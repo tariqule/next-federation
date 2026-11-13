@@ -56,6 +56,9 @@ const islandHandler = createIslandHandler({
   privateIslands: ['MyOrders'],
   issuers: ISSUERS,
   bootstrapUrl: async () => {
+    // Dev: point at the bootstrap module itself, not plugin-rsc's dev wrapper (which installs
+    // Fast Refresh globals on window). Build: the hashed client entry.
+    if (import.meta.env.DEV) return new URL('/src/bootstrap.tsx', ORIGIN).href
     const ssr = await import.meta.viteRsc.loadModule<typeof import('./entry.ssr')>('ssr', 'index')
     return new URL(ssr.clientEntryUrl(), ORIGIN).href
   },
