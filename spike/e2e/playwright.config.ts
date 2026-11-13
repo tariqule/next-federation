@@ -13,6 +13,7 @@ type App = { dir: string; url: string; command: string; env?: Record<string, str
 // One entry per app in the plan's origin table. Apps that don't exist yet are skipped,
 // so earlier tasks can run before later apps are created.
 const apps: App[] = [
+  { dir: 'e2e', url: 'http://localhost:3999/api/nf/jwks', command: 'node fixtures/jwks-server.ts' },
   { dir: 'island-remote', url: 'http://127.0.0.1:4100/_nf/health', command: 'pnpm dev', env: { NF_REMOTE: 'a', PORT: '4100' } },
   { dir: 'island-remote', url: 'http://127.0.0.1:4101/_nf/health', command: 'pnpm dev', env: { NF_REMOTE: 'b', PORT: '4101' } },
   { dir: 'host-app', url: 'http://localhost:3000', command: `pnpm exec next dev -p 3000 ${nextFlag}` },

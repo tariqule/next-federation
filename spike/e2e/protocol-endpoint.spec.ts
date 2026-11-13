@@ -35,3 +35,34 @@ test.describe('island remote protocol endpoint', () => {
     expect(res.status()).toBe(404)
   })
 })
+
+test.describe('private islands (identity tokens)', () => {
+  const mint = async (request: import('@playwright/test').APIRequestContext, q: string) =>
+    (await request.get(`http://localhost:3999/mint?${q}`)).text()
+
+  test('a valid token renders per-user content and is never publicly cacheable', async ({ request }) => {
+    const token = await mint(request, 'aud=a&sub=user-1')
+    const res = await request.get(`${A}/_nf/island/MyOrders`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(res.status()).toBe(200)
+    expect((await res.json()).html.replaceAll('<!-- -->', '')).toContain('Orders for user-1')
+    expect(res.headers()['cache-control']).toBe('private, no-store')
+  })
+
+  test('a token for another remote gets 401 and no content', async ({ request }) => {
+    const token = await mint(request, 'aud=b&sub=user-1')
+    const res = await request.get(`${A}/_nf/island/MyOrders`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(res.status()).toBe(401)
+    expect(await res.text()).toBe('')
+  })
+
+  test('an expired token gets 401', async ({ request }) => {
+    const token = await mint(request, 'aud=a&ttl=-1')
+    const res = await request.get(`${A}/_nf/island/MyOrders`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(res.status()).toBe(401)
+  })
+
+  test('a private island without a token gets 401', async ({ request }) => {
+    const res = await request.get(`${A}/_nf/island/MyOrders`)
+    expect(res.status()).toBe(401)
+  })
+})

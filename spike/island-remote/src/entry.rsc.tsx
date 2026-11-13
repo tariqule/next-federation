@@ -2,6 +2,7 @@ import { createIslandHandler, type RenderResult } from '@nf-spike/proto/remote-h
 import { renderToReadableStream } from '@vitejs/plugin-rsc/rsc'
 import { isValidElement, version, type ComponentType, type ReactNode } from 'react'
 import Banner from './islands/Banner'
+import MyOrders from './islands/MyOrders'
 import ProductPanel from './islands/ProductPanel'
 
 const NAME = import.meta.env.NF_REMOTE as string
@@ -9,12 +10,14 @@ const ORIGIN = import.meta.env.NF_ORIGIN as string
 const BUILD_ID = process.env.NF_BUILD_ID ?? `dev-${Date.now().toString(36)}`
 const ALLOWED_ORIGINS = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:4200']
 
-const islands: Record<string, ComponentType<any>> = { ProductPanel, Banner }
+const islands: Record<string, ComponentType<any>> = { ProductPanel, Banner, MyOrders }
+const ISSUERS = [...ALLOWED_ORIGINS.filter((o) => o !== 'http://localhost:4200'), 'http://localhost:3999']
 
 // loadCss needs a literal module id, so one call per island.
 const cssFor: Record<string, () => ReactNode> = {
   ProductPanel: () => import.meta.viteRsc.loadCss('/src/islands/ProductPanel.tsx'),
   Banner: () => import.meta.viteRsc.loadCss('/src/islands/Banner.tsx'),
+  MyOrders: () => import.meta.viteRsc.loadCss('/src/islands/MyOrders.tsx'),
 }
 
 // Pull stylesheet hrefs out of what loadCss returns (a server component rendering <link>s).
@@ -50,6 +53,8 @@ const islandHandler = createIslandHandler({
   allowedOrigins: ALLOWED_ORIGINS,
   islands,
   renderIsland,
+  privateIslands: ['MyOrders'],
+  issuers: ISSUERS,
   bootstrapUrl: async () => {
     const ssr = await import.meta.viteRsc.loadModule<typeof import('./entry.ssr')>('ssr', 'index')
     return new URL(ssr.clientEntryUrl(), ORIGIN).href

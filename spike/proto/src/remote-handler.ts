@@ -1,5 +1,7 @@
 // Framework-free island handler: Web Request → Response (design §6 "Remote side").
 import type { ComponentType } from 'react'
+import { decodeJwt } from 'jose'
+import { IdentityError, runWithIdentity, verifyIslandToken, type IslandIdentity } from './identity'
 import { ProtocolError, readIslandRequest, type IslandEnvelope } from './protocol'
 
 export type RenderResult = { html: string; rscPayload: string; css: string[] }
@@ -12,6 +14,24 @@ export type IslandHandlerOptions = {
   islands: Record<string, ComponentType<any>>
   bootstrapUrl: () => Promise<string>
   renderIsland: (island: string, props: unknown, identifierPrefix: string) => Promise<RenderResult>
+  /** Islands that require a verified identity token. */
+  privateIslands?: string[]
+  /** Hosts allowed to mint tokens for this remote; JWKS is fetched from `${iss}/api/nf/jwks`. */
+  issuers?: string[]
+}
+
+async function identityFrom(req: Request, opts: IslandHandlerOptions): Promise<IslandIdentity | null | 'invalid'> {
+  const auth = req.headers.get('authorization')
+  if (!auth) return null
+  const token = auth.replace(/^Bearer /, '')
+  try {
+    const iss = decodeJwt(token).iss
+    if (!iss || !opts.issuers?.includes(iss)) return 'invalid'
+    return await verifyIslandToken(token, { jwksUrl: `${iss}/api/nf/jwks`, aud: opts.name, issuers: opts.issuers })
+  } catch (e) {
+    if (e instanceof IdentityError || e instanceof Error) return 'invalid'
+    throw e
+  }
 }
 
 const hash = (text: string) => {
@@ -50,8 +70,13 @@ export function createIslandHandler(opts: IslandHandlerOptions): (req: Request) 
     if (!Object.hasOwn(opts.islands, island)) {
       return new Response(`unknown island: ${island}`, { status: 404, headers: cors })
     }
+    const identity = await identityFrom(req, opts)
+    if (identity === 'invalid' || (!identity && opts.privateIslands?.includes(island))) {
+      return new Response(null, { status: 401, headers: { ...cors, 'cache-control': 'no-store' } })
+    }
     const identifierPrefix = identifierPrefixFor(opts.name, island, props)
-    const rendered = await opts.renderIsland(island, props, identifierPrefix)
+    const render = () => opts.renderIsland(island, props, identifierPrefix)
+    const rendered = identity ? await runWithIdentity(identity, render) : await render()
     const envelope: IslandEnvelope = {
       protocolVersion: 1,
       buildId: opts.buildId,
@@ -63,7 +88,8 @@ export function createIslandHandler(opts: IslandHandlerOptions): (req: Request) 
       identifierPrefix,
     }
     return Response.json(envelope, {
-      headers: { ...cors, 'cache-control': 'public, max-age=60' },
+      // Token-bearing responses are always private (design §9 caching).
+      headers: { ...cors, 'cache-control': identity ? 'private, no-store' : 'public, max-age=60' },
     })
   }
 }
