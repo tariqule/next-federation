@@ -13,6 +13,7 @@ type Bootstrap = {
       mode: 'hydrate'
       bridge?: Partial<Bridge>
       callServer?: (id: string, args: unknown[]) => Promise<unknown>
+      getToken?: () => Promise<string | null>
       onError?: (e: unknown, kind: string) => void
     },
   ): IslandHandle
@@ -42,18 +43,34 @@ export type IslandMountProps = {
   envelope: IslandEnvelope
   bridge?: Partial<Bridge>
   callServer?: (id: string, args: unknown[]) => Promise<unknown>
+  /** Host token endpoint for this island's remote (design §9a); returns a token as text or {token}. */
+  tokenEndpoint?: string
   onIslandError?: (error: unknown, kind: string) => void
   fallback?: ReactNode
 }
 
+// Tokens are fetched lazily from the host's endpoint and reused until shortly before expiry.
+const tokenCache = new Map<string, { token: string; exp: number }>()
+async function fetchToken(endpoint: string): Promise<string | null> {
+  const hit = tokenCache.get(endpoint)
+  if (hit && hit.exp - 30 > Date.now() / 1000) return hit.token
+  const res = await fetch(endpoint, { method: 'POST', credentials: 'same-origin' })
+  if (!res.ok) return null
+  const text = await res.text()
+  const token = text.startsWith('{') ? (JSON.parse(text) as { token: string }).token : text
+  const exp = JSON.parse(atob(token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/'))).exp as number
+  tokenCache.set(endpoint, { token, exp })
+  return token
+}
+
 const defaultOnError = (error: unknown, kind: string) => console.error(`[next-federation] island ${kind} error:`, error)
 
-export function IslandMount({ envelope, bridge, callServer, onIslandError = defaultOnError }: IslandMountProps) {
+export function IslandMount({ envelope, bridge, callServer, tokenEndpoint, onIslandError = defaultOnError }: IslandMountProps) {
   const ref = useRef<HTMLDivElement>(null)
   // Rule 6: the HTML is written only on first render, then frozen.
   const [html] = useState(envelope.html)
-  const opts = useRef({ bridge, callServer, onIslandError })
-  opts.current = { bridge, callServer, onIslandError }
+  const opts = useRef({ bridge, callServer, tokenEndpoint, onIslandError })
+  opts.current = { bridge, callServer, tokenEndpoint, onIslandError }
 
   useEffect(() => {
     const el = ref.current
@@ -68,6 +85,7 @@ export function IslandMount({ envelope, bridge, callServer, onIslandError = defa
           mode: 'hydrate',
           bridge: opts.current.bridge,
           callServer: opts.current.callServer,
+          getToken: async () => (opts.current.tokenEndpoint ? fetchToken(opts.current.tokenEndpoint) : null),
           onError: (e, kind) => opts.current.onIslandError?.(e, kind),
         })
         el.dataset.nfState = 'live'

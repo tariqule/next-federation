@@ -2,7 +2,7 @@
 import clientReferences from 'virtual:vite-rsc/client-references'
 import { startTransition, use, type ReactNode } from 'react'
 import { hydrateRoot, type Root } from 'react-dom/client'
-import { createFromReadableStream } from 'react-server-dom-webpack/client.browser'
+import { createFromFetch, createFromReadableStream, encodeReply } from 'react-server-dom-webpack/client.browser'
 import { BridgeContext, type Bridge } from './island-bridge'
 
 type Envelope = { buildId: string; rscPayload: string; identifierPrefix: string }
@@ -13,6 +13,8 @@ export type MountOptions = {
   callServer?: CallServer
   bridge?: Partial<Bridge>
   mode: 'hydrate'
+  /** Returns a bearer identity token for this remote, or null (design §9a). */
+  getToken?: () => Promise<string | null>
   onError?: (error: unknown, kind: 'uncaught' | 'caught' | 'recoverable') => void
 }
 
@@ -45,7 +47,18 @@ const toStream = (text: string) =>
     },
   })
 
-const noServer: CallServer = () => Promise.reject(new Error('server actions not wired'))
+// Per-island callServer: posts to THIS remote with a bearer token and no cookies.
+function createCallServer(getToken?: () => Promise<string | null>): CallServer {
+  const callServer: CallServer = async (id, args) => {
+    const token = (await getToken?.()) ?? null
+    const headers: Record<string, string> = { 'x-nf-action': id }
+    if (token) headers.authorization = `Bearer ${token}`
+    const response = fetch(`${ORIGIN}/_nf/action`, { method: 'POST', headers, body: await encodeReply(args), credentials: 'omit' })
+    const { returnValue } = await createFromFetch<{ returnValue: unknown }>(response, { callServer })
+    return returnValue
+  }
+  return callServer
+}
 
 // Defined once so updates keep the same component type (and therefore client state).
 function Island({ payload }: { payload: Promise<ReactNode> }) {
@@ -62,7 +75,7 @@ function tree(envelope: Envelope, callServer: CallServer, bridge: Bridge) {
 }
 
 export function mountIsland(container: HTMLElement, opts: MountOptions): IslandHandle {
-  const callServer = opts.callServer ?? noServer
+  const callServer = opts.callServer ?? createCallServer(opts.getToken)
   const bridge: Bridge = { navigate: (h) => location.assign(h), prefetch: () => {}, basePath: '', ...opts.bridge }
   const report = (kind: 'uncaught' | 'caught' | 'recoverable') => (error: unknown) => opts.onError?.(error, kind)
   const root: Root = hydrateRoot(container, tree(opts.envelope, callServer, bridge), {

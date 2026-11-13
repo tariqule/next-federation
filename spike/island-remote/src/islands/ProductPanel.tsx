@@ -1,4 +1,5 @@
 import './ProductPanel.css'
+import { addToCart } from '../actions'
 import { getProduct } from '../data'
 import { AddToCart } from './AddToCart'
 import { Counter } from './Counter'
@@ -10,7 +11,7 @@ export default async function ProductPanel({ sku }: { sku: string }) {
       <h2>{product.name}</h2>
       <p>${product.price}</p>
       <Counter />
-      <AddToCart sku={sku} />
+      <AddToCart sku={sku} addToCart={addToCart} />
     </section>
   )
 }

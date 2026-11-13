@@ -34,7 +34,7 @@ export function Islands() {
       <button onClick={() => setVisible((v) => !v)}>toggle</button>
       {visible && (
         <div key={swapKey}>
-          {a && <IslandMount envelope={a} />}
+          {a && <IslandMount envelope={a} tokenEndpoint="http://localhost:3999/mint?aud=a&sub=user-1" />}
           {b && <IslandMount envelope={b} />}
         </div>
       )}

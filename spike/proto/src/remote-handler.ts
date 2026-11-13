@@ -20,7 +20,7 @@ export type IslandHandlerOptions = {
   issuers?: string[]
 }
 
-async function identityFrom(req: Request, opts: IslandHandlerOptions): Promise<IslandIdentity | null | 'invalid'> {
+export async function identityFrom(req: Request, opts: Pick<IslandHandlerOptions, 'name' | 'issuers'>): Promise<IslandIdentity | null | 'invalid'> {
   const auth = req.headers.get('authorization')
   if (!auth) return null
   const token = auth.replace(/^Bearer /, '')

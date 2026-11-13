@@ -1,5 +1,6 @@
-import { createIslandHandler, type RenderResult } from '@nf-spike/proto/remote-handler'
-import { renderToReadableStream } from '@vitejs/plugin-rsc/rsc'
+import { runWithIdentity } from '@nf-spike/proto/identity'
+import { corsHeaders, createIslandHandler, identityFrom, type RenderResult } from '@nf-spike/proto/remote-handler'
+import { decodeReply, loadServerAction, renderToReadableStream } from '@vitejs/plugin-rsc/rsc'
 import { isValidElement, version, type ComponentType, type ReactNode } from 'react'
 import Banner from './islands/Banner'
 import MyOrders from './islands/MyOrders'
@@ -64,10 +65,31 @@ const islandHandler = createIslandHandler({
   },
 })
 
+// Island Server Actions: POST /_nf/action, bearer identity, no cookies (design §6 Server Actions).
+async function actionHandler(request: Request): Promise<Response> {
+  const cors = corsHeaders(request, ALLOWED_ORIGINS)
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors })
+  const origin = request.headers.get('origin')
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) return new Response(null, { status: 403 })
+  const identity = await identityFrom(request, { name: NAME, issuers: ISSUERS })
+  if (identity === 'invalid') return new Response(null, { status: 401, headers: cors })
+  const id = request.headers.get('x-nf-action')
+  if (!id) return new Response('missing x-nf-action', { status: 400, headers: cors })
+  const body = request.headers.get('content-type')?.startsWith('multipart/form-data') ? await request.formData() : await request.text()
+  const args = (await decodeReply(body)) as unknown[]
+  const action = (await loadServerAction(id)) as (...a: unknown[]) => Promise<unknown>
+  const run = () => action(...args)
+  const returnValue = identity ? await runWithIdentity(identity, run) : await run()
+  return new Response(renderToReadableStream({ returnValue }), {
+    headers: { ...cors, 'content-type': 'text/x-component;charset=utf-8', 'cache-control': 'no-store' },
+  })
+}
+
 export default async function handler(request: Request): Promise<Response> {
   const { pathname } = new URL(request.url)
   if (pathname === '/_nf/health') return new Response('ok')
   if (pathname.startsWith('/_nf/island/')) return islandHandler(request)
+  if (pathname === '/_nf/action') return actionHandler(request)
   return new Response('not found', { status: 404 })
 }
 

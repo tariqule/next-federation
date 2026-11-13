@@ -7,6 +7,7 @@ const keys = await generateHostKeys('fixture-1')
 
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', ISS)
+  res.setHeader('access-control-allow-origin', '*') // test-only: the SPA fetches tokens cross-origin
   if (url.pathname === '/api/nf/jwks') {
     res.setHeader('content-type', 'application/json')
     return res.end(JSON.stringify(keys.publicJwks))
