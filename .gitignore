@@ -4,3 +4,8 @@ dist/
 *.log
 .env*
 !.env.example
+.next/
+.next-cc/
+test-results/
+playwright-report/
+.superpowers/
