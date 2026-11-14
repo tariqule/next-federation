@@ -10,6 +10,8 @@ import {
 export const REMOTES = {
   a: 'http://127.0.0.1:4100',
   b: 'http://127.0.0.1:4101',
+  // Nothing listens here: used by the remote-down test.
+  down: 'http://127.0.0.1:4199',
 } as const;
 export type RemoteName = keyof typeof REMOTES;
 export const BASE_PATH = process.env.NF_BASE ?? '';
@@ -22,7 +24,11 @@ type Keys = Awaited<ReturnType<typeof generateHostKeys>>;
 const g = globalThis as { __nfHostKeys?: Promise<Keys> };
 export const hostKeys = () => (g.__nfHostKeys ??= generateHostKeys('host-1'));
 
-export async function mintFor(remote: RemoteName, sub: string) {
+export async function mintFor(
+  remote: RemoteName,
+  sub: string,
+  ttlSeconds = Number(process.env.NF_TOKEN_TTL ?? 300),
+) {
   const { privateJwk } = await hostKeys();
   return mintIslandToken({
     privateJwk,
@@ -30,7 +36,7 @@ export async function mintFor(remote: RemoteName, sub: string) {
     iss: ISSUER,
     aud: remote,
     sub,
-    ttlSeconds: Number(process.env.NF_TOKEN_TTL ?? 300),
+    ttlSeconds,
   });
 }
 
@@ -41,8 +47,11 @@ export async function getIslandProps(opts: {
   island: string;
   props?: object;
   sub?: string;
+  ttlSeconds?: number;
 }): Promise<IslandEnvelope | null> {
-  const token = opts.sub ? await mintFor(opts.remote, opts.sub) : undefined;
+  const token = opts.sub
+    ? await mintFor(opts.remote, opts.sub, opts.ttlSeconds)
+    : undefined;
   const { url, init } = islandRequest(
     REMOTES[opts.remote],
     opts.island,

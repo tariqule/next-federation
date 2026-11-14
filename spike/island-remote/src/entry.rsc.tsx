@@ -1,4 +1,5 @@
 import { runWithIdentity } from '@nf-spike/proto/identity';
+import { sanitizeIslandHtml } from '@nf-spike/proto/protocol';
 import {
   corsHeaders,
   createIslandHandler,
@@ -16,14 +17,17 @@ import {
   type ComponentType,
   type ReactNode,
 } from 'react';
-import Banner from './islands/Banner';
-import Links from './islands/Links';
-import MyOrders from './islands/MyOrders';
-import ProductPanel from './islands/ProductPanel';
+import Banner, { islandCss as BannerCss } from './islands/Banner';
+import Links, { islandCss as LinksCss } from './islands/Links';
+import MyOrders, { islandCss as MyOrdersCss } from './islands/MyOrders';
+import ProductPanel, {
+  islandCss as ProductPanelCss,
+} from './islands/ProductPanel';
+import Slow, { islandCss as SlowCss } from './islands/Slow';
 
 const NAME = import.meta.env.NF_REMOTE as string;
 const ORIGIN = import.meta.env.NF_ORIGIN as string;
-const BUILD_ID = process.env.NF_BUILD_ID ?? `dev-${Date.now().toString(36)}`;
+const BUILD_ID = import.meta.env.NF_BUILD_ID as string;
 const ALLOWED_ORIGINS = [
   'http://localhost:3100',
   'http://localhost:3101',
@@ -37,19 +41,20 @@ const islands: Record<string, ComponentType<any>> = {
   Banner,
   MyOrders,
   Links,
+  Slow,
 };
 const ISSUERS = [
   ...ALLOWED_ORIGINS.filter((o) => o !== 'http://localhost:4200'),
   'http://localhost:3999',
 ];
 
-// loadCss needs a literal module id, so one call per island.
+// Each island module exports its own islandCss() (see the note in the island files).
 const cssFor: Record<string, () => ReactNode> = {
-  ProductPanel: () =>
-    import.meta.viteRsc.loadCss('/src/islands/ProductPanel.tsx'),
-  Banner: () => import.meta.viteRsc.loadCss('/src/islands/Banner.tsx'),
-  MyOrders: () => import.meta.viteRsc.loadCss('/src/islands/MyOrders.tsx'),
-  Links: () => import.meta.viteRsc.loadCss('/src/islands/Links.tsx'),
+  ProductPanel: ProductPanelCss,
+  Banner: BannerCss,
+  MyOrders: MyOrdersCss,
+  Links: LinksCss,
+  Slow: SlowCss,
 };
 
 // Pull stylesheet hrefs out of what loadCss returns (a server component rendering <link>s).
@@ -95,7 +100,11 @@ async function renderIsland(
     new Response(forPayload).text(),
     ssr.renderHtml(forHtml, identifierPrefix),
   ]);
-  return { html, rscPayload, css: await collectHrefs(cssFor[island]!()) };
+  return {
+    html: sanitizeIslandHtml(html),
+    rscPayload,
+    css: await collectHrefs(cssFor[island]!()),
+  };
 }
 
 const islandHandler = createIslandHandler({

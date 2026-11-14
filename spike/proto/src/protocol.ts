@@ -101,3 +101,13 @@ export function embedPayload(payload: string): string {
     .split(PS)
     .join('\\u2029');
 }
+
+// React and plugin-rsc SSR emit <link rel="modulepreload"> hoistables and inline scripts (form
+// replay). Island HTML must contain neither (design §6 island rules): React would hoist the links
+// into the host's <head>, and scripts set via innerHTML never run. React escapes text content,
+// so a literal "<script" or "<link" here is always a real tag.
+export function sanitizeIslandHtml(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<link\b[^>]*>/gi, '');
+}

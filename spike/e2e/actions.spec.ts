@@ -45,8 +45,12 @@ test.describe('island Server Actions (cross-site, bearer token, no cookies)', ()
         hostPosts.push(r.url()),
     );
     // Hold the island bootstrap so the island stays un-hydrated.
+    // Dev serves it as /src/bootstrap.tsx, a production build as /assets/index-<hash>.js.
     await page.route(
-      'http://127.0.0.1:4100/src/bootstrap.tsx',
+      (url) =>
+        url.origin === 'http://127.0.0.1:4100' &&
+        (url.pathname === '/src/bootstrap.tsx' ||
+          /^\/assets\/index-[\w-]+\.js$/.test(url.pathname)),
       async (route) => {
         await new Promise((r) => setTimeout(r, 3000));
         await route.continue();

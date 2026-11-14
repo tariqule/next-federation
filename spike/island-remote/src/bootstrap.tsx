@@ -34,7 +34,9 @@ export type MountOptions = {
 };
 
 const ORIGIN = import.meta.env.NF_ORIGIN as string;
-const BASE = `${ORIGIN}/`;
+// The build's own base URL: build-pinned when versioned, so actions reach the build that
+// rendered the island (design §6 deploy skew).
+const BASE = new URL(import.meta.env.BASE_URL, ORIGIN).href;
 
 // Registry slot the scoped flight client reads (see nfScope in vite.config.ts).
 const cache = new Map<string, Promise<unknown>>();
@@ -74,7 +76,7 @@ function createCallServer(getToken?: () => Promise<string | null>): CallServer {
     const token = (await getToken?.()) ?? null;
     const headers: Record<string, string> = { 'x-nf-action': id };
     if (token) headers.authorization = `Bearer ${token}`;
-    const response = fetch(`${ORIGIN}/_nf/action`, {
+    const response = fetch(`${BASE}_nf/action`, {
       method: 'POST',
       headers,
       body: await encodeReply(args),

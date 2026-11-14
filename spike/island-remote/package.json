@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --strictPort",
+    "serve:prod": "vite build && vite preview --host 127.0.0.1 --strictPort",
+    "serve:skew": "rm -rf dist/a-versions && NF_VERSIONED=1 NF_BUILD_ID=v1 vite build && NF_VERSIONED=1 NF_BUILD_ID=v2 vite build && NODE_ENV=production node serve-versions.ts"
   },
   "dependencies": {
     "@nf-spike/proto": "workspace:*",

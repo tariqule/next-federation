@@ -20,3 +20,6 @@ export default async function Links({
     </nav>
   );
 }
+
+// One loadCss() per module: plugin-rsc 0.5.39 only wires the first call in a module in builds.
+export const islandCss = () => import.meta.viteRsc.loadCss();

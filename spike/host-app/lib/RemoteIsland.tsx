@@ -37,9 +37,16 @@ async function getPrivateEnvelope(
   island: string,
   props: unknown,
 ): Promise<IslandEnvelope | null> {
-  const sub = (await cookies()).get('nf-user')?.value;
+  const jar = await cookies();
+  const sub = jar.get('nf-user')?.value;
+  // Spike-only hook so e2e can force an expired token.
+  const testTtl = jar.get('nf-test-ttl')?.value;
   if (!sub) return null;
-  const token = await mintFor(remote, sub); // minted server-side; never passed to the client
+  const token = await mintFor(
+    remote,
+    sub,
+    testTtl === undefined ? undefined : Number(testTtl),
+  ); // minted server-side; never passed to the client
   const { url, init } = islandRequest(REMOTES[remote], island, props, {
     token,
   });

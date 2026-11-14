@@ -11,10 +11,17 @@ export const getServerSideProps: GetServerSideProps<Props> = async ({
   req,
 }) => {
   const sub = req.cookies['nf-user'];
+  // Spike-only hook so e2e can force an expired token.
+  const testTtl = req.cookies['nf-test-ttl'];
   return {
     props: {
       envelope: sub
-        ? await getIslandProps({ remote: 'a', island: 'MyOrders', sub })
+        ? await getIslandProps({
+            remote: 'a',
+            island: 'MyOrders',
+            sub,
+            ttlSeconds: testTtl === undefined ? undefined : Number(testTtl),
+          })
         : null,
     },
   };

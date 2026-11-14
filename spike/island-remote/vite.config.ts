@@ -3,6 +3,15 @@ import { defineConfig, type Plugin } from 'vite';
 
 const PORT = Number(process.env.PORT ?? 4100);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
+const REMOTE = process.env.NF_REMOTE ?? 'a';
+const BUILD_ID = process.env.NF_BUILD_ID ?? `dev-${Date.now().toString(36)}`;
+// NF_VERSIONED=1: build-pinned asset paths (design §6 "Build pinning and deploy skew"), so a
+// self-hosted remote can keep serving every build's assets after a redeploy.
+const VERSIONED = process.env.NF_VERSIONED === '1';
+const BASE = VERSIONED ? `${ORIGIN}/b/${BUILD_ID}/` : `${ORIGIN}/`;
+const OUT = VERSIONED
+  ? `dist/${REMOTE}-versions/${BUILD_ID}`
+  : `dist/${REMOTE}`;
 
 // Per-remote flight-client scope (design §6 "no shared globals"). plugin-rsc rewrites the flight
 // client's __webpack_require__ to a page-global __vite_rsc_require__. Two remotes on one page would
@@ -41,7 +50,7 @@ const nfScopeOptimizer = {
 
 export default defineConfig({
   // plugin-rsc requires an absolute base for RSC asset URLs (design §2, §6 build pinning).
-  base: `${ORIGIN}/`,
+  base: BASE,
   // Remotes A and B run from this one folder: separate optimizer caches, since the pre-bundled
   // flight client embeds the remote's origin.
   cacheDir: `node_modules/.vite-${process.env.NF_REMOTE ?? 'a'}`,
@@ -63,11 +72,22 @@ export default defineConfig({
   define: {
     'import.meta.env.NF_REMOTE': JSON.stringify(process.env.NF_REMOTE ?? 'a'),
     'import.meta.env.NF_ORIGIN': JSON.stringify(ORIGIN),
+    // Baked in, because one process may serve several builds.
+    'import.meta.env.NF_BUILD_ID': JSON.stringify(BUILD_ID),
   },
+  // Each remote build bakes in its own origin, so A and B build to separate folders.
   environments: {
     client: {
       optimizeDeps: { rolldownOptions: { plugins: [nfScopeOptimizer] } },
+      build: {
+        outDir: `${OUT}/client`,
+        // The bootstrap is imported by hosts for its mountIsland export; app builds drop entry
+        // exports by default.
+        rollupOptions: { preserveEntrySignatures: 'exports-only' },
+      },
     },
+    ssr: { build: { outDir: `${OUT}/ssr` } },
+    rsc: { build: { outDir: `${OUT}/rsc` } },
   },
   server: {
     host: '127.0.0.1',

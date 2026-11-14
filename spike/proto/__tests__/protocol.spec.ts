@@ -6,6 +6,7 @@ import {
   islandRequest,
   parseEnvelope,
   readIslandRequest,
+  sanitizeIslandHtml,
 } from '../src/protocol';
 
 const origin = 'http://127.0.0.1:4100';
@@ -86,5 +87,23 @@ describe('embedPayload', () => {
     expect(out).not.toContain('<!--');
     expect(out).not.toContain(' ');
     expect(JSON.parse(out)).toBe(raw);
+  });
+});
+
+describe('sanitizeIslandHtml', () => {
+  test('removes modulepreload links and inline scripts, keeps content', () => {
+    const html =
+      '<link rel="modulepreload" href="http://x/a.js" crossorigin=""/><link rel="modulepreload" href="http://x/b.js"/>' +
+      '<section><h2>Product</h2><form action="javascript:throw 1"></form></section>' +
+      '<script>addEventListener("submit",function(a){})</script>';
+    expect(sanitizeIslandHtml(html)).toBe(
+      '<section><h2>Product</h2><form action="javascript:throw 1"></form></section>',
+    );
+  });
+
+  test('leaves escaped script text inside content untouched', () => {
+    const html =
+      '<strong>&lt;/script&gt;&lt;script&gt;window.pwned=1&lt;/script&gt;</strong>';
+    expect(sanitizeIslandHtml(html)).toBe(html);
   });
 });

@@ -7,6 +7,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const spike = join(here, '..');
 const webpack = process.env.NF_BUNDLER === 'webpack';
 const nextFlag = webpack ? '--webpack' : '';
+// NF_REMOTE_MODE=prod builds the island remotes and serves the production output.
+// NF_REMOTE_MODE=skew serves remote A's builds v1 and v2 side by side (gate g).
+const mode = process.env.NF_REMOTE_MODE;
+const remoteCommand = mode === 'prod' ? 'pnpm serve:prod' : 'pnpm dev';
+const remoteACommand =
+  mode === 'skew' ? 'pnpm serve:skew' : `${remoteCommand} --port 4100`;
 
 type App = {
   dir: string;
@@ -26,14 +32,14 @@ const apps: App[] = [
   {
     dir: 'island-remote',
     url: 'http://127.0.0.1:4100/_nf/health',
-    command: 'pnpm dev',
-    env: { NF_REMOTE: 'a', PORT: '4100' },
+    command: remoteACommand,
+    env: { NF_REMOTE: 'a', PORT: '4100', NF_BUILD_ID: 'v1' },
   },
   {
     dir: 'island-remote',
     url: 'http://127.0.0.1:4101/_nf/health',
-    command: 'pnpm dev',
-    env: { NF_REMOTE: 'b', PORT: '4101' },
+    command: `${remoteCommand} --port 4101`,
+    env: { NF_REMOTE: 'b', PORT: '4101', NF_BUILD_ID: 'v1' },
   },
   {
     dir: 'host-app',
