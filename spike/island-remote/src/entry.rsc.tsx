@@ -28,6 +28,7 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3100',
   'http://localhost:3101',
   'http://localhost:3102',
+  'http://localhost:3103',
   'http://localhost:4200',
 ];
 

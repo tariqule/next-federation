@@ -53,6 +53,12 @@ const apps: App[] = [
     command: `pnpm exec next dev -p 3101 ${nextFlag}`,
     env: { NF_PORT: '3101' },
   },
+  {
+    dir: 'host-pages',
+    url: 'http://localhost:3103/base',
+    command: `pnpm exec next dev -p 3103 ${nextFlag}`,
+    env: { NF_PORT: '3103', NF_BASE: '/base' },
+  },
   { dir: 'spa', url: 'http://localhost:4200', command: 'pnpm dev' },
 ];
 
