@@ -28,10 +28,10 @@ Playwright tests are the acceptance checks, one spec per gate. The playground ap
   |---|---|
   | Island remote A | `http://127.0.0.1:4100` |
   | Island remote B | `http://127.0.0.1:4101` (same code, `NF_REMOTE=b`) |
-  | Next App Router host | `http://localhost:3000` (`cacheComponents` off) / `http://localhost:3002` (on) |
-  | Next Pages Router host | `http://localhost:3001` |
+  | Next App Router host | `http://localhost:3100` (`cacheComponents` off) / `http://localhost:3102` (on) |
+  | Next Pages Router host | `http://localhost:3101` |
   | Vite SPA (host + Mode A remote) | `http://localhost:4200` |
-- Identity tokens: ES256 JWT, `iss: "http://localhost:3000"` (Pages host uses `:3001`), `aud` = remote name, `exp` = 5 minutes. **Never** in HTML or Next's RSC payload.
+- Identity tokens: ES256 JWT, `iss: "http://localhost:3100"` (Pages host uses `:3001`), `aud` = remote name, `exp` = 5 minutes. **Never** in HTML or Next's RSC payload.
 - Git: work on branch `spike/phase-0`. Commit messages and PR text must **never mention Claude or Anthropic** (no `Co-Authored-By` trailer).
 - Every gate runs under Turbopack **and** `--webpack`. A webpack pass with a Turbopack failure is a **FAIL**.
 
@@ -126,13 +126,13 @@ next-federation/
 **Interfaces:**
 - Consumes: `readIslandRequest`, `IslandEnvelope` (Task 2).
 - Produces:
-  - `GET|POST {origin}/_nf/island/:id`, which returns an `IslandEnvelope` JSON with `Access-Control-Allow-Origin` echoing only an allowed origin (`localhost:3000/3001/3002/4200`) and `Vary: Origin`;
+  - `GET|POST {origin}/_nf/island/:id`, which returns an `IslandEnvelope` JSON with `Access-Control-Allow-Origin` echoing only an allowed origin (`localhost:3100/3001/3002/4200`) and `Vary: Origin`;
   - `POST {origin}/_nf/action` (Task 6);
   - islands: `ProductPanel({ sku: string })` (A), `Banner({ text: string })` (B);
   - env vars `NF_REMOTE` (`a`|`b`), `PORT`, `NF_BUILD_ID` (default: the git short sha plus a timestamp).
 - `createIslandHandler(opts: { name: string; buildId: string; islands: Record<string, ComponentType<any>>; allowedOrigins: string[]; renderHtml: (rsc: ReadableStream, prefix: string) => Promise<string> }): (req: Request) => Promise<Response>` in `remote-handler.ts`.
 
-- [ ] **Step 1: Write the failing spec.** `GET http://127.0.0.1:4100/_nf/island/ProductPanel?p=<sku "A1">` with `Origin: http://localhost:3000` returns 200. The envelope has `protocolVersion 1`, `html` contains `Product A1` and `data-testid="counter"`, `css.length ≥ 1`, `bootstrap` starts with `http://127.0.0.1:4100/`, and the ACAO header is `http://localhost:3000`. With `Origin: http://evil.test` there is no ACAO header.
+- [ ] **Step 1: Write the failing spec.** `GET http://127.0.0.1:4100/_nf/island/ProductPanel?p=<sku "A1">` with `Origin: http://localhost:3100` returns 200. The envelope has `protocolVersion 1`, `html` contains `Product A1` and `data-testid="counter"`, `css.length ≥ 1`, `bootstrap` starts with `http://127.0.0.1:4100/`, and the ACAO header is `http://localhost:3100`. With `Origin: http://evil.test` there is no ACAO header.
 - [ ] **Step 2:** Run `pnpm e2e protocol-endpoint`. Expected: FAIL.
 - [ ] **Step 3:** Implement:
   - `vite.config.ts`: `rsc()` with `base: \`http://127.0.0.1:${PORT}/\``, and `environments.{rsc,ssr,client}` entries;

@@ -11,16 +11,16 @@
     "./remote-handler": "./src/remote-handler.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "rstest"
   },
   "dependencies": {
     "jose": "6.2.17"
   },
   "devDependencies": {
-    "vitest": "5.1.0",
     "typescript": "6.0.3",
     "react": "19.3.1",
-    "@types/react": "19.3.0"
+    "@types/react": "19.3.0",
+    "@rstest/core": "^0.10.6"
   },
   "peerDependencies": {
     "react": "^19.0.0"

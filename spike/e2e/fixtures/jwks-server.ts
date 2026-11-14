@@ -1,16 +1,16 @@
 // Test-only identity provider for e2e: serves JWKS like a host and mints tokens on request.
-import { createServer } from 'node:http'
-import { generateHostKeys, mintIslandToken } from '@nf-spike/proto/identity'
+import { createServer } from 'node:http';
+import { generateHostKeys, mintIslandToken } from '@nf-spike/proto/identity';
 
-const ISS = 'http://localhost:3999'
-const keys = await generateHostKeys('fixture-1')
+const ISS = 'http://localhost:3999';
+const keys = await generateHostKeys('fixture-1');
 
 createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', ISS)
-  res.setHeader('access-control-allow-origin', '*') // test-only: the SPA fetches tokens cross-origin
+  const url = new URL(req.url ?? '/', ISS);
+  res.setHeader('access-control-allow-origin', '*'); // test-only: the SPA fetches tokens cross-origin
   if (url.pathname === '/api/nf/jwks') {
-    res.setHeader('content-type', 'application/json')
-    return res.end(JSON.stringify(keys.publicJwks))
+    res.setHeader('content-type', 'application/json');
+    return res.end(JSON.stringify(keys.publicJwks));
   }
   if (url.pathname === '/mint') {
     const token = await mintIslandToken({
@@ -20,9 +20,9 @@ createServer(async (req, res) => {
       aud: url.searchParams.get('aud') ?? 'a',
       sub: url.searchParams.get('sub') ?? 'user-1',
       ttlSeconds: Number(url.searchParams.get('ttl') ?? 300),
-    })
-    return res.end(token)
+    });
+    return res.end(token);
   }
-  res.statusCode = 404
-  res.end()
-}).listen(3999, 'localhost')
+  res.statusCode = 404;
+  res.end();
+}).listen(3999, 'localhost');
