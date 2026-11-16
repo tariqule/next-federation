@@ -106,7 +106,9 @@ async function readJson(file: string, what: string): Promise<unknown> {
 /** `a/./b/` -> `a/b`, '' for the folder itself; null when it leaves it. */
 function insideRelative(path: string): string | null {
   if (path.startsWith('/') || path.includes('\\')) return null
-  const normal = posix.normalize(path === '' ? '.' : path).replace(/\/+$/, '')
+  let normal = posix.normalize(path === '' ? '.' : path)
+  // Trailing slashes, without a regex (CodeQL js/polynomial-redos).
+  while (normal.length > 1 && normal.endsWith('/')) normal = normal.slice(0, -1)
   if (normal === '..' || normal.startsWith('../')) return null
   return normal === '.' ? '' : normal
 }
