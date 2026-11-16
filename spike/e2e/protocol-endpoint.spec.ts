@@ -93,3 +93,17 @@ test.describe('private islands (identity tokens)', () => {
     expect(res.status()).toBe(401);
   });
 });
+
+test('a token from an issuer that is not on the allowlist gets 401', async ({
+  request,
+}) => {
+  // Signed by the fixture key, but claiming an issuer the remote does not trust: the remote must
+  // not fetch keys from it (design §9a issuer allowlist).
+  const token = await (
+    await request.get('http://localhost:3999/mint?aud=a&iss=http://evil.test')
+  ).text();
+  const res = await request.get('http://127.0.0.1:4100/_nf/island/MyOrders', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(res.status()).toBe(401);
+});

@@ -59,3 +59,22 @@ test('a new buildId re-bootstraps the island on the new build', async ({
   await island(page).getByTestId('counter').click();
   await expect(island(page).getByTestId('counter')).toHaveText('count 1');
 });
+
+test('a v1 island and a v2 island of the same remote are live at once and independent', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${SKEW}?both=1`);
+  await expect(page.locator('[data-nf-state="live"]')).toHaveCount(2);
+  const v1 = page.locator('[data-nf-root][data-nf-build="v1"]');
+  const v2 = page.locator('[data-nf-root][data-nf-build="v2"]');
+  await expect(v1).toHaveCount(1);
+  await expect(v2).toHaveCount(1);
+  await v1.getByTestId('counter').click();
+  await v1.getByTestId('counter').click();
+  await v2.getByTestId('counter').click();
+  await expect(v1.getByTestId('counter')).toHaveText('count 2');
+  await expect(v2.getByTestId('counter')).toHaveText('count 1');
+  expect(errors).toEqual([]);
+});

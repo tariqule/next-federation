@@ -104,8 +104,10 @@ export function embedPayload(payload: string): string {
 
 // React and plugin-rsc SSR emit <link rel="modulepreload"> hoistables and inline scripts (form
 // replay). Island HTML must contain neither (design §6 island rules): React would hoist the links
-// into the host's <head>, and scripts set via innerHTML never run. React escapes text content,
-// so a literal "<script" or "<link" here is always a real tag.
+// into the host's <head>, and inline scripts would run during host SSR. React escapes text content,
+// so a literal "<script" or "<link" here is always a real tag. This is cleanup of
+// known React output, NOT a security boundary: hosts must still only accept envelopes from
+// allowlisted remotes.
 export function sanitizeIslandHtml(html: string): string {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')

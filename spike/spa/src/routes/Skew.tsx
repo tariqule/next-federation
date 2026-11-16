@@ -16,11 +16,16 @@ async function fetchEnvelope(build: string | null): Promise<IslandEnvelope> {
 }
 
 export function Skew() {
+  const params = new URLSearchParams(location.search);
+  const both = params.get('both') === '1';
   const [envelope, setEnvelope] = useState<IslandEnvelope>();
+  const [old, setOld] = useState<IslandEnvelope>();
   useEffect(() => {
-    fetchEnvelope(new URLSearchParams(location.search).get('build')).then(
-      setEnvelope,
-    );
+    if (both) {
+      // One island from build v1 and one from the current build, live at the same time.
+      fetchEnvelope('v1').then(setOld);
+      fetchEnvelope(null).then(setEnvelope);
+    } else fetchEnvelope(params.get('build')).then(setEnvelope);
   }, []);
   const loadCurrent = useCallback(
     () => fetchEnvelope(null).then(setEnvelope),
@@ -29,6 +34,7 @@ export function Skew() {
   return (
     <main>
       <button onClick={loadCurrent}>load current build</button>
+      {old && <IslandMount envelope={old} />}
       {envelope && <IslandMount envelope={envelope} />}
     </main>
   );

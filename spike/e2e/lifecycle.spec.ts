@@ -68,4 +68,36 @@ test.describe('island lifecycle in a CSR host (SPA)', () => {
     await expect(islandA(page).getByTestId('counter')).toHaveText('count 1');
     expect(errors).toEqual([]);
   });
+
+  test('toggle during bootstrap leaves exactly two live roots and no errors', async ({
+    page,
+  }) => {
+    const errors = collectErrors(page);
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    // Hold the island bootstraps. Dev serves /src/bootstrap.tsx, a production build
+    // /assets/index-<hash>.js.
+    await page.route(
+      (url) =>
+        url.origin === 'http://127.0.0.1:4100' &&
+        (url.pathname === '/src/bootstrap.tsx' ||
+          /^\/assets\/index-[\w-]+\.js$/.test(url.pathname)),
+      async (route) => {
+        await held;
+        await route.continue();
+      },
+    );
+    await page.goto(SPA);
+    const toggle = page.getByRole('button', { name: 'toggle' });
+    for (let i = 0; i < 10; i++) await toggle.click({ delay: 0 });
+    release();
+    await expect(page.locator('[data-nf-root]')).toHaveCount(2);
+    await expect(page.locator('[data-nf-state="live"]')).toHaveCount(2);
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as any).__nf_liveRoots))
+      .toBe(2);
+    await islandA(page).getByTestId('counter').click();
+    await expect(islandA(page).getByTestId('counter')).toHaveText('count 1');
+    expect(errors).toEqual([]);
+  });
 });

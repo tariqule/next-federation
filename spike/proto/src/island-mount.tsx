@@ -31,8 +31,12 @@ type Bootstrap = {
 type Entry = {
   el: HTMLElement;
   handle: IslandHandle | null;
+  /** Newest envelope seen; applied via update() once booted. */
   latest: IslandEnvelope;
+  /** Envelope matching the frozen server HTML; hydration must use this one. */
+  original: IslandEnvelope;
   buildId: string;
+  bootstrap: string;
 };
 
 // Rule 3: the island root is keyed to the container DOM node, not to the effect.
@@ -45,14 +49,21 @@ const loadBootstrap = (url: string): Promise<Bootstrap> =>
   );
 
 // Rule 4: tear down roots whose container left the document.
+function destroyEntry(e: Entry) {
+  e.handle?.destroy();
+  e.handle = null;
+  live.delete(e);
+  if (entries.get(e.el) === e) entries.delete(e.el);
+  publishCount();
+}
 function sweep() {
-  for (const e of live) {
-    if (!e.el.isConnected) {
-      e.handle?.destroy();
-      live.delete(e);
-      entries.delete(e.el);
-    }
-  }
+  for (const e of live) if (!e.el.isConnected) destroyEntry(e);
+}
+// Debug counter of hydrated roots currently alive.
+function publishCount() {
+  let n = 0;
+  for (const e of live) if (e.handle) n++;
+  (globalThis as any).__nf_liveRoots = n;
 }
 
 export type IslandMountProps = {
@@ -108,12 +119,13 @@ export function IslandMount({
     sweep();
     let entry = entries.get(el);
     const start = (target: Entry) => {
-      loadBootstrap(target.latest.bootstrap).then(
+      loadBootstrap(target.bootstrap).then(
         (m) => {
           if (!el.isConnected || entries.get(el) !== target || target.handle)
             return;
           target.handle = m.mountIsland(el, {
-            envelope: target.latest,
+            // Hydrate with the envelope the HTML was rendered from, then catch up.
+            envelope: target.original,
             mode: 'hydrate',
             bridge: opts.current.bridge,
             callServer: opts.current.callServer,
@@ -123,38 +135,53 @@ export function IslandMount({
                 : null,
             onError: (e, kind) => opts.current.onIslandError?.(e, kind),
           });
+          if (target.latest !== target.original)
+            target.handle.update(target.latest);
           el.dataset.nfState = 'live';
+          publishCount();
         },
         (e) => opts.current.onIslandError?.(e, 'bootstrap'),
       );
     };
-    if (!entry) {
-      // First mount of this container (or a swapped-in container, rule 5).
-      entry = { el, handle: null, latest: envelope, buildId: envelope.buildId };
-      entries.set(el, entry);
-      live.add(entry);
-      start(entry);
-    } else if (entry.buildId !== envelope.buildId) {
-      // Remote redeployed: the only case where island HTML is replaced.
-      entry.handle?.destroy();
-      el.dataset.nfState = 'booting';
-      el.innerHTML = envelope.html;
-      const next: Entry = {
+    const create = (): Entry => {
+      const e: Entry = {
         el,
         handle: null,
         latest: envelope,
+        original: envelope,
         buildId: envelope.buildId,
+        bootstrap: envelope.bootstrap,
       };
-      entries.set(el, next);
-      live.delete(entry);
-      live.add(next);
-      start(next);
+      entries.set(el, e);
+      live.add(e);
+      return e;
+    };
+    if (!entry) {
+      // First mount of this container (or a swapped-in container, rule 5).
+      start(create());
+    } else if (
+      entry.buildId !== envelope.buildId ||
+      entry.bootstrap !== envelope.bootstrap
+    ) {
+      // Remote redeployed: the only case where island HTML is replaced.
+      destroyEntry(entry);
+      el.dataset.nfState = 'booting';
+      el.innerHTML = envelope.html;
+      start(create());
     } else if (entry.latest !== envelope) {
       // Rule 6: later updates apply only the new RSC payload.
       entry.latest = envelope;
       entry.handle?.update(envelope);
     }
-    // Rules 3/4: no unmount in cleanup (StrictMode / Activity safe); sweep() handles real removal.
+    // Rules 3/4: cleanup never unmounts synchronously (StrictMode / Activity safe). It only
+    // schedules a check: a node still connected (re-run effect, hidden Activity) is kept.
+    return () => {
+      setTimeout(() => {
+        if (el.isConnected) return;
+        const e = entries.get(el);
+        if (e) destroyEntry(e);
+      }, 0);
+    };
   }, [envelope]);
 
   return (

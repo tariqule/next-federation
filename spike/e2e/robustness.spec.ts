@@ -18,6 +18,7 @@ for (const host of HOSTS) {
       // Streaming briefly keeps a hidden copy until React swaps it in.
       await expect(page.getByText('remote unavailable')).toHaveCount(1);
       await expect(page.getByText('remote unavailable')).toBeVisible();
+      await expect(page.getByText('loading…')).toHaveCount(0);
     });
 
     test('a slow remote: the host times out and shows the fallback', async ({
@@ -29,7 +30,8 @@ for (const host of HOSTS) {
       // Streaming briefly keeps a hidden copy until React swaps it in.
       await expect(page.getByText('remote too slow')).toHaveCount(1);
       await expect(page.getByText('remote too slow')).toBeVisible();
-      expect(Date.now() - started).toBeLessThan(8000); // 3 s timeout, not the remote's 10 s
+      await expect(page.getByText('loading…')).toHaveCount(0);
+      expect(Date.now() - started).toBeLessThan(3500); // 3 s timeout, not the remote's 10 s
     });
 
     test('island content cannot inject script', async ({ page, request }) => {

@@ -40,6 +40,32 @@ for (const host of HOSTS) {
       expect(errors).toEqual([]);
     });
 
+    test('gate c2: two remotes, three islands live and independent', async ({
+      page,
+    }) => {
+      const errors = collectErrors(page);
+      await page.goto(`${host.url}/two`);
+      await expect(page.locator('[data-nf-state="live"]')).toHaveCount(3);
+      const p0 = island(page, 'ProductPanel').nth(0);
+      const p1 = island(page, 'ProductPanel').nth(1);
+      const banner = island(page, 'Banner');
+      await p0.getByTestId('counter').click();
+      await p0.getByTestId('counter').click();
+      await p1.getByTestId('counter').click();
+      await expect(p0.getByTestId('counter')).toHaveText('count 2');
+      await expect(p1.getByTestId('counter')).toHaveText('count 1');
+      const bc = banner.getByTestId('counter');
+      if (await bc.count()) {
+        await bc.click();
+        await expect(bc).toHaveText('count 1');
+        await expect(p0.getByTestId('counter')).toHaveText('count 2');
+      }
+      expect(
+        await page.evaluate(() => (window as any).__viteRscCallServer),
+      ).toBeUndefined();
+      expect(errors).toEqual([]);
+    });
+
     test('island CSS is rendered by the host with precedence', async ({
       page,
     }) => {

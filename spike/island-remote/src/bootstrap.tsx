@@ -44,7 +44,7 @@ const registry = ((globalThis as any).__nf_rsc__ ??= {}) as Record<
   string,
   unknown
 >;
-registry[ORIGIN] = {
+registry[BASE] = {
   require(rawId: string) {
     const id = rawId.split('$$cache=')[0]!;
     let mod = cache.get(id);

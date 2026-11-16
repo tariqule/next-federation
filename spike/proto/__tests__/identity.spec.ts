@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, test } from '@rstest/core';
 import {
   IdentityError,
+  IdentityUnavailableError,
   generateHostKeys,
   getIdentity,
   mintIslandToken,
@@ -106,5 +107,35 @@ describe('island identity tokens', () => {
       async () => getIdentity()?.sub,
     );
     expect(seen).toBe('user-9');
+  });
+});
+
+describe('JWKS outage vs invalid token', () => {
+  test('an unreachable JWKS is "unavailable", not "invalid"', async () => {
+    const token = await mint();
+    await expect(
+      verifyIslandToken(token, {
+        jwksUrl: 'http://127.0.0.1:1/jwks', // nothing listens on port 1
+        aud: 'a',
+        issuers: [iss],
+      }),
+    ).rejects.toBeInstanceOf(IdentityUnavailableError);
+  });
+
+  test('a bad signature is still an IdentityError, not "unavailable"', async () => {
+    const forged = await mintIslandToken({
+      privateJwk: other.privateJwk,
+      kid: 'k1',
+      iss,
+      aud: 'a',
+      sub: 'u',
+    });
+    const err = await verifyIslandToken(forged, {
+      jwksUrl,
+      aud: 'a',
+      issuers: [iss],
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(IdentityError);
+    expect(err).not.toBeInstanceOf(IdentityUnavailableError);
   });
 });

@@ -8,7 +8,8 @@ export default function Slow() {
         remote="a"
         island="Slow"
         props={{ ms: 10_000 }}
-        fallback={<p>remote too slow</p>}
+        fallback={<p>loading…</p>}
+        errorFallback={<p>remote too slow</p>}
       />
     </main>
   );

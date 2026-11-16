@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import { decodeJwt } from 'jose';
 import {
   IdentityError,
+  IdentityUnavailableError,
   runWithIdentity,
   verifyIslandToken,
   type IslandIdentity,
@@ -36,7 +37,7 @@ export type IslandHandlerOptions = {
 export async function identityFrom(
   req: Request,
   opts: Pick<IslandHandlerOptions, 'name' | 'issuers'>,
-): Promise<IslandIdentity | null | 'invalid'> {
+): Promise<IslandIdentity | null | 'invalid' | 'unavailable'> {
   const auth = req.headers.get('authorization');
   if (!auth) return null;
   const token = auth.replace(/^Bearer /, '');
@@ -49,6 +50,7 @@ export async function identityFrom(
       issuers: opts.issuers,
     });
   } catch (e) {
+    if (e instanceof IdentityUnavailableError) return 'unavailable';
     if (e instanceof IdentityError || e instanceof Error) return 'invalid';
     throw e;
   }
@@ -106,6 +108,13 @@ export function createIslandHandler(
       });
     }
     const identity = await identityFrom(req, opts);
+    if (identity === 'unavailable') {
+      // The issuer's JWKS can't be reached: a temporary server problem, not a bad token.
+      return new Response(null, {
+        status: 503,
+        headers: { ...cors, 'cache-control': 'no-store', 'retry-after': '5' },
+      });
+    }
     if (
       identity === 'invalid' ||
       (!identity && opts.privateIslands?.includes(island))

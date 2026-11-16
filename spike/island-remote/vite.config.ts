@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import rsc from '@vitejs/plugin-rsc';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -16,8 +17,8 @@ const OUT = VERSIONED
 // Per-remote flight-client scope (design §6 "no shared globals"). plugin-rsc rewrites the flight
 // client's __webpack_require__ to a page-global __vite_rsc_require__. Two remotes on one page would
 // overwrite each other, so the browser flight client is re-pointed at a registry entry keyed by this
-// remote's origin. (A true module-scoped binding is impossible in dev: the client is pre-bundled.)
-const SLOT = `globalThis.__nf_rsc__[${JSON.stringify(ORIGIN)}]`;
+// build's absolute base URL (two builds of one remote may share a page). (A true module-scoped binding is impossible in dev: the client is pre-bundled.)
+const SLOT = `globalThis.__nf_rsc__[${JSON.stringify(BASE)}]`;
 const scopeFlightClient = (code: string) =>
   code
     .replaceAll('__vite_rsc_require__', `${SLOT}.require`)
@@ -53,7 +54,9 @@ export default defineConfig({
   base: BASE,
   // Remotes A and B run from this one folder: separate optimizer caches, since the pre-bundled
   // flight client embeds the remote's origin.
-  cacheDir: `node_modules/.vite-${process.env.NF_REMOTE ?? 'a'}`,
+  // The pre-bundled flight client has SLOT baked in, and Vite's optimizer cache does not notice
+  // plugin changes, so the cache folder is named after the slot: a new key forces a fresh bundle.
+  cacheDir: `node_modules/.vite-${REMOTE}-${createHash('sha1').update(SLOT).digest('hex').slice(0, 8)}`,
   // No @vitejs/plugin-react: Fast Refresh globals would clash with the host's refresh runtime
   // when island modules load cross-origin. Vite's built-in oxc compiles JSX.
   oxc: { jsx: { runtime: 'automatic', importSource: 'react' } },

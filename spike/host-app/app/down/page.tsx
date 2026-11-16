@@ -8,7 +8,8 @@ export default function Down() {
         remote="down"
         island="Banner"
         props={{ text: 'never' }}
-        fallback={<p>remote unavailable</p>}
+        fallback={<p>loading…</p>}
+        errorFallback={<p>remote unavailable</p>}
       />
     </main>
   );

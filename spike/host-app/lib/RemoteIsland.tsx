@@ -21,6 +21,7 @@ type Props = {
   props?: object;
   private?: boolean;
   fallback: ReactNode;
+  errorFallback?: ReactNode;
 };
 
 // Every island sits in its own Suspense boundary (design §6, maintainer review B2).
@@ -68,11 +69,12 @@ async function IslandLoader({
   props = {},
   private: isPrivate,
   fallback,
+  errorFallback = fallback,
 }: Props) {
   const envelope = isPrivate
     ? await getPrivateEnvelope(remote, island, props)
     : await getPublicEnvelope(remote, island, props);
-  if (!envelope) return <>{fallback}</>;
+  if (!envelope) return <>{errorFallback}</>;
   return (
     <>
       {envelope.css.map((href) => (

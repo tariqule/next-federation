@@ -139,6 +139,8 @@ async function actionHandler(request: Request): Promise<Response> {
     name: NAME,
     issuers: ISSUERS,
   });
+  if (identity === 'unavailable')
+    return new Response(null, { status: 503, headers: cors });
   if (identity === 'invalid')
     return new Response(null, { status: 401, headers: cors });
   const id = request.headers.get('x-nf-action');

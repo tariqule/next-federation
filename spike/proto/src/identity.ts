@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   SignJWT,
   createRemoteJWKSet,
+  errors,
   exportJWK,
   generateKeyPair,
   importJWK,
@@ -14,6 +15,11 @@ export type IslandIdentity = { sub: string; [claim: string]: unknown };
 
 export class IdentityError extends Error {
   override name = 'IdentityError';
+}
+
+/** The token could not be checked (JWKS unreachable or timed out): not the caller's fault. */
+export class IdentityUnavailableError extends IdentityError {
+  override name = 'IdentityUnavailableError';
 }
 
 const ALG = 'ES256';
@@ -78,6 +84,10 @@ export async function verifyIslandToken(
     return payload as IslandIdentity;
   } catch (e) {
     if (e instanceof IdentityError) throw e;
+    // Network failures (fetch TypeError) and JWKS timeouts mean "can't check", not "invalid".
+    if (!(e instanceof errors.JOSEError) || e instanceof errors.JWKSTimeout) {
+      throw new IdentityUnavailableError((e as Error).message);
+    }
     throw new IdentityError((e as Error).message);
   }
 }
