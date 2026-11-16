@@ -1,0 +1,13 @@
+# Used when deploying docs-site (root directory docs-site) from the repo root:
+# upload only sources, never build output or caches.
+.git
+.superpowers
+**/node_modules
+**/.next
+**/.next-*
+**/dist
+**/test-results*
+**/playwright-report
+**/.vercel
+**/.logs-*
+**/coverage

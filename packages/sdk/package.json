@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "description": "Category logger and NF-xxx error codes shared by every next-federation package.",
   "license": "MIT",
+  "author": "tariqule",
+  "homepage": "https://github.com/tariqule/next-federation#readme",
+  "bugs": "https://github.com/tariqule/next-federation/issues",
+  "keywords": [
+    "module-federation",
+    "nextjs",
+    "react-server-components",
+    "micro-frontends",
+    "islands",
+    "logger",
+    "error-codes"
+  ],
   "type": "module",
   "sideEffects": false,
   "repository": {

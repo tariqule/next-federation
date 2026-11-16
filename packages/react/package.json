@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "description": "React components for next-federation: the island mount, the island error boundary and fallbacks.",
   "license": "MIT",
+  "author": "tariqule",
+  "homepage": "https://github.com/tariqule/next-federation#readme",
+  "bugs": "https://github.com/tariqule/next-federation/issues",
+  "keywords": [
+    "module-federation",
+    "nextjs",
+    "react-server-components",
+    "micro-frontends",
+    "islands",
+    "react",
+    "error-boundary"
+  ],
   "type": "module",
   "sideEffects": false,
   "repository": {

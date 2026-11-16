@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "description": "Island protocol v1 for next-federation: envelope, request codec, bootstrap contract. Bundler-neutral.",
   "license": "MIT",
+  "author": "tariqule",
+  "homepage": "https://github.com/tariqule/next-federation#readme",
+  "bugs": "https://github.com/tariqule/next-federation/issues",
+  "keywords": [
+    "module-federation",
+    "nextjs",
+    "react-server-components",
+    "micro-frontends",
+    "islands",
+    "protocol",
+    "rsc-flight"
+  ],
   "type": "module",
   "sideEffects": false,
   "repository": {

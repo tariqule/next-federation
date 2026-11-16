@@ -1,0 +1,56 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Security problems go through the private advisory link on the issue chooser, not here.
+  - type: input
+    id: versions
+    attributes:
+      label: next-federation version
+      description: The `@next-federation/*` version (all packages are versioned together).
+    validations:
+      required: true
+  - type: input
+    id: next
+    attributes:
+      label: Next.js, React and Node versions
+      placeholder: next 16.x, react 19.x, node 24.x
+    validations:
+      required: true
+  - type: dropdown
+    id: router
+    attributes:
+      label: Host router
+      options:
+        - App Router
+        - Pages Router
+        - Vite SPA
+        - Not applicable
+    validations:
+      required: true
+  - type: dropdown
+    id: bundler
+    attributes:
+      label: Bundler
+      options:
+        - Turbopack
+        - webpack
+        - Vite
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A link to a minimal repository, or exact steps. Say whether it happens in dev, production or both.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

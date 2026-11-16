@@ -17,6 +17,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "changeset": "changeset",
+    "release": "pnpm build && changeset publish",
     "e2e": "pnpm e2e:dev && pnpm e2e:dev:webpack && pnpm e2e:prod && pnpm e2e:prod:webpack && pnpm e2e:skew",
     "e2e:dev": "NF_MODE=dev pnpm --filter e2e test",
     "e2e:dev:webpack": "NF_MODE=dev NF_BUNDLER=webpack pnpm --filter e2e test",

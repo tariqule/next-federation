@@ -1,7 +1,5 @@
 # Phase 0 Spike + Local Playground Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Prove or disprove the design's Phase 0 assumptions (c, c2, d, e, e2, f, g, h, i, j) in a local playground with a Next.js App Router host, a Next.js Pages Router host, and a client-side-rendered Vite SPA, and record a go/no-go verdict per gate.
 
 **Architecture:** This is a throwaway prototype in `spike/`, a pnpm workspace inside the `next-federation` repo:

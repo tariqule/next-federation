@@ -15,6 +15,9 @@ concurrency:
   group: vercel-e2e
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   e2e-vercel:
     runs-on: ubuntu-latest

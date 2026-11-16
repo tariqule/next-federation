@@ -76,4 +76,5 @@ Next.js is a trademark of Vercel, Inc.
 
 Requires Node >= 24 and pnpm 10 for the workspace; the published packages target Node >= 20.9.
 See [AGENTS.md](AGENTS.md) for the repo map and commands, and [docs/conventions.md](docs/conventions.md)
-for code conventions. Released under the [MIT licence](LICENSE).
+for code conventions, [CONTRIBUTING.md](CONTRIBUTING.md) to contribute, and
+[SECURITY.md](SECURITY.md) to report a vulnerability. Released under the [MIT licence](LICENSE).
