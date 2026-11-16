@@ -40,8 +40,13 @@ export function ReactProbe({
 }: {
   descriptor: RemoteComponentDescriptor | null
 }) {
-  // The signed remote only: on the tampered page its own load would fail.
-  if (!descriptor?.ssr || descriptor.remote !== 'components') return null
+  // The signed remotes only: on the tampered page its own load would fail.
+  if (
+    !descriptor?.ssr ||
+    (descriptor.remote !== 'components' && descriptor.remote !== 'rspack')
+  ) {
+    return null
+  }
   return (
     <Quiet>
       <Suspense fallback={null}>

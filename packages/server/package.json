@@ -59,6 +59,7 @@
     "@next-federation/core": "workspace:*"
   },
   "bin": {
+    "nf-describe": "./dist/node/describe-cli.js",
     "nf-serve": "./dist/node/cli.js"
   }
 }

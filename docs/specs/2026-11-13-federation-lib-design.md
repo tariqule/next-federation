@@ -199,7 +199,9 @@ for a verified build, then hydrated in the browser; in the browser only for any 
   host bundler never tries to resolve them (§2).
 - **React sharing:** §7.
 - **Remote builds:** `@next-federation/vite` (wraps `@module-federation/vite`). MF 2.0 remotes from Rspack or webpack
-  that emit `mf-manifest.json`: **untested; planned** (they also need a build descriptor, `nf-components.json`).
+  (`@module-federation/enhanced`, emitting `mf-manifest.json`) also work: `nf-describe` (`@next-federation/server`)
+  writes their descriptor. Tested: `test/e2e/mode-a-rspack.spec.ts` (an Rspack remote, server-rendered and hydrated
+  in App Router and Pages Router hosts, browser-rendered in an SPA). webpack: documented, untested.
 - **Mode A server rendering shipped for verified builds** (first deferred after review, then built in Task 28). It
   runs remote code fetched over the network inside the host's server process, so a compromised remote CDN would
   mean code execution with the host's secrets. What shipped against the original prerequisites:

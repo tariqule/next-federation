@@ -29,6 +29,10 @@ export const COMPONENTS_PORTS = {
   unsigned: 4112,
   /** Started by mode-a.spec.ts itself: redeploy and skew (r1, r2). */
   redeploy: 4113,
+  /** The Rspack-built remote (components-remote-rspack): signed rs1. */
+  rspack: 4114,
+  /** The Rspack-built remote, unsigned ru1. */
+  rspackUnsigned: 4115,
   /** Nothing listens here. */
   down: 4119,
 } as const

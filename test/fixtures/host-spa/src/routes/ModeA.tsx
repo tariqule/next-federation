@@ -12,6 +12,9 @@ import { Suspense, use } from 'react'
 const origin =
   import.meta.env.VITE_NF_COMPONENTS_ORIGIN ?? 'http://127.0.0.1:4110'
 const down = import.meta.env.VITE_NF_COMPONENTS_DOWN ?? 'http://127.0.0.1:4119'
+// `?rspack=1`: the remote built with Rspack (components-remote-rspack).
+const rspack =
+  import.meta.env.VITE_NF_COMPONENTS_RSPACK ?? 'http://127.0.0.1:4114'
 
 const RemoteCounter = createRemoteComponent<{ start?: number }>({
   expose: './Counter',
@@ -29,7 +32,7 @@ function descriptorOf(url: string) {
   let p = descriptors.get(url)
   if (!p) {
     p = fetchDescriptorInBrowser(`${url}/_nf/components.json`, {
-      remote: 'components',
+      remote: url === rspack ? 'rspack' : 'components',
     })
     descriptors.set(url, p)
   }
@@ -49,7 +52,8 @@ function Section({ url }: { url: string }) {
 }
 
 export function ModeA() {
-  const url = new URLSearchParams(location.search).get('down') ? down : origin
+  const query = new URLSearchParams(location.search)
+  const url = query.get('down') ? down : query.get('rspack') ? rspack : origin
   return (
     <main>
       <h1>Mode A (SPA)</h1>

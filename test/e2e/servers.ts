@@ -36,8 +36,9 @@
 //   NF_REMOTE_A_ORIGIN    host-app: remote `a`'s origin, set from
 //                         NF_VERCEL_PROD_URL when that is set (vercel.spec.ts).
 //   VITE_NF_ORIGIN_*      host-spa: remote origins (A, B, FAKE, C, RETIRED).
-//   VITE_NF_COMPONENTS_*  host-spa: the Mode A remote (ORIGIN) and a down one
-//                         (DOWN). Mode A ports: fixtures/components-keys.ts.
+//   VITE_NF_COMPONENTS_*  host-spa: the Mode A remote (ORIGIN), a down one
+//                         (DOWN) and the Rspack-built one (RSPACK). Mode A
+//                         ports: fixtures/components-keys.ts.
 // Ports below are the lane's: BASE_PORTS plus lane.ts's offset.
 //
 // Origins: hosts are reached as `localhost`, remotes as `127.0.0.1`, so a
@@ -232,6 +233,7 @@ const spaEnv: Record<string, string> = {
   VITE_NF_ORIGIN_RETIRED: REMOTE_A_RETIRED,
   VITE_NF_COMPONENTS_ORIGIN: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.signed)}`,
   VITE_NF_COMPONENTS_DOWN: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.down)}`,
+  VITE_NF_COMPONENTS_RSPACK: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.rspack)}`,
 }
 
 const hostEnv = (port: number): Record<string, string> => ({
@@ -294,6 +296,14 @@ export const APPS: App[] = [
     key: 'components-remote',
     dir: 'components-remote',
     url: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.signed)}/_nf/components.json`,
+    command: 'node scripts/e2e.ts',
+  },
+  {
+    // Mode A remotes built with Rspack + @module-federation/enhanced (not
+    // Vite) and described by nf-describe: signed rs1, unsigned ru1.
+    key: 'components-remote-rspack',
+    dir: 'components-remote-rspack',
+    url: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.rspack)}/_nf/components.json`,
     command: 'node scripts/e2e.ts',
   },
   {

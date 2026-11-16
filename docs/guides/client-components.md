@@ -16,7 +16,7 @@ it in the browser.
 | Props | Plain JSON | Anything a client component takes |
 | Server rendering | Always, on the remote | On the host, for verified builds only |
 | Remote server code in the host process | Never | Yes, for verified builds (see Integrity) |
-| Remote framework | Anything that serves the island protocol | `@module-federation/vite` (`nextFederationComponents`) |
+| Remote framework | Anything that serves the island protocol | Any Module Federation 2.0 build: `nextFederationComponents` (Vite), or Rspack/webpack + `nf-describe` |
 
 Use islands when the remote must stay isolated, or owns its data fetching. Use client components
 for interactive pieces that must feel like part of the host: they share its React, context and
@@ -66,6 +66,159 @@ fails with `NF-002` when an exposed module contains Fast Refresh code.
 
 `@module-federation/vite` is pinned to exactly **1.24.0** (`NF-026` otherwise; `NF_ALLOW_MF_VITE=1`
 for a canary job only).
+
+## Remotes built with Rspack or webpack
+
+Any Module Federation 2.0 remote that emits `mf-manifest.json` works, built with
+`@module-federation/enhanced`. The e2e suite runs one built with Rspack 2.3.0 and
+`@module-federation/enhanced` 2.9.2 against App Router, Pages Router and SPA hosts
+(`test/fixtures/components-remote-rspack`). You make two builds (the browser copy and a CommonJS
+server copy for host SSR), then `nf-describe` (in `@next-federation/server`) writes the descriptor.
+
+**webpack is documented but untested**: only the Rspack setup below runs in the e2e suite. The
+webpack equivalent (same options, `@module-federation/enhanced/webpack` and webpack's
+`LimitChunkCountPlugin`) is expected to work the same way, but no test proves it.
+
+```ts
+// rspack.config.ts of the remote (webpack: the same, with
+// `@module-federation/enhanced/webpack` and webpack's LimitChunkCountPlugin)
+import { ModuleFederationPlugin } from '@module-federation/enhanced/rspack'
+import { rspack } from '@rspack/core'
+import type { Configuration } from '@rspack/core'
+import { join } from 'node:path'
+
+const buildId = process.env.NF_BUILD_ID ?? Date.now().toString(36)
+const client = join(import.meta.dirname, 'dist', buildId, 'client')
+// Absolute and immutable per build: nf-serve serves client/ under /b/<buildId>/.
+const publicPath = `https://shop.example.com/b/${buildId}/`
+
+// Host-provided, never bundled: always these four React modules, plus any
+// module whose instance the host owns (a context module).
+const host = (requiredVersion: string | false) => ({
+  singleton: true,
+  import: false as const,
+  requiredVersion,
+})
+const shared = {
+  react: host('^19.0.0'),
+  'react-dom': host('^19.0.0'),
+  'react-dom/client': host('^19.0.0'),
+  'react/jsx-runtime': host('^19.0.0'),
+  '@acme/host-context': host(false),
+}
+const exposes = { './Cart': './src/Cart.tsx' }
+const common: Configuration = {
+  mode: 'production',
+  entry: {},
+  resolve: { extensions: ['.tsx', '.ts', '.js'] },
+  module: {
+    rules: [
+      {
+        test: /\.tsx?$/,
+        loader: 'builtin:swc-loader',
+        options: {
+          jsc: {
+            parser: { syntax: 'typescript', tsx: true },
+            transform: { react: { runtime: 'automatic' } },
+          },
+        },
+      },
+    ],
+  },
+}
+
+export default [
+  {
+    ...common,
+    name: 'browser',
+    target: 'web',
+    output: {
+      path: client,
+      publicPath,
+      uniqueName: 'shop', // the host page may run other webpack runtimes
+      clean: true,
+      module: true,
+      chunkFormat: 'module',
+      chunkLoading: 'import',
+    },
+    plugins: [
+      new ModuleFederationPlugin({
+        name: 'shop', // the container name (a JS identifier)
+        filename: 'remoteEntry.js',
+        library: { type: 'module' },
+        exposes,
+        shared,
+        manifest: true,
+        dts: false,
+      }),
+    ],
+  },
+  {
+    ...common,
+    name: 'server',
+    // Built after the browser copy (its `clean` empties client/).
+    dependencies: ['browser'],
+    target: 'async-node',
+    output: {
+      path: join(client, 'server'),
+      publicPath: `${publicPath}server/`,
+      uniqueName: 'shop',
+      clean: true,
+      // One file: hosts resolve no Node modules (fs, vm) for remote code.
+      asyncChunks: false,
+    },
+    optimization: { splitChunks: false },
+    plugins: [
+      new rspack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
+      new ModuleFederationPlugin({
+        name: 'shop',
+        filename: 'remoteEntry.js',
+        library: { type: 'commonjs-module' },
+        exposes,
+        shared,
+        manifest: true,
+        dts: false,
+      }),
+    ],
+  },
+] satisfies Configuration[]
+```
+
+Then describe the build (`NF_COMPONENTS_SIGNING_KEY` set signs it) and serve it:
+
+```sh
+NF_BUILD_ID=2026-11-16a rspack build
+nf-describe --dir dist/2026-11-16a --ssr-entry server/remoteEntry.js
+nf-serve --dir dist --port 4110
+```
+
+`nf-describe --dir <build folder>` reads `<build folder>/client/mf-manifest.json` and:
+
+- records the server entry in the manifest (`metaData.ssrRemoteEntry`, `type: 'commonjs-module'`;
+  Rspack and webpack manifests never name one), which is how a host's server finds it;
+- hashes the manifest and every file of the server graph, and fails (`NF-002`) when a server file
+  requires a module hosts never provide (an async-chunk server build loads its chunks with `fs` and
+  `vm`: build it as one file, as above);
+- writes `nf-components.json` (exactly what `nextFederationComponents` writes, browser assets
+  included, signed when `NF_COMPONENTS_SIGNING_KEY` holds the private JWK; an unsigned build with
+  `NODE_ENV=production` is a warning) and `nf-build.json`.
+
+It never reads or writes a build file through a symlink, and refuses server files that resolve
+outside the build folder (`NF-002`).
+
+**Run `nf-describe` before you upload the build** (for example to a CDN): it rewrites
+`client/mf-manifest.json`, whose sha384 is in the descriptor. A copy of the manifest uploaded
+earlier fails the digest check, and hosts then render the build in the browser only (`NF-027`).
+
+The build id is the folder name (`--build-id` otherwise); the public URL is the manifest's absolute
+`publicPath` (`--base` when it is `auto`) and must contain the build id. `--no-ssr` describes a
+browser-only build. Describing a build again keeps its build time.
+
+`nf-describe --dir <build folder> --verify` checks a described build before you ship it
+(`NF-027` otherwise): the digest covers the payload (assets included), the JWS signs exactly that
+payload, the assets are the ones `mf-manifest.json` lists, and every server file still matches its
+sha384. With `--public-key <public JWK or file>` (repeatable) it also verifies the ES256
+signature, as hosts do; **without one the signature is not checked**, and the output says so.
 
 ## Host: configure the remote
 

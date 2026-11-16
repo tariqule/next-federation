@@ -28,6 +28,12 @@ export const componentsFederation = defineFederation({
     unsigned: { origin: at(COMPONENTS_PORTS.unsigned), components: trusted },
     redeploy: { origin: at(COMPONENTS_PORTS.redeploy), components: trusted },
     down: { origin: at(COMPONENTS_PORTS.down), components: trusted },
+    // Built with Rspack + @module-federation/enhanced, described by nf-describe.
+    rspack: { origin: at(COMPONENTS_PORTS.rspack), components: trusted },
+    'rspack-unsigned': {
+      origin: at(COMPONENTS_PORTS.rspackUnsigned),
+      components: trusted,
+    },
   },
 })
 
@@ -37,4 +43,6 @@ export const MODE_A_REMOTES = [
   'unsigned',
   'redeploy',
   'down',
+  'rspack',
+  'rspack-unsigned',
 ] as const
