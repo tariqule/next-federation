@@ -260,6 +260,8 @@ for (const key of NEXT_RUNTIME_ONLY) {
     let served
     try {
       mkdirSync(join(dir, 'b1', 'rsc'), { recursive: true })
+      // As @next-federation/vite writes it: the build declares ES modules.
+      writeFileSync(join(dir, 'b1', 'package.json'), '{"type":"module"}\n')
       writeFileSync(
         join(dir, 'b1', 'nf-build.json'),
         JSON.stringify({ buildId: 'b1', builtAt: Date.now() })

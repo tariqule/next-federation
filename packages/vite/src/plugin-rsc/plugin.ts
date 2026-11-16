@@ -191,6 +191,13 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
           base: opts.publicBase,
         }
         await mkdir(outDir, { recursive: true })
+        // Node < 22 loads `rsc/index.js` as CommonJS unless the nearest
+        // package.json says "type": "module" (e.g. when only this folder is
+        // deployed), so the build carries its own.
+        await writeFile(
+          join(outDir, 'package.json'),
+          `${JSON.stringify({ type: 'module' })}\n`
+        )
         await writeFile(
           join(outDir, 'nf-build.json'),
           `${JSON.stringify(info, null, 2)}\n`
