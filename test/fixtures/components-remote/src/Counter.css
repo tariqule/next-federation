@@ -1,0 +1,5 @@
+/* Mode A stylesheet fixture: a distinctive rule the e2e checks after hydration. */
+.nf-counter {
+  color: rgb(12, 34, 56);
+  border-left: 3px solid rgb(12, 34, 56);
+}

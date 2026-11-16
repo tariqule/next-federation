@@ -204,12 +204,18 @@ export async function verifyComponentDescriptor(
   target: ComponentTarget,
   file: ComponentDescriptorFile
 ): Promise<VerifiedComponentDescriptor> {
-  const { v, name, buildId, base, manifest, ssr, iat, jws } = file
-  const payload: ComponentBuildDescriptor =
-    iat === undefined
-      ? { v, name, buildId, base, manifest, ssr }
-      : { v, name, buildId, base, manifest, ssr, iat }
-  const browserOnly: RemoteComponentDescriptor = {
+  const { v, name, buildId, base, manifest, ssr, iat, assets, jws } = file
+  const payload: ComponentBuildDescriptor = {
+    v,
+    name,
+    buildId,
+    base,
+    manifest,
+    ssr,
+    ...(iat === undefined ? {} : { iat }),
+    ...(assets === undefined ? {} : { assets }),
+  }
+  const unstyled: RemoteComponentDescriptor = {
     remote: target.remote,
     name,
     buildId,
@@ -219,6 +225,9 @@ export async function verifyComponentDescriptor(
     maxBuilds: target.maxBuilds,
     ...(iat === undefined ? {} : { iat }),
   }
+  // The browser renders an unverified build too, with its stylesheets.
+  const browserOnly: RemoteComponentDescriptor =
+    assets === undefined ? unstyled : { ...unstyled, assets }
   const digest = await componentDescriptorDigest(payload)
   const trusted = (trust: ComponentTrustKind): VerifiedComponentDescriptor => {
     // The server loader evaluates only descriptors recorded here (or that it
@@ -241,7 +250,9 @@ export async function verifyComponentDescriptor(
     code: 'NF-027' | 'NF-028',
     detail: string
   ): VerifiedComponentDescriptor => ({
-    descriptor: browserOnly,
+    // NF-027: the file is not what was built, so none of its URLs are used
+    // (no stylesheet or modulepreload link from a URL the remote didn't sign).
+    descriptor: code === 'NF-027' ? unstyled : browserOnly,
     trust: null,
     code,
     detail,

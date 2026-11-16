@@ -1,6 +1,9 @@
 // The Mode A React bindings, created over a runtime (index.tsx wires the real
 // one; tests pass a fake, with `isServer` set either way).
-import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import type {
+  ComponentExposeAssets,
+  RemoteComponentDescriptor,
+} from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import {
   Component,
@@ -12,6 +15,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import type { ComponentType, ReactNode } from 'react'
+import { preinit, preload, preloadModule } from 'react-dom'
 import type {
   ComponentRuntime,
   RemoteModule,
@@ -87,6 +91,36 @@ function hasBrowserOnlyMark(id: string): boolean {
       `template[${BROWSER_ONLY_ATTR}="${CSS.escape(id)}"]`
     ) !== null
   )
+}
+
+/**
+ * Remote component stylesheets are React 19 stylesheet resources, as for
+ * islands (island-mount.tsx): one link per href across the page, in `<head>`
+ * in this precedence group. A server-rendered component renders
+ * `<link precedence>` next to its markup, so its HTML never paints unstyled
+ * (a streamed boundary is revealed once its stylesheet loaded); hydration
+ * renders the same links. A component first mounted in the browser (client
+ * navigation, browser-only build, SPA) inserts them with `preinit` instead:
+ * a rendered one would hold the commit (the host's navigation) until it
+ * loads. Either way the stylesheet is in the document before the module
+ * loads, so the remote's own CSS loader finds it and never adds another.
+ */
+const CSS_PRECEDENCE = 'next-federation'
+
+/** The descriptor's browser files of one expose, only URLs under its base. */
+function exposeAssets(
+  descriptor: RemoteComponentDescriptor,
+  expose: string
+): (ComponentExposeAssets & { entry: string | null }) | null {
+  const assets = descriptor.assets
+  const files = assets?.exposes[expose]
+  if (!assets || !files) return null
+  const inside = (url: string) => url.startsWith(descriptor.base)
+  return {
+    entry: inside(assets.entry) ? assets.entry : null,
+    css: [...new Set(files.css.filter(inside))],
+    js: [...new Set(files.js.filter(inside))],
+  }
 }
 
 export type Bindings = {
@@ -176,6 +210,17 @@ export function createBindings({
       () => true,
       () => false
     )
+    // True when this boundary first renders in the browser after hydration,
+    // or is one the server left to the browser (it sent no stylesheet).
+    const [clientMount] = useState(hydrated || marked)
+    const files = exposeAssets(descriptor, expose)
+    const css = files?.css ?? []
+    if (clientMount) {
+      // Before the load below starts (see CSS_PRECEDENCE).
+      for (const href of css) {
+        preinit(href, { as: 'style', precedence: CSS_PRECEDENCE })
+      }
+    }
     const browserOnly = (
       <>
         <template {...{ [BROWSER_ONLY_ATTR]: id }} />
@@ -189,10 +234,42 @@ export function createBindings({
         : runtime.load(descriptor, expose)) as Promise<RemoteModule | null>
     )
     if (!mod) return browserOnly
-    return createElement(
-      mod.default as ComponentType<Record<string, unknown>>,
-      props
+    return (
+      <>
+        {clientMount
+          ? null
+          : css.map((href) => (
+              <link
+                key={href}
+                rel="stylesheet"
+                href={href}
+                precedence={CSS_PRECEDENCE}
+              />
+            ))}
+        {createElement(
+          mod.default as ComponentType<Record<string, unknown>>,
+          props
+        )}
+      </>
     )
+  }
+
+  /**
+   * Server render of a build this server renders: modulepreload the remote
+   * entry and the expose's chunks, and preload its stylesheets, from the
+   * shell (outside Suspense), so the browser fetches them in parallel
+   * instead of manifest, then entry, then chunks.
+   */
+  function preloadAssets(
+    descriptor: RemoteComponentDescriptor,
+    expose: string
+  ): void {
+    if (!descriptor.ssr || runtime.serverBlock(descriptor)) return
+    const files = exposeAssets(descriptor, expose)
+    if (!files) return
+    for (const href of files.css) preload(href, { as: 'style' })
+    if (files.entry) preloadModule(files.entry)
+    for (const href of files.js) preloadModule(href)
   }
 
   /**
@@ -213,6 +290,7 @@ export function createBindings({
     }: RemoteComponentProps<P>): ReactNode {
       const fallback = fallbackProp ?? options.fallback ?? null
       if (!descriptor) return fallback
+      if (isServer) preloadAssets(descriptor, expose)
       const tree = (
         <Boundary key={descriptor.base} fallback={fallback}>
           <Suspense fallback={fallback}>

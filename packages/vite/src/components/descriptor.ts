@@ -7,6 +7,7 @@ import {
   sha384Integrity,
 } from '@next-federation/protocol'
 import type {
+  ComponentBuildAssets,
   ComponentBuildDescriptor,
   ComponentDescriptorFile,
 } from '@next-federation/protocol'
@@ -17,8 +18,76 @@ import type { JWK } from 'jose'
 /** `require("./x")` / `require("../x")` in the CommonJS server build. */
 const RELATIVE_REQUIRE = /require\(["'](\.\.?\/[^"']+)["']\)/g
 
+type ManifestEntry = { name?: unknown; path?: unknown }
+type ManifestFiles = { sync?: unknown; async?: unknown }
 type Manifest = {
-  metaData?: { ssrRemoteEntry?: { name?: unknown; path?: unknown } }
+  metaData?: { remoteEntry?: ManifestEntry; ssrRemoteEntry?: ManifestEntry }
+  exposes?: Array<{
+    path?: unknown
+    assets?: { js?: ManifestFiles; css?: ManifestFiles }
+  }>
+}
+
+/** A manifest file path as an absolute URL under `base`; NF-002 outside it. */
+function underBase(base: string, file: unknown): string {
+  const parts = typeof file === 'string' ? file.split('/') : []
+  if (
+    parts.length === 0 ||
+    (file as string).includes('\\') ||
+    !parts.every((p) => p !== '' && p !== '.' && p !== '..' && !/[?#:]/.test(p))
+  ) {
+    throw new NFError(
+      'NF-002',
+      `mf-manifest.json lists ${JSON.stringify(file)}, which is not a file inside the build folder.`
+    )
+  }
+  const url = `${base}${file as string}`
+  if (new URL(url).href !== url) {
+    throw new NFError(
+      'NF-002',
+      `mf-manifest.json lists ${JSON.stringify(file)}, whose URL is not in normal form (rename the file).`
+    )
+  }
+  return url
+}
+
+const syncFiles = (files: ManifestFiles | undefined): unknown[] =>
+  Array.isArray(files?.sync) ? (files.sync as unknown[]) : []
+
+/**
+ * The browser files of every exposed module, from the built
+ * `mf-manifest.json`: the remote entry and, per expose, its synchronous
+ * stylesheets and JavaScript chunks, as absolute URLs under `base`. Hosts
+ * render stylesheet links (server-rendered components are styled before
+ * they hydrate) and modulepreload links (no manifest, entry, chunk
+ * waterfall) for exactly these URLs; they are signed with the descriptor.
+ */
+export async function collectBrowserAssets(
+  dir: string,
+  base: string
+): Promise<ComponentBuildAssets> {
+  const manifest = JSON.parse(
+    await readFile(join(resolve(dir), 'mf-manifest.json'), 'utf8')
+  ) as Manifest
+  const entry = manifest.metaData?.remoteEntry
+  const entryPath =
+    typeof entry?.path === 'string' && entry.path !== ''
+      ? `${entry.path.replace(/^\/+|\/+$/g, '')}/${String(entry.name)}`
+      : entry?.name
+  const exposes: ComponentBuildAssets['exposes'] = {}
+  for (const expose of manifest.exposes ?? []) {
+    if (typeof expose.path !== 'string') continue
+    const key = expose.path.startsWith('./') ? expose.path : `./${expose.path}`
+    exposes[key] = {
+      css: [...new Set(syncFiles(expose.assets?.css))].map((f) =>
+        underBase(base, f)
+      ),
+      js: [...new Set(syncFiles(expose.assets?.js))].map((f) =>
+        underBase(base, f)
+      ),
+    }
+  }
+  return { entry: underBase(base, entryPath), exposes }
 }
 
 /**

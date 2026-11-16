@@ -48,6 +48,10 @@ add('docs/guides/caching.md', 'guides/caching')
 add('docs/guides/identity.md', 'guides/identity')
 add('docs/guides/csp.md', 'guides/csp')
 add('docs/guides/limits.md', 'guides/limits')
+add(
+  'docs/guides/migrating-from-nextjs-mf.md',
+  'guides/migrating-from-nextjs-mf'
+)
 add('docs/guides/client-components.md', 'client-components/overview')
 add(
   'docs/guides/sharing-components-from-a-next-app.md',
@@ -236,6 +240,7 @@ meta('guides', 'Guides', [
   'identity',
   'csp',
   'limits',
+  'migrating-from-nextjs-mf',
 ])
 meta('client-components', 'Client components (Mode A)', [
   'overview',

@@ -561,3 +561,82 @@ describe('final fix wave', () => {
     expect(registry.verified.has(verifiedKey('other', pin))).toBe(true)
   })
 })
+
+describe('browser assets (Mode A stylesheets and modulepreload)', () => {
+  const withAssets: ComponentBuildDescriptor = {
+    ...payload,
+    assets: {
+      entry: `${BASE}remoteEntry.js`,
+      exposes: {
+        './Counter': {
+          css: [`${BASE}assets/Counter-x.css`],
+          js: [`${BASE}assets/Counter-x.js`],
+        },
+      },
+    },
+  }
+  const target = (pub: JWK) =>
+    federationWith({ ssr: { publicKeys: [pub] } }).componentTarget('components')
+
+  test('a signed descriptor carries its signed assets to RemoteComponent', async () => {
+    const { priv, pub } = keyPair('k1')
+    const result = await verifyComponentDescriptor(
+      target(pub),
+      await file(withAssets, await sign(withAssets, priv))
+    )
+    expect(result.trust).toBe('signature')
+    expect(result.descriptor.assets).toEqual(withAssets.assets)
+  })
+
+  test('a stylesheet URL changed after signing is refused (NF-027), and no assets are kept', async () => {
+    const { priv, pub } = keyPair('k1')
+    const jws = await sign(withAssets, priv)
+    const tampered: ComponentBuildDescriptor = {
+      ...withAssets,
+      assets: {
+        ...withAssets.assets!,
+        exposes: {
+          './Counter': {
+            css: [`${BASE}assets/evil.css`],
+            js: withAssets.assets!.exposes['./Counter']!.js,
+          },
+        },
+      },
+    }
+    // The digest recomputed by whoever edited the file: the JWS still differs.
+    const recomputed = await verifyComponentDescriptor(
+      target(pub),
+      await file(tampered, jws)
+    )
+    expect(recomputed.code).toBe('NF-027')
+    expect(recomputed.descriptor.ssr).toBeNull()
+    expect(recomputed.descriptor.assets).toBeUndefined()
+    // The digest left as published: it is not the payload's.
+    const stale = {
+      ...(await file(withAssets, jws)),
+      assets: tampered.assets,
+    }
+    const result = await verifyComponentDescriptor(target(pub), stale)
+    expect(result.code).toBe('NF-027')
+    expect(result.descriptor.assets).toBeUndefined()
+  })
+
+  test('a browser-only build (no SSR policy, or unsigned) keeps its assets for the browser', async () => {
+    const plain = defineFederation({
+      remotes: { components: { origin: ORIGIN, components: {} } as never },
+    }).componentTarget('components')
+    const result = await verifyComponentDescriptor(
+      plain,
+      await file(withAssets)
+    )
+    expect(result.trust).toBeNull()
+    expect(result.descriptor.assets).toEqual(withAssets.assets)
+    const { pub } = keyPair('k1')
+    const unsigned = await verifyComponentDescriptor(
+      target(pub),
+      await file(withAssets)
+    )
+    expect(unsigned.code).toBe('NF-028')
+    expect(unsigned.descriptor.assets).toEqual(withAssets.assets)
+  })
+})

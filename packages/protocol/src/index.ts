@@ -46,8 +46,10 @@ export {
   sha384Integrity,
 } from './components.ts'
 export type {
+  ComponentBuildAssets,
   ComponentBuildDescriptor,
   ComponentDescriptorFile,
+  ComponentExposeAssets,
   ComponentTrustKind,
   ComponentTrustPolicy,
   ComponentTrustRegistry,

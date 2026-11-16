@@ -33,6 +33,26 @@ other version fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
 - **No Fast Refresh for islands inside a host.** Edits reload the page.
 - **No Server Actions yet.** A `'use server'` module fails with `NF-019`.
 
+## What a client component (Mode A) cannot do
+
+- **Share only the host's React set and the modules the host declares.** `react`, `react-dom`,
+  `react-dom/client` and `react/jsx-runtime` are always the host's. Every other module a remote lists
+  in `shared` must be provided by the host (`createRemoteComponent({ shared })`); a missing one fails
+  the load (`NF-029`, fallback). Remotes never bundle a shared module, and nothing is negotiated: the
+  remote gets the host's copy whatever its version. A remote's `shared: { name: { requiredVersion } }`
+  is passed to Module Federation as a singleton range; a mismatch only produces a Module Federation
+  runtime warning, and the host's copy is still used.
+- **No `next/*` modules.** Remotes are Vite builds; `next/link`, `next/navigation` and `next/image`
+  are never shared. Pass callbacks or components as props.
+- **No server rendering for unverified builds.** Only a signed or pinned build runs on the host's
+  server; any other renders in the browser ([Client components](client-components.md#integrity-server-rendering)).
+- **Stylesheets follow the island rules.** A server-rendered component's stylesheets come ahead of
+  its markup (never unstyled) with modulepreload links for its chunks; one first mounted in the
+  browser (client navigation, browser-only build, SPA) inserts them without waiting, so it can show
+  unstyled until its CSS arrives. No CSS isolation: scope class names.
+- **Remotes are `@module-federation/vite` builds** (`nextFederationComponents`). Rspack or webpack
+  Module Federation remotes are untested.
+
 ## Trust
 
 The host trusts the remote's HTML and scripts. Only configure remotes you trust.

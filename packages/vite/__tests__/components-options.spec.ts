@@ -10,6 +10,7 @@ import { isNFError } from '@next-federation/sdk'
 import { compactVerify, importJWK } from 'jose'
 import type { JWK } from 'jose'
 import {
+  collectBrowserAssets,
   collectServerIntegrity,
   createDescriptorFile,
 } from '../src/components/descriptor.ts'
@@ -160,6 +161,86 @@ test('a server graph that escapes the build folder is NF-002', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+const browserManifest = {
+  metaData: {
+    remoteEntry: { name: 'remoteEntry.js', path: '' },
+    ssrRemoteEntry: { name: 'remoteEntry.ssr.js', path: '' },
+  },
+  exposes: [
+    {
+      name: 'Counter',
+      path: './Counter',
+      assets: {
+        js: { sync: ['assets/dist-a.js', 'assets/Counter-b.js'], async: [] },
+        css: { sync: ['assets/Counter-c.css'], async: ['assets/lazy-d.css'] },
+      },
+    },
+    {
+      name: 'Plain',
+      path: './Plain',
+      assets: {
+        js: { sync: ['assets/Plain-e.js'], async: [] },
+        css: { sync: [], async: [] },
+      },
+    },
+  ],
+}
+
+test("collects each exposed module's stylesheets and chunks as absolute URLs under base", async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'nf-components-'))
+  try {
+    await writeFile(
+      join(dir, 'mf-manifest.json'),
+      JSON.stringify(browserManifest)
+    )
+    const b = 'https://remote.example/b/c1/'
+    expect(await collectBrowserAssets(dir, b)).toEqual({
+      entry: `${b}remoteEntry.js`,
+      exposes: {
+        './Counter': {
+          css: [`${b}assets/Counter-c.css`],
+          js: [`${b}assets/dist-a.js`, `${b}assets/Counter-b.js`],
+        },
+        './Plain': { css: [], js: [`${b}assets/Plain-e.js`] },
+      },
+    })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test.each([
+  ['a file outside the build folder', '../c0/x.css'],
+  ['an absolute URL', 'https://evil.example/x.css'],
+])('collectBrowserAssets: %s is NF-002', async (_label, file) => {
+  const dir = await mkdtemp(join(tmpdir(), 'nf-components-'))
+  try {
+    const manifest = structuredClone(browserManifest)
+    manifest.exposes[0]!.assets.css.sync = [file]
+    await writeFile(join(dir, 'mf-manifest.json'), JSON.stringify(manifest))
+    await expect(
+      collectBrowserAssets(dir, 'https://remote.example/b/c1/')
+    ).rejects.toMatchObject({ code: 'NF-002' })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('a descriptor file with assets parses back to the same payload', async () => {
+  const b = 'https://remote.example/b/c1/'
+  const file = await createDescriptorFile(
+    {
+      ...payload,
+      assets: {
+        entry: `${b}remoteEntry.js`,
+        exposes: { './Counter': { css: [`${b}a.css`], js: [`${b}a.js`] } },
+      },
+    },
+    {}
+  )
+  expect(parseComponentDescriptorFile(file)).toEqual(file)
 })
 
 function privateJwk(): JWK {

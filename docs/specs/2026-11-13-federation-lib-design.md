@@ -76,8 +76,9 @@ internal.** Framework knowledge lives only in small adapters that use public API
 2. **Real Server Components in remotes:** async server components, server-only code and secrets, `'use client'`
    children, and Server Actions run on the remote. They are shown in the host as **server-rendered, hydrated
    islands** (Mode B).
-3. **Remote client components (Mode A), browser-rendered in v1.0:** they render inside the host's tree and share
-   context. The host server-renders a skeleton for them.
+3. **Remote client components (Mode A):** they render inside the host's tree and share context. Next hosts
+   server-render **verified builds** (signed or pinned descriptor, sha384 of every server file) and hydrate them;
+   any other build renders in the browser, with the server sending its fallback (§6 Mode A).
 4. Islands can show **per-user content on the server** for remotes on **any origin**. Links inside islands
    **navigate the host client-side**.
 4a. **Island remotes on the same exact React version share one copy of React** on a page (shared scope `nf-islands`), falling back to their own copy on any mismatch. Conditional on the Phase 2 proving gate; if the gate fails, islands ship without sharing and this returns to the deferred list.
@@ -91,8 +92,10 @@ internal.** Framework knowledge lives only in small adapters that use public API
 
 ### Deferred to after v1.0 (planned, not dropped)
 - **React Router adapter** (first post-1.0 release).
-- **Mode A server-side rendering**, gated on integrity verification and a memory/update policy (§6 Mode A).
-- Hosts that use **both routers at once** with Mode A server rendering.
+- ~~Mode A server-side rendering~~: **shipped** for verified builds (§6 Mode A), with integrity verification and
+  a memory bound (`maxBuilds`).
+- Hosts that use **both routers at once** with Mode A server rendering (today the second router's routes render
+  Mode A browser-only, `NF-028`).
 - An optional host **import-rewriting loader** (`import X from 'remote/X'`).
 - Intercepting **plain `<a>` clicks** in islands. v1.0 navigates only through the explicit `<Link>`.
 - Streaming *inside* an island across the host; Rspack RSC remotes.
@@ -179,27 +182,33 @@ The rule: `core`, `react`, `protocol`, `server` and `island` import no framework
 
 ## 6. Two federation modes
 
-### Mode A: remote client components (browser-rendered in v1.0)
-The host loads a remote's module through the MF runtime **in the browser** and renders it inside the host's React
-tree.
+### Mode A: remote client components
+The host loads a remote's module through the MF runtime and renders it inside the host's React tree: on the server
+for a verified build, then hydrated in the browser; in the browser only for any other build.
 
 - **Use for:** interactive widgets that must share context or state with the host. Props may include functions
   and children.
-- **In v1.0** it renders only in the browser, under a host `<Suspense>`. On the server, `RemoteComponent`
-  renders its `fallback` (a skeleton). In App Router it is used from a `'use client'` file.
+- **Rendering:** under a host `<Suspense>`. A verified build is server-rendered and hydrated; an unverified one
+  renders its `fallback` on the server and the component after hydration. In App Router it is used from a
+  `'use client'` file (`createRemoteComponent` from `@next-federation/react/components`).
+- **Stylesheets and preloads:** the signed descriptor lists each exposed module's CSS files and JS chunks
+  (absolute, build-pinned URLs). A server render emits React 19 `<link rel="stylesheet" precedence>` for them
+  and `<link rel="modulepreload">` for the entry and chunks; a component first mounted in the browser inserts its
+  stylesheets with `preinit`, so a stalled stylesheet never holds a navigation.
 - **Runtime imports** of remote code carry `/* webpackIgnore: true */` and `/* turbopackIgnore: true */`, so the
   host bundler never tries to resolve them (§2).
 - **React sharing:** §7.
 - **Remote builds:** `@next-federation/vite` (wraps `@module-federation/vite`). MF 2.0 remotes from Rspack or webpack
-  also work if they emit `mf-manifest.json`.
-- **Mode A server rendering is deferred to after v1.0** (decided after review). It means running remote code fetched
-  over the network inside the host's server process. A compromised remote CDN would then mean code execution with
-  the host's secrets, and Node cannot unload ESM, so each picked-up remote version leaks memory. Prerequisites to
-  ship it later:
-  1. integrity verification, either hashes pinned in host config or a signed manifest;
-  2. a documented update policy (pinned per host deploy versus hot pickup) with a memory bound;
-  3. the per-React-environment isolation from rev. 2 of this design (distinct entry global names), and the
-     React shims for host-provided React.
+  that emit `mf-manifest.json`: **untested; planned** (they also need a build descriptor, `nf-components.json`).
+- **Mode A server rendering shipped for verified builds** (first deferred after review, then built in Task 28). It
+  runs remote code fetched over the network inside the host's server process, so a compromised remote CDN would
+  mean code execution with the host's secrets. What shipped against the original prerequisites:
+  1. integrity verification: an ES256-signed build descriptor (or a pinned digest) carrying the sha384 of every
+     server file, checked before anything is evaluated; anything else renders browser-only (`NF-027`/`NF-028`);
+  2. hot pickup of new builds within `revalidate`, bounded by `maxBuilds` per remote (server code is evaluated
+     with `new Function`, not `import()`ed, so evicted builds are garbage-collected);
+  3. one host React per Next layer, registered in the MF share scope by the host's own runtime.
+  See `docs/guides/client-components.md`.
 
 ### Mode B: RSC islands (real Server Components in remotes)
 The remote renders **real React Server Components in its own process**, does its own SSR, and returns the result.
@@ -404,7 +413,8 @@ export const federation = defineFederation({
 ```
 
 ```tsx
-// Mode A (browser-rendered in v1.0): App Router 'use client' file, or Pages Router
+// Mode A (as first designed; shipped as createRemoteComponent + getComponentDescriptor,
+// see docs/guides/client-components.md): App Router 'use client' file, or Pages Router
 import { RemoteComponent } from '@next-federation/next'
 <RemoteComponent remote="shop" module="./CartButton" props={{ onOpen }} fallback={<CartSkeleton />} />
 ```
@@ -514,7 +524,7 @@ uses tokens, not cookies.
 | **3. Island Server Actions** | per-island `callServer`, bearer token, CORS + max-age, `<Form>`, dev check for actions imported by client modules (F2); action endpoint hardening (R) | e2e: cross-site action updates the right user's island; token refresh transparent; Enter-key submit before hydration pressed and blocked (G) |
 | **4. Mode A (browser)** | `RemoteComponent`, shared React with guard, version policy, `vite` exposes | e2e: context shared; externalization guard fires; React **context** shared with the host (G); absolute manifest `publicPath` (F3) |
 | **5. DX + v1.0** | Types (reuse MF `dts-plugin` where suitable), docs site, examples, support matrix, semver, Vercel Skew Protection and Deployment Protection verified **if a Vercel account is available** (G; optional, otherwise documented as unverified); fetched payload transport decided (F12); plugin-rsc `loadCss` bug reported upstream (F8) | v1.0 published |
-| **After v1.0** | React Router adapter (first); Mode A SSR (with integrity + memory policy); mixed-router hosts; host import loader; plain-anchor interception; streaming inside islands; React dedup across remotes, only if the Phase 2 sharing gate (plan Task 18A) failed; Rspack RSC remotes | Scoped when started |
+| **After v1.0** | React Router adapter (first); ~~Mode A SSR~~ (shipped for verified builds, §6); mixed-router hosts with Mode A SSR; host import loader; plain-anchor interception; streaming inside islands; React dedup across remotes, only if the Phase 2 sharing gate (plan Task 18A) failed; Rspack RSC remotes | Scoped when started |
 | **Watch (not relied on)** | Official Next support for federated RSC or server-side MF | Informational |
 
 ## 11. Testing
@@ -548,7 +558,8 @@ uses tokens, not cookies.
 - Next apps don't expose `app/`; they use a separate island build.
 - Islands render per-user content on the server; remotes on any origin; island links navigate the host smoothly.
 - **After review:** accept v1 cuts (Mode A browser-only; no mixed-router hosts, host loader, or plain-anchor
-  interception; forms disabled until hydrated). **React Router ships right after v1.0.**
+  interception; forms disabled until hydrated). **React Router ships right after v1.0.** (The Mode A cut was
+  later lifted: verified-build server rendering shipped, §6.)
 - **2026-11-15:** `withNextFederation()` is a required config wrapper. Island remotes share React in their own MF scope (`nf-islands`), exact-version, with own-copy fallback, behind a proving gate. Licence MIT. Node floor 20.9 for published packages. Error docs links point at the GitHub repository until a docs site exists. Vercel verification is optional, gated on an account.
 - No tool attribution in commits, PRs or repo descriptions.
 
