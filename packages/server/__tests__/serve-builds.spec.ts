@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { request } from 'node:http'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -21,7 +21,9 @@ const HANDLER = `export default async (req) => {
 
 function alive(marker: string): string {
   try {
-    return execSync(`pgrep -f ${marker}`, { encoding: 'utf8' }).trim()
+    // No shell: on Linux `sh -c "pgrep -f <marker>"` keeps the shell, whose own
+    // command line contains the marker, so pgrep would find it.
+    return execFileSync('pgrep', ['-f', marker], { encoding: 'utf8' }).trim()
   } catch {
     return ''
   }
