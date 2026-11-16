@@ -1,0 +1,38 @@
+{
+  "name": "@next-federation/protocol",
+  "version": "0.0.0",
+  "description": "Island protocol v1 for next-federation: envelope, request codec, bootstrap contract. Bundler-neutral.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tariqule/next-federation.git",
+    "directory": "packages/protocol"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@next-federation/sdk": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsdown"
+  }
+}

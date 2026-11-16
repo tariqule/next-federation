@@ -11,3 +11,5 @@ playwright-report/
 .superpowers/
 .next-base/
 *.tsbuildinfo
+.pnpm-store/
+coverage/

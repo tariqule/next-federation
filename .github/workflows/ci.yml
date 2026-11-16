@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Commit messages
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm lint:docs
+      - run: pnpm guardrail
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: Error docs
+        if: hashFiles('scripts/check-error-docs.mjs') != ''
+        run: pnpm check:error-docs
+      - name: Pack check
+        run: pnpm check:pack
+      - run: pnpm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: packages/*/dist
+          if-no-files-found: ignore
+
+  node-floor:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.9
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: packages
+      - name: Production install of runtime dependencies
+        # Runtime deps only (no dev tooling), resolved by pnpm so workspace:*
+        # links work. Runs on the Node floor.
+        run: pnpm install --frozen-lockfile --prod --ignore-scripts --filter "./packages/*"
+      - run: node scripts/smoke-dist.mjs

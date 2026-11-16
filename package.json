@@ -6,21 +6,34 @@
     "node": ">=24"
   },
   "scripts": {
-    "e2e": "pnpm --filter e2e test",
-    "e2e:webpack": "NF_BUNDLER=webpack pnpm --filter e2e test",
-    "test": "pnpm -r --filter=!e2e --if-present test",
-    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint \"spike/**/*.{ts,tsx}\"",
+    "build": "pnpm -r --filter \"./packages/*\" build",
+    "test": "rstest",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "lint:docs": "alex README.md AGENTS.md docs",
+    "guardrail": "node scripts/check-guardrails.mjs",
+    "check:error-docs": "node scripts/check-error-docs.mjs",
+    "check:pack": "node scripts/check-pack.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "changeset": "changeset",
+    "e2e": "pnpm --filter e2e test",
+    "e2e:webpack": "NF_BUNDLER=webpack pnpm --filter e2e test",
     "commitlint": "commitlint --edit"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.3",
     "@commitlint/cli": "^19.4.1",
     "@commitlint/config-conventional": "^19.4.1",
-    "@typescript-eslint/eslint-plugin": "8.56.1",
-    "@typescript-eslint/parser": "8.56.1",
+    "@rstest/core": "0.10.6",
+    "@types/node": "24.10.1",
+    "alex": "11.0.1",
     "eslint": "9.39.3",
+    "happy-dom": "20.9.0",
     "prettier": "3.8.1",
-    "typescript": "6.0.3"
+    "publint": "0.3.25",
+    "tsdown": "0.23.7",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2"
   }
 }

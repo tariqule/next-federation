@@ -1,2 +1,6 @@
 packages:
+  - 'packages/*'
+  - 'test/fixtures/*'
+  - 'test/e2e'
+  # Removed in Task 25.
   - 'spike/*'
