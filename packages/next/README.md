@@ -13,8 +13,8 @@ export default withNextFederation({ basePath: '/shop' })
 
 Every Next host must wrap its config. Using public config keys only, the wrapper:
 
-- sets `env.NF_CACHE_MODEL` (`'cache-components'` when `cacheComponents` is on, else `'legacy'`)
-  and `env.NF_BASE_PATH` (`basePath ?? ''`);
+- sets `env.NF_CACHE_MODEL` (`'cache-components'` when `cacheComponents` is on, else `'legacy'`),
+  `env.NF_BASE_PATH` (`basePath ?? ''`) and `env.NF_NEXT_VERSION` (the installed Next.js version);
 - aliases `@next-federation/next/island-cache` to `/legacy` or `/cache-components` through
   `turbopack.resolveAlias` and a `webpack` function (an existing `webpack` function runs first);
 - appends `@next-federation/next` to `transpilePackages`;
@@ -186,7 +186,7 @@ the page can request a token for any configured remote. `aud` is not isolation b
 browser. Tokens are minted only for configured remotes, are never logged, and token responses are never
 cached.
 
-## Client components: `getComponentDescriptor` (both routers)
+## Remote components: `getComponentDescriptor` (both routers)
 
 ```tsx
 // App Router (Server Component)
@@ -199,7 +199,7 @@ import { getComponentDescriptor } from '@next-federation/next/pages/server'
 return { props: { descriptor: await getComponentDescriptor(federation, 'shop') } }
 ```
 
-Resolves which build of a Mode A remote this render uses (fetches the remote's
+Resolves which build of a components remote this render uses (fetches the remote's
 `/_nf/components.json`) and verifies it against `remotes.<name>.components.ssr`: only a signed or
 pinned build keeps `ssr` (server rendering); every other build renders in the browser only
 (`NF-028` once per build, `NF-027` for a bad signature or digest). The descriptor fetch is cached
@@ -210,19 +210,41 @@ revalidate) })` with it (a failure gets the short failure profile). `{ dynamic: 
 in-process cache and no wall-clock read; when the remote is down the last known descriptor is
 returned, and `null` (render the fallback) when none was ever fetched. Events:
 `component:descriptor`, `component:error`. `@next-federation/next/pages/server` also re-exports
-`preloadRemoteComponent`. Guide: [Client components](../../docs/guides/client-components.md).
+`preloadRemoteComponent`. Guide: [Remote components](../../docs/guides/remote-components.md).
+
+## Remote components with the host's `next/*` modules
+
+```tsx
+'use client'
+// App Router: next/link and next/navigation. Pages Router: '@next-federation/next/pages/components'
+// (next/link and next/router).
+import { createRemoteComponent } from '@next-federation/next/components'
+
+export const NavMenu = createRemoteComponent({ expose: './NavMenu', fallback: null })
+```
+
+These two `'use client'` entries are `@next-federation/react/components` (same exports, without
+`fetchDescriptorInBrowser`) plus the host's own Next.js modules, registered as shared modules for
+every remote component in the layer that imports them: `next/link` and `next/navigation` in the
+App Router, `next/link` and `next/router` in the Pages Router. A remote that lists them in its
+`shared` then renders the host's `<Link>` and reads the host's router, so links navigate on the
+client and keep the host's `basePath` and locale. A remote component that imports a module the host
+does not provide (for example `next/router` in an App Router host) renders its fallback
+(`NF-036`). The version they report is the host's Next.js version, which `withNextFederation`
+records in `env.NF_NEXT_VERSION` (`NF-017` without the wrapper).
 
 ## API
 
-| Export                                                    | Entry                                                                | Purpose                                                           |
-| --------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `withNextFederation(config)`                              | `@next-federation/next/config`                                       | Required config wrapper.                                          |
-| `createIslands(federation, { getIdentity? })`             | `@next-federation/next/server`                                       | `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router). |
-| `createFederationRoutes(federation, { getIdentity })`     | `@next-federation/next/routes`                                       | JWKS and token route handlers (App Router).                       |
-| `createPagesIslands(federation, { getIdentity? })`        | `@next-federation/next/pages/server`                                 | `getIslandProps` (Pages Router, server only).                     |
-| `createFederationApiHandler(federation, { getIdentity })` | `@next-federation/next/pages/server`                                 | JWKS and token API route (Pages Router).                          |
-| `RemoteIsland`, `IslandProps`                             | `@next-federation/next/pages`                                        | Render an island in a page component.                             |
-| `getComponentDescriptor(federation, remote, options?)`    | `@next-federation/next/server`, `@next-federation/next/pages/server` | Mode A: the build to render, for `RemoteComponent`.               |
+| Export                                                    | Entry                                                                        | Purpose                                                           |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `withNextFederation(config)`                              | `@next-federation/next/config`                                               | Required config wrapper.                                          |
+| `createIslands(federation, { getIdentity? })`             | `@next-federation/next/server`                                               | `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router). |
+| `createFederationRoutes(federation, { getIdentity })`     | `@next-federation/next/routes`                                               | JWKS and token route handlers (App Router).                       |
+| `createPagesIslands(federation, { getIdentity? })`        | `@next-federation/next/pages/server`                                         | `getIslandProps` (Pages Router, server only).                     |
+| `createFederationApiHandler(federation, { getIdentity })` | `@next-federation/next/pages/server`                                         | JWKS and token API route (Pages Router).                          |
+| `RemoteIsland`, `IslandProps`                             | `@next-federation/next/pages`                                                | Render an island in a page component.                             |
+| `getComponentDescriptor(federation, remote, options?)`    | `@next-federation/next/server`, `@next-federation/next/pages/server`         | Remote components: the build to render, for `RemoteComponent`.    |
+| `createRemoteComponent`, `registerSharedModules`, …       | `@next-federation/next/components`, `@next-federation/next/pages/components` | Remote components with the host's `next/*` modules.               |
 
 `@next-federation/next/island-cache` and its `/legacy` and `/cache-components` variants are internal:
 `withNextFederation` aliases them.

@@ -17,7 +17,10 @@
     "pages-router"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/client/components.js",
+    "./dist/pages/components.js"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tariqule/next-federation.git",
@@ -49,9 +52,17 @@
       "types": "./dist/routes.d.ts",
       "default": "./dist/routes.js"
     },
+    "./components": {
+      "types": "./dist/client/components.d.ts",
+      "default": "./dist/client/components.js"
+    },
     "./pages": {
       "types": "./dist/pages/index.d.ts",
       "default": "./dist/pages/index.js"
+    },
+    "./pages/components": {
+      "types": "./dist/pages/components.d.ts",
+      "default": "./dist/pages/components.js"
     },
     "./pages/server": {
       "types": "./dist/pages/server.d.ts",

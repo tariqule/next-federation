@@ -2,7 +2,7 @@
 
 ## What happened
 
-A Mode A remote build could not be verified, so the host did not run its server code. The
+A remote component build could not be verified, so the host did not run its server code. The
 component renders in the browser only (the server sends its fallback). One of these:
 
 - The build descriptor is signed, but by none of the keys in `components.ssr.publicKeys`, or its

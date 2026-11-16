@@ -640,3 +640,53 @@ describe('browser assets (Mode A stylesheets and modulepreload)', () => {
     expect(unsigned.descriptor.assets).toEqual(withAssets.assets)
   })
 })
+
+describe('shared modules (version negotiation)', () => {
+  const withShared: ComponentBuildDescriptor = {
+    ...payload,
+    shared: {
+      'components-context': { requiredVersion: '^1.0.0', fallback: false },
+      'date-lib': { requiredVersion: '^2.0.0', fallback: true },
+    },
+  }
+  const target = (pub: JWK) =>
+    federationWith({ ssr: { publicKeys: [pub] } }).componentTarget('components')
+
+  test('a signed descriptor carries its shared requirements', async () => {
+    const { priv, pub } = keyPair('k1')
+    const result = await verifyComponentDescriptor(
+      target(pub),
+      await file(withShared, await sign(withShared, priv))
+    )
+    expect(result.trust).toBe('signature')
+    expect(result.descriptor.shared).toEqual(withShared.shared)
+  })
+
+  test('requirements changed after signing are refused (NF-027)', async () => {
+    const { priv, pub } = keyPair('k1')
+    const jws = await sign(withShared, priv)
+    const relaxed: ComponentBuildDescriptor = {
+      ...withShared,
+      shared: {
+        ...withShared.shared,
+        'components-context': { requiredVersion: false, fallback: false },
+      },
+    }
+    const result = await verifyComponentDescriptor(
+      target(pub),
+      await file(relaxed, jws)
+    )
+    expect(result.code).toBe('NF-027')
+    expect(result.descriptor.ssr).toBeNull()
+  })
+
+  test('a browser-only build keeps its requirements (the browser checks them)', async () => {
+    const { pub } = keyPair('k1')
+    const unsigned = await verifyComponentDescriptor(
+      target(pub),
+      await file(withShared)
+    )
+    expect(unsigned.code).toBe('NF-028')
+    expect(unsigned.descriptor.shared).toEqual(withShared.shared)
+  })
+})

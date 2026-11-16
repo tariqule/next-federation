@@ -32,6 +32,8 @@ export type NFErrorCode =
   | 'NF-028'
   | 'NF-029'
   | 'NF-030'
+  // NF-031..NF-035 are reserved (island Server Actions).
+  | 'NF-036'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
   {
@@ -140,6 +142,11 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
       slug: 'component-require-refused',
       title:
         'Remote component server code required a module the host does not provide',
+    },
+    'NF-036': {
+      slug: 'component-shared-unavailable',
+      title:
+        'Host does not provide a shared module version the remote component accepts',
     },
   }
 

@@ -161,7 +161,7 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
   calls its `onExit({ buildId, code, signal })` option. The `nf-serve` CLI then exits non-zero, so run
   it under a supervisor (Docker, systemd, Kubernetes) that restarts it.
 
-- Mode A components builds (`nf-build.json` with `kind: "components"`, written by
+- Remote components builds (`nf-build.json` with `kind: "components"`, written by
   `nextFederationComponents`) are static: no process; `/b/<build>/*` serves every file of the
   build's `client/` folder (browser and server chunks, immutable, CORS `*`),
   `/b/<build>/nf-components.json` its descriptor, `/_nf/components.json` the current build's

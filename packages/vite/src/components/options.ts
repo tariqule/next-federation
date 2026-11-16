@@ -1,6 +1,7 @@
 import {
   BUILD_ID_PATTERN,
   assertSecureUrl,
+  isSemverRange,
   parseAllowInsecureHttp,
 } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
@@ -13,12 +14,19 @@ export type ComponentsRemoteOptions = {
   /** Exposed modules: `{ './Counter': './src/Counter.tsx' }`. */
   exposes: Record<string, string>
   /**
-   * Modules the host provides, besides React (`react`, `react-dom`,
-   * `react-dom/client`, `react/jsx-runtime`, always host-provided): never
-   * bundled, read from the host's share scope. A list of bare specifiers
-   * (any version), or `{ [specifier]: { requiredVersion } }`.
+   * Modules shared with the host, besides React (`react`, `react-dom`,
+   * `react-dom/client`, `react/jsx-runtime`, always host-provided). A list of
+   * bare specifiers (host-provided, any version), or
+   * `{ [specifier]: { requiredVersion, fallback } }`:
+   * - `requiredVersion`: a semver range the host's copy must satisfy.
+   * - `fallback: true`: bundle this build's own copy, used when the host does
+   *   not provide the module or its version does not satisfy the range.
+   *   Without it the module is host-provided only, and a missing or
+   *   unsatisfying copy renders the host's fallback (NF-036).
+   * `next/link`, `next/navigation` and `next/router` can be listed (always
+   * host-provided, from a Next.js host; never a fallback).
    */
-  shared?: string[] | Record<string, { requiredVersion?: string | false }>
+  shared?: string[] | Record<string, SharedModuleOptions>
   buildId?: string
   /** Output folder, relative to the Vite root. Default 'dist'; builds go to `<outDir>/<buildId>`. */
   outDir?: string
@@ -31,6 +39,16 @@ export type ComponentsRemoteOptions = {
   allowInsecureHttp?: boolean
 }
 
+export type SharedModuleOptions = {
+  requiredVersion?: string | false
+  fallback?: boolean
+}
+
+export type ResolvedSharedModule = {
+  requiredVersion: string | false
+  fallback: boolean
+}
+
 export type ResolvedComponentsOptions = {
   name: string
   buildId: string
@@ -39,7 +57,7 @@ export type ResolvedComponentsOptions = {
   /** `${outDir}/${buildId}` for a build. */
   outDir: string
   exposes: Record<string, string>
-  shared: Record<string, { requiredVersion: string | false }>
+  shared: Record<string, ResolvedSharedModule>
   ssr: boolean
 }
 
@@ -55,6 +73,12 @@ export const HOST_REACT: readonly string[] = [
   'react-dom',
   'react-dom/client',
   'react/jsx-runtime',
+]
+/** The Next.js modules a Next host provides to remote components. */
+export const NEXT_SHARED: readonly string[] = [
+  'next/link',
+  'next/navigation',
+  'next/router',
 ]
 const REACT_RANGE = '^19.0.0'
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -111,11 +135,12 @@ function resolveSharedOption(
   value: ComponentsRemoteOptions['shared']
 ): ResolvedComponentsOptions['shared'] {
   const out: ResolvedComponentsOptions['shared'] = {}
-  for (const name of HOST_REACT) out[name] = { requiredVersion: REACT_RANGE }
-  const extra: Array<[string, { requiredVersion?: string | false }]> =
-    Array.isArray(value)
-      ? value.map((name) => [name, {}])
-      : Object.entries(value ?? {})
+  for (const name of HOST_REACT) {
+    out[name] = { requiredVersion: REACT_RANGE, fallback: false }
+  }
+  const extra: Array<[string, SharedModuleOptions]> = Array.isArray(value)
+    ? value.map((name) => [name, {}])
+    : Object.entries(value ?? {})
   for (const [name, config] of extra) {
     if (typeof name !== 'string' || !BARE_SPECIFIER.test(name)) {
       throw invalid(
@@ -127,13 +152,33 @@ function resolveSharedOption(
         `${JSON.stringify(name)} is always host-provided; remove it from \`shared\`.`
       )
     }
-    const range = config?.requiredVersion ?? false
-    if (range !== false && typeof range !== 'string') {
+    const isNext = name === 'next' || name.startsWith('next/')
+    if (isNext && !NEXT_SHARED.includes(name)) {
       throw invalid(
-        `\`shared[${JSON.stringify(name)}].requiredVersion\` must be a semver range or false.`
+        `Only ${NEXT_SHARED.join(', ')} can be shared from Next.js (the host provides them); ${JSON.stringify(name)} cannot.`
       )
     }
-    out[name] = { requiredVersion: range }
+    const range = config?.requiredVersion ?? false
+    if (
+      range !== false &&
+      (typeof range !== 'string' || !isSemverRange(range))
+    ) {
+      throw invalid(
+        `\`shared[${JSON.stringify(name)}].requiredVersion\` must be a semver range (such as "^2.0.0") or false.`
+      )
+    }
+    const fallback = config?.fallback ?? false
+    if (typeof fallback !== 'boolean') {
+      throw invalid(
+        `\`shared[${JSON.stringify(name)}].fallback\` must be true or false.`
+      )
+    }
+    if (fallback && isNext) {
+      throw invalid(
+        `${JSON.stringify(name)} cannot have a fallback: it is always the host's (a copy would not see the host's router).`
+      )
+    }
+    out[name] = { requiredVersion: range, fallback }
   }
   return out
 }

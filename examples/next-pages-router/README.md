@@ -26,4 +26,4 @@ Then open <http://localhost:3302/shop/fr>. Alone: `pnpm examples:keys` once, sta
 their READMEs), then `pnpm --filter example-next-pages-router dev` (or `build` and `start`).
 
 Guides: [Pages Router host](../../docs/guides/getting-started-pages-router.md),
-[Identity](../../docs/guides/identity.md), [Client components](../../docs/guides/client-components.md).
+[Identity](../../docs/guides/identity.md), [Remote components](../../docs/guides/remote-components.md).

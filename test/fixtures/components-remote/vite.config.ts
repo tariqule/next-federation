@@ -21,9 +21,25 @@ export default defineConfig({
     nextFederationComponents({
       name: 'components',
       base: `http://127.0.0.1:${PORT}/`,
-      exposes: { './Counter': './src/Counter.tsx' },
-      // The host owns this context: the remote reads the host's value.
-      shared: ['components-context'],
+      exposes: {
+        './Counter': './src/Counter.tsx',
+        './NavLink': './src/NavLink.tsx',
+        './PagesNavLink': './src/PagesNavLink.tsx',
+        './Versioned': './src/Versioned.tsx',
+      },
+      shared: {
+        // The host owns this context: the remote reads the host's value.
+        'components-context': {},
+        // Bundled too: used when the host's copy is missing or not ^2.
+        'components-fallback-lib': {
+          requiredVersion: '^2.0.0',
+          fallback: true,
+        },
+        // A Next.js host's own router modules (NavLink, PagesNavLink).
+        'next/link': {},
+        'next/navigation': {},
+        'next/router': {},
+      },
       outDir: process.env.NF_OUT ?? 'dist/components',
     }),
   ],

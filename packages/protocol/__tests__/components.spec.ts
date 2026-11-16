@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type { ComponentSharedModule } from '../src/components.ts'
 import {
   COMPONENTS_DESCRIPTOR_PATH,
   componentDescriptorDigest,
@@ -195,6 +196,100 @@ describe('browser assets (stylesheets and modulepreload)', () => {
       },
     ],
     ['assets not an object', { ...payload, assets: [], digest: 'd' }],
+  ])('rejects %s', (_name, value) => {
+    expect(parseComponentDescriptorFile(value)).toBeNull()
+  })
+})
+
+describe('shared modules (version negotiation)', () => {
+  const shared: Record<string, ComponentSharedModule> = {
+    'components-context': { requiredVersion: '^1.0.0', fallback: false },
+    'date-lib': {
+      requiredVersion: '^2.0.0',
+      fallback: true,
+      exposes: ['./Counter'],
+      version: '2.0.0',
+    },
+    'next/link': { requiredVersion: false, fallback: false, exposes: [] },
+  }
+
+  test('parses shared and the digest covers it', async () => {
+    const file = parseComponentDescriptorFile({
+      ...payload,
+      shared,
+      digest: 'd',
+    })
+    expect(file?.shared).toEqual(shared)
+    const a = await componentDescriptorDigest({ ...payload, shared })
+    expect(a).not.toBe(await componentDescriptorDigest(payload))
+    const relaxed: Record<string, ComponentSharedModule> = {
+      ...shared,
+      'components-context': { requiredVersion: false, fallback: false },
+    }
+    expect(
+      await componentDescriptorDigest({ ...payload, shared: relaxed })
+    ).not.toBe(a)
+  })
+
+  test('a descriptor without shared still parses (older builds)', () => {
+    expect(
+      parseComponentDescriptorFile({ ...payload, digest: 'd' })?.shared
+    ).toBeUndefined()
+  })
+
+  const withShared = (value: unknown) => ({
+    ...payload,
+    shared: value,
+    digest: 'd',
+  })
+  test.each([
+    ['shared not an object', withShared([])],
+    [
+      'a relative specifier',
+      withShared({ './x': { requiredVersion: false, fallback: false } }),
+    ],
+    [
+      'an invalid range',
+      withShared({ lib: { requiredVersion: 'latest', fallback: false } }),
+    ],
+    [
+      'a missing fallback flag',
+      withShared({ lib: { requiredVersion: false } }),
+    ],
+    [
+      'a non-boolean fallback',
+      withShared({ lib: { requiredVersion: false, fallback: 'yes' } }),
+    ],
+    [
+      'an expose that is not ./name',
+      withShared({
+        lib: { requiredVersion: false, fallback: false, exposes: ['Counter'] },
+      }),
+    ],
+    ...[
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      'next/link',
+      'next/navigation',
+      'next/router',
+    ].map((name) => [
+      `a fallback copy of ${name} (always the host's)`,
+      withShared({ [name]: { requiredVersion: false, fallback: true } }),
+    ]),
+    [
+      'a bundled version that is not semver',
+      withShared({
+        lib: { requiredVersion: false, fallback: true, version: 'x' },
+      }),
+    ],
+    [
+      'exposes not a list',
+      withShared({
+        lib: { requiredVersion: false, fallback: false, exposes: './Counter' },
+      }),
+    ],
   ])('rejects %s', (_name, value) => {
     expect(parseComponentDescriptorFile(value)).toBeNull()
   })

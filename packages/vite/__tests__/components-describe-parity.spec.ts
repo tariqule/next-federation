@@ -61,6 +61,22 @@ test('nf-describe on a Vite-built remote writes the plugin descriptor', async ()
   // The signed browser assets too (stylesheets and modulepreload chunks).
   expect(file.assets?.exposes['./Counter']?.js.length).toBeGreaterThan(0)
   expect(file.assets).toEqual(plugin.assets)
+  // The signed shared modules too, per expose (nf-describe reads the usage
+  // the plugin left next to the build): the fallback library with its
+  // bundled version, next/* host-only, each listed for its own exposes.
+  expect(file.shared).toEqual(plugin.shared)
+  expect(file.shared?.['components-fallback-lib']).toEqual({
+    requiredVersion: '^2.0.0',
+    fallback: true,
+    version: '2.0.0',
+    exposes: ['./Versioned'],
+  })
+  expect(file.shared?.['next/router']).toEqual({
+    requiredVersion: false,
+    fallback: false,
+    exposes: ['./PagesNavLink'],
+  })
+  expect(file.shared?.react).toBeUndefined()
   const publicKey = await importJWK({ ...jwk, d: undefined }, 'ES256')
   for (const token of [jws!, pluginJws as string]) {
     const { payload } = await compactVerify(token, publicKey)

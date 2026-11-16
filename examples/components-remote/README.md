@@ -1,6 +1,6 @@
 # example-components-remote
 
-A **client-components remote** (Mode A) built with `nextFederationComponents` from
+A **components remote** (remote components) built with `nextFederationComponents` from
 `@next-federation/vite`. It exposes one component, `./CartButton`, that hosts load at runtime and
 render inside their own React tree: it runs on the host's React and reads the host's cart through
 the shared [`example-cart-context`](../cart-context/README.md) module.
@@ -37,4 +37,4 @@ descriptor is signed with it (ES256). The hosts list the matching public key in
 
 Without a trusted key or pin, hosts render the component in the browser only (and log `NF-028`).
 
-Guide: [Client components](../../docs/guides/client-components.md) (integrity, rotation, limits).
+Guide: [Remote components](../../docs/guides/remote-components.md) (integrity, rotation, limits).

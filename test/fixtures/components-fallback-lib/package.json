@@ -1,0 +1,13 @@
+{
+  "name": "components-fallback-lib",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

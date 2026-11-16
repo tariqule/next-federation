@@ -37,6 +37,8 @@ import {
   collectBrowserAssets,
   collectServerIntegrity,
   createDescriptorFile,
+  readSharedUsage,
+  sharedFromManifest,
 } from './components-descriptor.ts'
 import type { ComponentsBuildInfo } from './components-descriptor.ts'
 
@@ -369,6 +371,10 @@ export async function describeComponentsBuild(
     // As the Vite plugin: the only stylesheet and modulepreload URLs hosts render.
     assets: await collectBrowserAssets(client, base),
   }
+  // What the host's shared modules must satisfy (NF-036), from the manifest;
+  // per expose only with the Vite plugin's usage file.
+  const shared = sharedFromManifest(manifest, await readSharedUsage(dir))
+  if (shared) payload.shared = shared
   const file = await createDescriptorFile(payload, opts.env)
   const info: ComponentsBuildInfo = {
     kind: 'components',
@@ -434,7 +440,7 @@ async function signatureVerifies(jws: string, keys: JWK[]): Promise<boolean> {
  * - a JWS's payload is exactly that canonical payload, and, with
  *   `publicKeys`, its ES256 signature verifies (without them the signature
  *   is not checked, and the result says so);
- * - the assets are the ones `mf-manifest.json` lists;
+ * - the assets and the shared modules are the ones `mf-manifest.json` lists;
  * - every server file still has its recorded sha384, and the server graph has
  *   no file the descriptor does not list.
  */
@@ -500,6 +506,15 @@ export async function verifyComponentsBuild(
         `The assets in ${COMPONENTS_DESCRIPTOR_FILE} are not the ones mf-manifest.json lists.`
       )
     }
+  }
+  const shared = sharedFromManifest(
+    await readJson(join(client, 'mf-manifest.json'), 'mf-manifest.json'),
+    await readSharedUsage(root)
+  )
+  if (canonicalJson(shared ?? null) !== canonicalJson(file.shared ?? null)) {
+    throw mismatch(
+      `The shared modules in ${COMPONENTS_DESCRIPTOR_FILE} are not the ones mf-manifest.json lists.`
+    )
   }
   if (!file.ssr) return { signature }
   const graph = await collectServerIntegrity(client)

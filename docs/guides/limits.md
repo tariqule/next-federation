@@ -6,8 +6,9 @@ different approach.
 ## Supported
 
 React 19 (required). Next.js 16 App Router and Pages Router, with Turbopack or webpack, on Node 20.9
-or newer (Mode A server rendering needs Node 20.16 or newer). React Router hosts come after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any
-other version fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
+or newer (server rendering of remote components needs Node 20.16 or newer). React Router hosts come
+after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
+fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
 
 ## What an island cannot do
 
@@ -33,25 +34,49 @@ other version fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
 - **No Fast Refresh for islands inside a host.** Edits reload the page.
 - **No Server Actions yet.** A `'use server'` module fails with `NF-019`.
 
-## What a client component (Mode A) cannot do
+## What a remote component cannot do
 
-- **Share only the host's React set and the modules the host declares.** `react`, `react-dom`,
-  `react-dom/client` and `react/jsx-runtime` are always the host's. Every other module a remote lists
-  in `shared` must be provided by the host (`createRemoteComponent({ shared })`); a missing one fails
-  the load (`NF-029`, fallback). Remotes never bundle a shared module, and nothing is negotiated: the
-  remote gets the host's copy whatever its version. A remote's `shared: { name: { requiredVersion } }`
-  is passed to Module Federation as a singleton range; a mismatch only produces a Module Federation
-  runtime warning, and the host's copy is still used.
-- **No `next/*` modules.** Remotes are Vite builds; `next/link`, `next/navigation` and `next/image`
-  are never shared. Pass callbacks or components as props.
+- **Shared modules come from the host, unless the remote bundles a fallback.** `react`, `react-dom`,
+  `react-dom/client` and `react/jsx-runtime` are always the host's, with no fallback. Every other
+  module a remote lists in `shared` is host-provided by default: the host passes it with its real
+  version (`createRemoteComponent({ shared })` or `registerSharedModules`). Before an exposed module
+  loads, the host checks the shared modules that exposed module imports. A missing module, or a
+  version outside the remote's `requiredVersion`, renders the fallback (`NF-036`); the remote's
+  other components still load. With `fallback: true` the remote bundles its own copy and uses it
+  when the host's copy is missing or does not satisfy the range. Do not use a fallback for a module
+  whose identity matters, such as a context module. React and `next/*` never fall back.
+- **A satisfying host copy is seeded page-wide.** A fallback copy is looked up in
+  `@module-federation/vite`'s module cache by its name and bundled version, and the host seeds its
+  own copy under that key when it satisfies the range. The key is page-wide (process-wide on the
+  server): any other `@module-federation/vite` app on the page that bundles the same version reads
+  the host's copy, even when its own range is narrower. If two remotes bundle the same version with
+  different ranges, they share whichever copy loaded first. A server process that hosts more than
+  one React (an App Router and a Pages Router route), or whose share cache holds another instance
+  of a host module, never seeds: there the remote always uses its bundled copy.
+- **Register shared modules early.** Provide them at module scope, in a module every page imports
+  (the root layout or `_app`). A module first registered after a remote component has loaded (for
+  example by a page reached through a client navigation) makes the runtime start over for later
+  loads. On the server, the remote's code is then evaluated again for those later loads, so they do
+  not share module state with the components loaded before. The earlier instance's evaluated
+  graphs stay in memory as long as the components loaded from it, and `maxBuilds` does not count
+  them: it counts builds, not instances.
+- **Only three `next/*` modules.** `next/link`, `next/navigation` (App Router) and `next/router`
+  (Pages Router) come from the host's router, through `@next-federation/next/components` or
+  `@next-federation/next/pages/components`. An SPA provides none. `next/image`, `next/head` and the
+  rest cannot be shared (`NF-002` at build time); pass what the component needs as props.
+- **No checks against a remote dev server.** A dev server's descriptor lists no shared modules, so
+  a missing module fails only when the remote's code asks for it (`NF-029`).
 - **No server rendering for unverified builds.** Only a signed or pinned build runs on the host's
-  server; any other renders in the browser ([Client components](client-components.md#integrity-server-rendering)).
+  server; any other renders in the browser ([Remote components](remote-components.md#integrity-server-rendering)).
 - **Stylesheets follow the island rules.** A server-rendered component's stylesheets come ahead of
   its markup (never unstyled) with modulepreload links for its chunks; one first mounted in the
   browser (client navigation, browser-only build, SPA) inserts them without waiting, so it can show
   unstyled until its CSS arrives. No CSS isolation: scope class names.
-- **Remotes are `@module-federation/vite` builds** (`nextFederationComponents`). Rspack or webpack
-  Module Federation remotes are untested.
+- **Rspack and webpack remotes get coarser checks.** `nf-describe` reads the shared modules from
+  `mf-manifest.json`, with no per-expose list, so every exposed module is checked against every
+  host-provided module the build shares. A fallback copy there is chosen by the remote's own
+  Module Federation runtime. Rspack remotes are tested; webpack remotes are documented but
+  untested ([Remote components](remote-components.md#remotes-built-with-rspack-or-webpack)).
 
 ## Trust
 
@@ -97,4 +122,4 @@ A host cache that outlives the remote's build retention leads to `410 NF-023` an
 
 - A remote must run its server in the same React mode as its client bundle.
 - Remote assets need CORS headers; `nf-serve` and the island handler add them for the listed `hosts`.
-- Mode A (client components, with SSR): see [Client components](client-components.md).
+- Remote components (client components, with SSR): see [Remote components](remote-components.md).

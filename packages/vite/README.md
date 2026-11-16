@@ -118,7 +118,7 @@ only (a `NODE_ENV` other than `production` bundles React's development copies, w
 Any version other than 0.5.39 fails with `NF-025`. A CI canary job may set `NF_ALLOW_PLUGIN_RSC=1`
 to turn that into a warning while testing a newer plugin-rsc.
 
-## Client components remote (Mode A)
+## Components remote (remote components)
 
 ```ts
 import { nextFederationComponents } from '@next-federation/vite'
@@ -129,7 +129,11 @@ export default defineConfig({
       name: 'shop', // Module Federation container name (a JS identifier)
       base: 'https://shop.example.com/',
       exposes: { './Cart': './src/Cart.tsx' },
-      shared: ['@acme/host-context'], // host-provided, besides React
+      shared: {
+        '@acme/host-context': {}, // host-provided, besides React
+        '@acme/date-utils': { requiredVersion: '^2.0.0', fallback: true }, // own copy if needed
+        'next/link': {}, // the host's next/link (Next.js hosts only)
+      },
     }),
   ],
 })
@@ -142,22 +146,29 @@ build descriptor with the sha384 of every server file and each exposed module's 
 JS chunks, which hosts link and modulepreload; signed with ES256 when
 `NF_COMPONENTS_SIGNING_KEY` holds a private JWK) and `nf-build.json`; `nf-serve --dir <outDir>`
 serves it. React, `react-dom`, `react-dom/client` and `react/jsx-runtime` are always host-provided.
+Every other `shared` entry is host-provided too (never bundled) unless it sets `fallback: true`: then
+the build bundles its own copy and uses it when the host's copy is missing or outside
+`requiredVersion` (a semver range). Without a fallback, a missing or unsatisfying host copy renders
+the host's fallback (`NF-036`). `next/link`, `next/navigation` and `next/router` can be shared
+(host-provided only; the remote needs `next` as a dev dependency). The descriptor lists each shared
+module with its range, its fallback flag and the exposed modules that import it (signed).
 An exposed module compiled with Fast Refresh fails the build (`NF-002`). The dev server answers
 `/_nf/components.json` with `ssr: null` (hosts render a dev remote in the browser only).
 Programmatic builds set `NF_VITE_COMMAND=build` (the plugin reads the command before Vite does).
-Guide: [Client components](../../docs/guides/client-components.md).
+Guide: [Remote components](../../docs/guides/remote-components.md).
 
 ## API
 
-| Export                                   | Purpose                                            |
-| ---------------------------------------- | -------------------------------------------------- |
-| `nextFederationIslands(options)`         | The Vite plugin array for an island remote.        |
-| `resolveOptions(options, ctx)`           | Validate and resolve options (`NF-020`, `NF-002`). |
-| `IslandRemoteOptions`, `ResolvedOptions` | Option types.                                      |
-| `BuildInfo`                              | The shape written to `nf-build.json`.              |
-| `nextFederationComponents(options)`      | The Vite plugins for a Mode A components remote.   |
-| `ComponentsRemoteOptions`                | Its option type.                                   |
-| `ComponentsBuildInfo`                    | Its `nf-build.json` shape (`kind: 'components'`).  |
+| Export                                   | Purpose                                              |
+| ---------------------------------------- | ---------------------------------------------------- |
+| `nextFederationIslands(options)`         | The Vite plugin array for an island remote.          |
+| `resolveOptions(options, ctx)`           | Validate and resolve options (`NF-020`, `NF-002`).   |
+| `IslandRemoteOptions`, `ResolvedOptions` | Option types.                                        |
+| `BuildInfo`                              | The shape written to `nf-build.json`.                |
+| `nextFederationComponents(options)`      | The Vite plugins for a components remote.            |
+| `ComponentsRemoteOptions`                | Its option type.                                     |
+| `SharedModuleOptions`                    | One `shared` entry: `{ requiredVersion, fallback }`. |
+| `ComponentsBuildInfo`                    | Its `nf-build.json` shape (`kind: 'components'`).    |
 
 Guide: [Writing an island remote](../../docs/guides/writing-an-island-remote.md). For what islands cost
 and cannot do, see [Limits](../../docs/guides/limits.md).

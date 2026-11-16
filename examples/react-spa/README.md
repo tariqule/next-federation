@@ -24,4 +24,4 @@ Then open <http://localhost:3303>. Alone: start both remotes (see their READMEs)
 `pnpm --filter example-react-spa dev` (or `build` and `start`, which runs `vite preview`).
 
 Guides: [SPA host](../../docs/guides/getting-started-spa.md),
-[Client components](../../docs/guides/client-components.md).
+[Remote components](../../docs/guides/remote-components.md).

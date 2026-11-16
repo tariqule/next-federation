@@ -12,6 +12,12 @@ const config = {
         destination: '/docs/getting-started/app-router',
         permanent: false,
       },
+      // The guide was "Client components" before; old links keep working.
+      {
+        source: '/docs/client-components/:path*',
+        destination: '/docs/remote-components/:path*',
+        permanent: true,
+      },
     ]
   },
 }

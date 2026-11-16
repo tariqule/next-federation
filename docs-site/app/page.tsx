@@ -10,7 +10,7 @@ const links = [
     href: '/docs/guides/writing-an-island-remote',
     label: 'Writing an island remote',
   },
-  { href: '/docs/client-components/overview', label: 'Client components' },
+  { href: '/docs/remote-components/overview', label: 'Remote components' },
   { href: '/docs/errors/unknown-island', label: 'Error codes' },
   { href: '/docs/protocol/v1', label: 'Island protocol v1' },
   { href: '/docs/api/core', label: 'Package API' },

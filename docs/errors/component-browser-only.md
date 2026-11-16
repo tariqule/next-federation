@@ -2,7 +2,7 @@
 
 ## What happened
 
-The host rendered a Mode A remote component's fallback on the server and the browser rendered
+The host rendered a remote component's fallback on the server and the browser rendered
 the component itself. It still works; the page just has no server HTML for it. The message says
 which case applies:
 
@@ -21,8 +21,8 @@ The warning is logged once per build (or once per process).
 ## How to fix
 
 - Sign the remote's descriptor (`NF_COMPONENTS_SIGNING_KEY` at build time, `publicKeys` in the
-  host) or pin its builds. See `docs/guides/client-components.md`.
+  host) or pin its builds. See `docs/guides/remote-components.md`.
 - Run the host on Node.js 20.16 or newer.
-- Mixed App Router + Pages Router hosts are supported after v1; keep Mode A components to one
+- Mixed App Router + Pages Router hosts are supported after v1; keep remote components to one
   router per host, or accept browser-only rendering on the other one.
 - `components.ssr: false` turns server rendering off for a remote without a warning.

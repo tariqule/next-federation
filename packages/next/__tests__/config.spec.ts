@@ -56,7 +56,12 @@ test('legacy config: env, alias, transpilePackages', () => {
 
 test('no basePath sets NF_BASE_PATH to the empty string', () => {
   const c = loose(withNextFederation({}))
-  expect(c.env).toEqual({ NF_CACHE_MODEL: 'legacy', NF_BASE_PATH: '' })
+  expect(c.env).toEqual({
+    NF_CACHE_MODEL: 'legacy',
+    NF_BASE_PATH: '',
+    // The host's Next version: remote components check ranges against it.
+    NF_NEXT_VERSION: '16.4.6',
+  })
   expect(c.transpilePackages).toEqual(['@next-federation/next'])
 })
 
@@ -113,6 +118,7 @@ test('keeps existing turbopack.resolveAlias and env entries', () => {
     MINE: '1',
     NF_CACHE_MODEL: 'legacy',
     NF_BASE_PATH: '',
+    NF_NEXT_VERSION: '16.4.6',
   })
   expect(c.turbopack).toEqual({
     root: '/r',
@@ -149,6 +155,7 @@ test('supports a config function', async () => {
   expect(c.env).toEqual({
     NF_CACHE_MODEL: 'cache-components',
     NF_BASE_PATH: '/p',
+    NF_NEXT_VERSION: '16.4.6',
   })
   expect(c.turbopack.resolveAlias[ALIAS]).toBe(CC)
 })
@@ -229,4 +236,15 @@ describe('assert-wrapped', () => {
     expect(cacheModel()).toBe('legacy')
     expect(hostBasePath()).toBe('/b')
   })
+})
+
+test('an unreadable Next version is NF-002 at config time (remote components need it)', async () => {
+  rs.resetModules()
+  rs.doMock('node:module', () => ({
+    createRequire: () => () => ({ version: undefined }),
+  }))
+  const { withNextFederation: wrap } = await import('../src/config.ts')
+  expectCode(() => wrap({}), 'NF-002')
+  rs.doUnmock('node:module')
+  rs.resetModules()
 })

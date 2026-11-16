@@ -10,6 +10,8 @@
     "@next-federation/vite": "workspace:*",
     "@types/react": "19.3.0",
     "components-context": "workspace:*",
+    "components-fallback-lib": "workspace:*",
+    "next": "16.4.6",
     "react": "19.3.1",
     "typescript": "6.0.3",
     "vite": "8.3.8"

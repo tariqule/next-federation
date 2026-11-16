@@ -277,6 +277,29 @@ describe('fix round 1: server-side trust', () => {
     ).toBe(false)
   })
 
+  test('the shared requirements are covered: a relaxed requirement is not trusted', () => {
+    const shared = {
+      'components-context': { requiredVersion: '^1.0.0', fallback: false },
+    }
+    const signed = { ...d(), shared }
+    const digest = `sha384-${createHash('sha384')
+      .update(canonicalJson({ ...JSON.parse(canonicalOf(d())), shared }))
+      .digest('base64')}`
+    componentTrustRegistry().verified.set(
+      verifiedKey('trusted-remote', digest),
+      'signature'
+    )
+    expect(isTrustedDescriptor(signed)).toBe(true)
+    expect(
+      isTrustedDescriptor({
+        ...signed,
+        shared: {
+          'components-context': { requiredVersion: false, fallback: true },
+        },
+      })
+    ).toBe(false)
+  })
+
   test('cache hit after a restart: re-verified from the carried jws against registered keys', () => {
     const { privateKey, pub } = keyPair()
     const signed = d({ iat: 100 })

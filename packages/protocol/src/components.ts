@@ -2,6 +2,7 @@
 // descriptor a components remote publishes for each build. Bundler-neutral.
 import { BUILD_ID_PATTERN, NAME_PATTERN, SHA384_PATTERN } from './constants.ts'
 import { canonicalJson } from './props.ts'
+import { isSemverRange, isSemverVersion } from './semver.ts'
 
 /** The current build's descriptor; `/b/<buildId>/nf-components.json` names one build. */
 export const COMPONENTS_DESCRIPTOR_PATH = '/_nf/components.json'
@@ -29,6 +30,26 @@ export type ComponentBuildAssets = {
   exposes: Record<string, ComponentExposeAssets>
 }
 
+/**
+ * One module the build expects from its host (`shared` in the remote's
+ * config, besides React, which is always the host's): what the host's copy
+ * must satisfy, and whether the build carries its own copy to use otherwise.
+ */
+export type ComponentSharedModule = {
+  /** A semver range the host's version must satisfy; false: any version. */
+  requiredVersion: string | false
+  /**
+   * true: the build bundles its own copy and uses it when the host does not
+   * provide the module or its version does not satisfy `requiredVersion`.
+   * false: host-provided only (a missing or unsatisfying copy is NF-036).
+   */
+  fallback: boolean
+  /** The exposed modules ('./Name') that import it; absent: every one. */
+  exposes?: string[]
+  /** With `fallback`: the version of the build's own copy. */
+  version?: string
+}
+
 /** What a build signs (or a host pins): everything a host trusts about it. */
 export type ComponentBuildDescriptor = {
   v: 1
@@ -49,6 +70,8 @@ export type ComponentBuildDescriptor = {
   iat?: number
   /** The browser files (stylesheets, chunks); absent in dev and older builds. */
   assets?: ComponentBuildAssets
+  /** Modules the build expects from its host, by specifier; absent in older builds. */
+  shared?: Record<string, ComponentSharedModule>
 }
 
 /** The published file: the payload, its digest and optionally its ES256 JWS. */
@@ -77,6 +100,8 @@ export type RemoteComponentDescriptor = {
   iat?: number
   /** The build's browser files, as in its descriptor. */
   assets?: ComponentBuildAssets
+  /** The modules the build expects from its host, as in its descriptor. */
+  shared?: Record<string, ComponentSharedModule>
   /**
    * The build's JWS, carried so a server can re-verify the descriptor
    * itself (a cached descriptor after a restart): `ssr` alone is never trusted.
@@ -116,6 +141,11 @@ export type ComponentTrustKind = 'signature' | 'pinned' | 'unsafe-dev'
 export type ComponentTrustRegistry = {
   verified: Map<string, ComponentTrustKind>
   trust: Map<string, ComponentTrustPolicy[]>
+  /**
+   * The React of every server-side remote component runtime in this process
+   * (one per Next layer): more than one means a mixed-router host.
+   */
+  reacts?: Set<unknown>
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')
@@ -210,11 +240,7 @@ function parseAssets(
   const exposes: Record<string, ComponentExposeAssets> = {}
   for (const [key, files] of Object.entries(value.exposes)) {
     // Expose keys as Module Federation writes them: './Name'.
-    if (
-      !key.startsWith('./') ||
-      !insidePath(key.slice(2)) ||
-      !isRecord(files)
-    ) {
+    if (!isExposeKey(key) || !isRecord(files)) {
       return null
     }
     const css = urlsUnder(files.css, base)
@@ -223,6 +249,62 @@ function parseAssets(
     exposes[key] = { css, js }
   }
   return { entry, exposes }
+}
+
+const BARE_SPECIFIER =
+  /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
+
+/** Always the host's: never a fallback copy in a build (React, the router). */
+export const NEVER_FALLBACK: readonly string[] = [
+  'react',
+  'react-dom',
+  'react-dom/client',
+  'react/jsx-runtime',
+  'next/link',
+  'next/navigation',
+  'next/router',
+]
+
+/** An expose key as Module Federation writes it: './Name'. */
+const isExposeKey = (key: unknown): key is string =>
+  typeof key === 'string' && key.startsWith('./') && insidePath(key.slice(2))
+
+function parseShared(
+  value: unknown
+): Record<string, ComponentSharedModule> | null {
+  if (!isRecord(value)) return null
+  const out: Record<string, ComponentSharedModule> = {}
+  for (const [name, entry] of Object.entries(value)) {
+    if (!BARE_SPECIFIER.test(name) || !isRecord(entry)) return null
+    const { requiredVersion, fallback, exposes, version } = entry
+    if (
+      requiredVersion !== false &&
+      (typeof requiredVersion !== 'string' || !isSemverRange(requiredVersion))
+    ) {
+      return null
+    }
+    if (typeof fallback !== 'boolean') return null
+    if (fallback && NEVER_FALLBACK.includes(name)) return null
+    if (
+      exposes !== undefined &&
+      (!Array.isArray(exposes) || !exposes.every(isExposeKey))
+    ) {
+      return null
+    }
+    if (
+      version !== undefined &&
+      (typeof version !== 'string' || !isSemverVersion(version))
+    ) {
+      return null
+    }
+    out[name] = {
+      requiredVersion,
+      fallback,
+      ...(exposes === undefined ? {} : { exposes: [...exposes] }),
+      ...(version === undefined ? {} : { version }),
+    }
+  }
+  return out
 }
 
 /** The payload fields of a descriptor, validated; null when invalid. */
@@ -255,6 +337,12 @@ export function parseComponentBuildDescriptor(
     if (!parsed) return null
     assets = parsed
   }
+  let shared: Record<string, ComponentSharedModule> | undefined
+  if (value.shared !== undefined) {
+    const parsed = parseShared(value.shared)
+    if (!parsed) return null
+    shared = parsed
+  }
   return {
     v: 1,
     name,
@@ -264,6 +352,7 @@ export function parseComponentBuildDescriptor(
     ssr,
     ...(iat === undefined ? {} : { iat: iat as number }),
     ...(assets === undefined ? {} : { assets }),
+    ...(shared === undefined ? {} : { shared }),
   }
 }
 
@@ -307,8 +396,18 @@ export function componentDescriptorBytes(
 export function componentDescriptorCanonical(
   payload: ComponentBuildDescriptor
 ): string {
-  const { v, name, buildId, base, manifest, ssr, iat, assets } = payload
-  return canonicalJson({ v, name, buildId, base, manifest, ssr, iat, assets })
+  const { v, name, buildId, base, manifest, ssr, iat, assets, shared } = payload
+  return canonicalJson({
+    v,
+    name,
+    buildId,
+    base,
+    manifest,
+    ssr,
+    iat,
+    assets,
+    shared,
+  })
 }
 
 /** The descriptor digest a host pins: sha384 of the canonical payload. */

@@ -7,12 +7,15 @@ import {
   COMPONENTS_JWS_TYPE,
   componentDescriptorBytes,
   componentDescriptorDigest,
+  isSemverRange,
+  isSemverVersion,
   sha384Integrity,
 } from '@next-federation/protocol'
 import type {
   ComponentBuildAssets,
   ComponentBuildDescriptor,
   ComponentDescriptorFile,
+  ComponentSharedModule,
 } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import { CompactSign, importJWK } from 'jose'
@@ -218,6 +221,111 @@ export async function collectServerIntegrity(
     }
   }
   return integrity
+}
+
+/** Always the host's (never in the descriptor's `shared`). */
+const HOST_REACT = new Set([
+  'react',
+  'react-dom',
+  'react-dom/client',
+  'react/jsx-runtime',
+])
+/** The host's router modules: shared, never a fallback copy. */
+const NEXT_SHARED = new Set(['next/link', 'next/navigation', 'next/router'])
+const BARE_SPECIFIER =
+  /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
+
+/**
+ * Written by `nextFederationComponents` next to `client/`: the shared modules
+ * each exposed module imports (`{ "./Counter": ["ctx"] }`, or null when
+ * unknown). nf-describe reads it too, so describing a Vite build again gives
+ * the same descriptor; other bundlers have none (every expose is checked).
+ */
+export const SHARED_USAGE_FILE = 'nf-shared-usage.json'
+
+/** Expose key -> the shared specifiers its module graph imports. */
+export type SharedUsage = Map<string, Set<string>>
+
+/** The usage file of a build folder; null when it is absent (unknown). */
+export async function readSharedUsage(
+  buildDir: string
+): Promise<SharedUsage | null> {
+  const file = join(resolve(buildDir), SHARED_USAGE_FILE)
+  let stat
+  try {
+    stat = await lstat(file)
+  } catch {
+    return null
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new NFError(
+      'NF-002',
+      `${SHARED_USAGE_FILE} must be a regular file inside the build folder.`
+    )
+  }
+  const raw = JSON.parse(await readFile(file, 'utf8')) as unknown
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const usage: SharedUsage = new Map()
+  for (const [expose, names] of Object.entries(raw)) {
+    if (!Array.isArray(names)) return null
+    usage.set(
+      expose,
+      new Set(names.filter((n): n is string => typeof n === 'string'))
+    )
+  }
+  return usage
+}
+
+type ManifestShared = {
+  name?: unknown
+  version?: unknown
+  singleton?: unknown
+  requiredVersion?: unknown
+}
+
+/**
+ * The descriptor's signed `shared` field from a built `mf-manifest.json`:
+ * every shared module but React, with the range the host's copy must
+ * satisfy (false: any; a range hosts cannot evaluate counts as any), and
+ * `fallback` for a bundled copy (a non-singleton share: Module Federation
+ * picks a satisfying copy or the build's own), with that copy's version.
+ * `next/*` never falls back. `usage` (per expose) adds `exposes`; without
+ * it every expose is checked. undefined when there is nothing to list, so
+ * the digest of such a build is what older hosts compute.
+ */
+export function sharedFromManifest(
+  manifest: unknown,
+  usage: SharedUsage | null
+): Record<string, ComponentSharedModule> | undefined {
+  const list = (manifest as { shared?: unknown } | null)?.shared
+  const out: Record<string, ComponentSharedModule> = {}
+  for (const item of Array.isArray(list) ? (list as ManifestShared[]) : []) {
+    const name = item?.name
+    if (typeof name !== 'string' || !BARE_SPECIFIER.test(name)) continue
+    if (HOST_REACT.has(name)) continue
+    const range = item.requiredVersion
+    const fallback = item.singleton === false && !NEXT_SHARED.has(name)
+    const entry: ComponentSharedModule = {
+      requiredVersion:
+        typeof range === 'string' && isSemverRange(range) ? range : false,
+      fallback,
+    }
+    if (
+      fallback &&
+      typeof item.version === 'string' &&
+      isSemverVersion(item.version)
+    ) {
+      entry.version = item.version
+    }
+    if (usage) {
+      entry.exposes = [...usage.entries()]
+        .filter(([, names]) => names.has(name))
+        .map(([expose]) => expose)
+        .sort()
+    }
+    out[name] = entry
+  }
+  return Object.keys(out).length === 0 ? undefined : out
 }
 
 async function signingKey(raw: string) {

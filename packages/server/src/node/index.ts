@@ -4,11 +4,17 @@ export type { BuildInfo, Retention } from './retention.ts'
 export { serveBuilds } from './serve-builds.ts'
 export type { ServeBuildsOptions, ServedBuilds } from './serve-builds.ts'
 export {
+  SHARED_USAGE_FILE,
   collectBrowserAssets,
   collectServerIntegrity,
   createDescriptorFile,
+  readSharedUsage,
+  sharedFromManifest,
 } from './components-descriptor.ts'
-export type { ComponentsBuildInfo } from './components-descriptor.ts'
+export type {
+  ComponentsBuildInfo,
+  SharedUsage,
+} from './components-descriptor.ts'
 export {
   describeComponentsBuild,
   runDescribeCli,

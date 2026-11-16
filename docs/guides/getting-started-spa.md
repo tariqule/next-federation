@@ -6,6 +6,22 @@ them with `IslandMount`. Per-user islands need a server to mint tokens and are n
 **Supported:** React 19 (required: `IslandMount` uses React 19 APIs). This guide builds the SPA with
 Vite; the library packages target Node.js 20.9 or newer.
 
+## Choosing between remote components and islands
+
+This guide sets up islands. A remote can also ship remote components, and a host can use both.
+
+| | Remote components | Islands |
+| --- | --- | --- |
+| What the remote ships | A client component module | HTML rendered on the remote's server |
+| React | The host's | The remote's own (or the host's, with `provideHostReact`) |
+| Host context | Readable | Does not cross in; pass data as props |
+| Props | Anything a client component takes | Plain JSON |
+| Rendering in an SPA | In the browser | The remote's HTML, then hydration |
+| `next/link` and other Next modules | Not available in an SPA (`NF-036`) | Not used; `Link` from `@next-federation/island` |
+| Choose it for | Interactive pieces that share the app's state | Content the remote renders and fetches itself |
+
+Remote components: see [Remote components](remote-components.md).
+
 ## 1. Install
 
 ```sh
@@ -74,4 +90,4 @@ development or on a pre-release React.
   no `<link>` for them.
 - Add each remote origin to `script-src`, `connect-src` and `style-src` ([CSP](csp.md)).
 - Props are plain JSON; React context does not cross into an island ([Limits](limits.md)).
-- Mode A (client components): see [Client components](client-components.md).
+- Remote components (client components): see [Remote components](remote-components.md).
