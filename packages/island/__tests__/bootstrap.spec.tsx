@@ -311,6 +311,24 @@ describe('hydration signal', () => {
     await act(async () => handle.destroy())
   })
 
+  test('destroy before hydration reports no recoverable error', async () => {
+    // A host that unmounts an island while it is still hydrating (rapid
+    // navigation): React reports the unmount as an "early update" to the
+    // dehydrated root. The root is gone, so that is not an island error.
+    const onError = rs.fn()
+    const handle = setup().mountIsland(
+      container,
+      options({ rscPayload: 'slow', onError })
+    )
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    await act(async () => handle.destroy())
+    await act(async () => releaseSlow())
+    expect(onError).not.toHaveBeenCalled()
+    expect(container.innerHTML).toBe('')
+  })
+
   test('a second mountIsland on a container with a live root throws NF-012', async () => {
     const mod = setup()
     const handle = await mount(options(), mod)

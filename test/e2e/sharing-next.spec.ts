@@ -12,6 +12,8 @@ import { HOST_APP, HOST_PAGES, REMOTE_A, REMOTE_B } from './servers.ts'
 // Servers: NF_MODE=prod NF_APPS=issuer,remote-a,remote-b,host-app,host-pages.
 const PROD = process.env.NF_MODE === 'prod'
 const SHARE = PROD && process.env.NF_SHARE !== '0'
+// NF_MEASURE=1 remotes build without the React copy probe these tests read.
+const MEASURE = process.env.NF_MEASURE === '1'
 const FIRST_LIVE = { timeout: 30_000 }
 
 const NAMESPACE = '@next-federation/island-share@1'
@@ -60,7 +62,10 @@ const probe = (page: Page): Promise<Probe> =>
   )
 
 test.describe('island React sharing on Next hosts', () => {
-  test.skip(!SHARE, 'needs NF_MODE=prod with sharing on')
+  test.skip(
+    !SHARE || MEASURE,
+    'needs NF_MODE=prod with sharing on, no NF_MEASURE'
+  )
 
   for (const host of [
     { name: 'App Router', url: HOST_APP, app: 'host-app' },

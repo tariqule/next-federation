@@ -202,7 +202,37 @@ test.describe('island lifecycle in a CSR host (SPA)', () => {
     test(`a bootstrap aborted after ${toggles} toggles reports only for an island still on the page`, async ({
       page,
     }) => {
-      const errors = collectErrors(page)
+      // The library's own reports: its island:error events, its logger's
+      // console lines and uncaught page errors. How the browser words the
+      // aborted request in the console is its own (Chromium "Failed to load
+      // resource", Firefox "Cross-Origin Request Blocked"), not the library's.
+      const pageErrors: string[] = []
+      const logged: string[] = []
+      page.on('pageerror', (e) => pageErrors.push(e.message))
+      page.on('console', (m) => {
+        if (m.type() === 'error' && m.text().includes('[ next-federation ]'))
+          logged.push(m.text())
+      })
+      await page.addInitScript(() => {
+        const seen: string[] = []
+        ;(window as unknown as { islandErrors: string[] }).islandErrors = seen
+        document.addEventListener('nf:island', (e) => {
+          const d = (
+            e as CustomEvent<{
+              type: string
+              remote: string
+              kind?: string
+              code?: string
+            }>
+          ).detail
+          if (d.type === 'island:error')
+            seen.push(`${d.remote}:${d.kind}:${d.code}`)
+        })
+      })
+      const islandErrors = () =>
+        page.evaluate(() => [
+          ...(window as unknown as { islandErrors: string[] }).islandErrors,
+        ])
       let abort!: () => void
       const held = new Promise<void>((r) => (abort = r))
       // Hold remote A's bootstrap module (as above), then fail it.
@@ -232,27 +262,27 @@ test.describe('island lifecycle in a CSR host (SPA)', () => {
       for (let i = 0; i < toggles; i++) await toggle.click({ delay: 0 })
       abort()
       await expect.poll(() => aborted).toBe(true)
-      // The page's own network log of the aborted request is the browser's,
-      // not the library's.
-      const ours = () =>
-        errors.filter((e) => !/^Failed to load resource/.test(e))
       if (shown) {
         // The island on the page is inert (server HTML kept) and reports
         // the failure once; the nine unmounted ones report nothing.
         await expect(
           page.locator('[data-nf-root]:has([data-island="ProductPanel"])')
         ).toHaveAttribute('data-nf-state', 'inert')
-        await expect.poll(() => ours().length).toBe(1)
-        expect(ours()[0]).toContain('NF-011')
+        await expect.poll(islandErrors).toEqual(['a:bootstrap:NF-011'])
         await expect(page.locator('[data-nf-state="live"]')).toHaveCount(1)
       } else {
         await expect(page.locator('[data-nf-root]')).toHaveCount(0)
-        // Let any late rejection handler and the deferred teardown run.
-        await page.evaluate(
-          () => new Promise((resolve) => setTimeout(resolve, 50))
-        )
-        expect(ours()).toEqual([])
       }
+      // Let any late rejection handler and the deferred teardown run.
+      await page.evaluate(
+        () => new Promise((resolve) => setTimeout(resolve, 50))
+      )
+      // An unmounted island's container is detached, so its events would not
+      // reach the document: its logger line would still show here.
+      expect(await islandErrors()).toEqual(shown ? ['a:bootstrap:NF-011'] : [])
+      expect(logged).toHaveLength(shown ? 1 : 0)
+      if (shown) expect(logged[0]).toContain('NF-011')
+      expect(pageErrors).toEqual([])
       await expect(liveRoots(page)).toHaveText(shown ? '1' : '0')
     })
   }
