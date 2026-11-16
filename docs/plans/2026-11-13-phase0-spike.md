@@ -32,7 +32,7 @@ Playwright tests are the acceptance checks, one spec per gate. The playground ap
   | Next Pages Router host | `http://localhost:3101` |
   | Vite SPA (host + Mode A remote) | `http://localhost:4200` |
 - Identity tokens: ES256 JWT, `iss: "http://localhost:3100"` (Pages host uses `:3001`), `aud` = remote name, `exp` = 5 minutes. **Never** in HTML or Next's RSC payload.
-- Git: work on branch `spike/phase-0`. Commit messages and PR text must **never mention Claude or Anthropic** (no `Co-Authored-By` trailer).
+- Git: work on branch `spike/phase-0`. Commit messages and PR text carry no tool attribution (no `Co-Authored-By` trailer).
 - Every gate runs under Turbopack **and** `--webpack`. A webpack pass with a Turbopack failure is a **FAIL**.
 
 ## Review Focus

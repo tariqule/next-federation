@@ -1,0 +1,71 @@
+name: Vercel
+
+# Manual only: deploys the island-remote fixture to a Vercel project twice
+# (two production deployments) and runs test/e2e/vercel.spec.ts against it.
+# Guide: docs/guides/deploying-a-remote-on-vercel.md.
+on:
+  workflow_dispatch:
+    inputs:
+      production-domain:
+        description: The project's production domain, without https://
+        required: true
+        default: next-federation-island-remote.vercel.app
+
+concurrency:
+  group: vercel-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e-vercel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The CLI reads all three from the environment (no `vercel link`).
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DOMAIN: ${{ inputs.production-domain }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: npm install --global vercel@65.16.0
+      - name: Two production deployments
+        working-directory: test/fixtures/island-remote
+        run: |
+          set -euo pipefail
+          deploy() {
+            # `vercel build` does not set VERCEL_PROJECT_PRODUCTION_URL, so
+            # the fixture's base comes from the input.
+            NF_BUILD_ID="$1" VERCEL_PROJECT_PRODUCTION_URL="$DOMAIN" \
+              vercel build --prod --yes
+            vercel deploy --prebuilt --prod --yes --json > "$RUNNER_TEMP/$1.json"
+          }
+          old="v1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          deploy "$old"
+          deploy "v2-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "NF_VERCEL_PROD_URL=https://$DOMAIN"
+            echo "NF_VERCEL_OLD_BUILD_ID=$old"
+            echo "NF_VERCEL_OLD_DEPLOYMENT_ID=$(jq -r .deployment.id "$RUNNER_TEMP/$old.json")"
+            echo "NF_VERCEL_OLD_DEPLOYMENT_URL=$(jq -r .deployment.url "$RUNNER_TEMP/$old.json")"
+          } >> "$GITHUB_ENV"
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: e2e (host-app against the Vercel remote)
+        run: pnpm --filter e2e exec playwright test vercel
+        env:
+          NF_MODE: prod
+          NF_APPS: host-app
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: vercel-e2e
+          path: |
+            test/e2e/test-results
+            test/e2e/.logs
+          if-no-files-found: ignore

@@ -49,7 +49,7 @@ internal.** Framework knowledge lives only in small adapters that use public API
 | plugin-rsc's browser runtime keeps state in page-wide globals (`globalThis.__vite_rsc_client_require__`, `globalThis.__viteRscCallServer`); two copies on one page collide. The flight client is pre-bundled outside the app's module graph in dev, so a true module-scoped binding is impossible; scoping is done with one registry global keyed per build (§6). | `@vitejs/plugin-rsc@0.5.39` `dist/shared-*.js`, `dist/react/browser.js` |
 | plugin-rsc builds asset URLs as `config.base + url` and rejects a relative `base` for RSC | `@vitejs/plugin-rsc@0.5.39` `dist/plugin-*.js` |
 | `@module-federation/vite` v1.24.0 emits ESM SSR entries and has `experiments.ssrMode: 'ISLAND'` (client-component islands that refuse to share `react`) | `@module-federation/vite@1.24.0` README/types |
-| Vercel Deployment Protection (Standard) requires auth on generated deployment URLs, so they can't serve public assets to end users. **Per Vercel docs; not verified by the spike. Verified in Phase 5 on a real deployment.** | vercel.com/docs/deployment-protection |
+| Vercel Deployment Protection (Standard) requires auth on generated deployment URLs, so they can't serve public assets to end users. **Verified 2026-11-16 (Task 26, Hobby).** Previously: per Vercel docs; not verified by the spike. Verified in Phase 5 on a real deployment.** | vercel.com/docs/deployment-protection |
 | No production-grade federated React Server Components exist (MF core PRs #4247, #4467, #3736 closed unmerged) | GitHub |
 | `'use cache'` only compiles when `cacheComponents` is on, so the caching implementation must be selected at build time | Phase 0 spike (`spike/host-app/next.config.ts`) |
 | Production SSR emits `<link rel="modulepreload">` and React's inline form-replay `<script>`; dev does not | F6 |
@@ -237,9 +237,14 @@ The host shows it as an **island**: a separate React root with **its own React**
 #### Build pinning and deploy skew
 - Asset and action URLs are **absolute and pinned to the build that rendered the island**. plugin-rsc requires an
   absolute `base` (§2).
-- **On Vercel:** use the remote's **production domain** plus **Vercel Skew Protection** to pin the deployment. Do not use
-  generated deployment URLs, which Deployment Protection puts behind auth (§2). The exact pinning mechanism (the
-  deployment id on asset and action requests) is confirmed in Phase 0. Not verified by the spike; verified in Phase 5 (G).
+- **On Vercel:** use the remote's **production domain**; never generated deployment URLs, which Standard Deployment
+  Protection puts behind auth (§2). **Verified 2026-11-16 on a Hobby team (Task 26):** the production domain serves
+  envelopes and assets without auth while deployment URLs require it, and after a new deploy the previous build's
+  assets return 404 on the production domain and its pinned island path returns 410 NF-023 (no Skew Protection on
+  Hobby; `dpl` / `x-deployment-id` are ignored). A cached island from the old build goes inert: its HTML stays, no page
+  errors, a reload shows the new build. To keep old builds interactive: Vercel Skew Protection (Pro/Enterprise, not
+  verified here) or persistent asset storage that keeps `/b/<buildId>/` across deploys. See
+  `docs/guides/deploying-a-remote-on-vercel.md`.
 - **Self-hosted:** versioned paths for assets **and handlers**. Each retained build's **server** keeps running, **in its own process** (F10), because islands post to the build that rendered them and plugin-rsc's server runtime is process-wide. `nf-serve` implements this. **Retention policy:** the current build, the newest 3 builds, and any build younger than 24 h stay live; retired builds answer `410` (`NF-023`) and their islands stay visible but inert. Operators keep builds for at least the longer of the host's island cache lifetime and the longest expected open tab (R).
 - Cache keys include `buildId`. When a host re-render delivers an island from a **different `buildId`** than the one
   loaded, the mount **tears the island root down and re-bootstraps it** from the new HTML and bootstrap. This is the
@@ -545,7 +550,7 @@ uses tokens, not cookies.
 - **After review:** accept v1 cuts (Mode A browser-only; no mixed-router hosts, host loader, or plain-anchor
   interception; forms disabled until hydrated). **React Router ships right after v1.0.**
 - **2026-11-15:** `withNextFederation()` is a required config wrapper. Island remotes share React in their own MF scope (`nf-islands`), exact-version, with own-copy fallback, behind a proving gate. Licence MIT. Node floor 20.9 for published packages. Error docs links point at the GitHub repository until a docs site exists. Vercel verification is optional, gated on an account.
-- Never mention Claude/Anthropic in commits, PRs or repo descriptions.
+- No tool attribution in commits, PRs or repo descriptions.
 
 ## 13. Calls made by the designer (please check)
 - Two modes; islands bring their own React; islands built with Vite + plugin-rsc (pinned, contained).

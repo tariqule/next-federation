@@ -38,7 +38,8 @@ The wire contract is published at [`docs/protocol/v1.md`](docs/protocol/v1.md).
   [Client components (Mode A)](docs/guides/client-components.md),
   [Sharing components from a Next app](docs/guides/sharing-components-from-a-next-app.md)
 - Operations: [Identity and key rotation](docs/guides/identity.md), [CSP](docs/guides/csp.md),
-  [Caching](docs/guides/caching.md), [Deployment](docs/guides/deployment.md)
+  [Caching](docs/guides/caching.md), [Deployment](docs/guides/deployment.md),
+  [Deploying a remote on Vercel](docs/guides/deploying-a-remote-on-vercel.md)
 - [Limits](docs/guides/limits.md): what islands cannot do and what they cost
 - [Examples](examples/README.md): a Vite island remote, a components remote and three hosts
   (App Router, Pages Router, SPA) you can run with `pnpm examples:dev`
