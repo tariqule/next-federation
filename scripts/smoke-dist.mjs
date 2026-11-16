@@ -36,6 +36,10 @@ const NEXT_RUNTIME_ONLY = new Set([
   '@next-federation/next:./dist/server/index.js',
   // `next/head`, `next/router`.
   '@next-federation/next:./dist/pages/index.js',
+  // Remote components with the host's `next/link` and `next/navigation`
+  // (App Router) or `next/router` (Pages Router).
+  '@next-federation/next:./dist/client/components.js',
+  '@next-federation/next:./dist/pages/components.js',
 ])
 
 const failures = []

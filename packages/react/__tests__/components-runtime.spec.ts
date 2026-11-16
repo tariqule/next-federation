@@ -843,6 +843,31 @@ describe('shared modules registered late, and fallback copies', () => {
     expect(cachedLib()).toBeUndefined()
   })
 
+  test('server: a build that needs a seeded copy it cannot get renders browser-only (no hydration mismatch)', async () => {
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    setup({
+      react: otherReact,
+      hostShared: { react: { version: '19.3.1', module: otherReact } },
+    })
+    const { runtime, instance } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: {} } })
+    // The browser seeds the host's copy, so the server must not render the
+    // bundled one: it leaves this component to the browser.
+    expect(
+      await runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).toBeNull()
+    expect(instance.loads).toEqual([])
+    // An unsatisfying host copy means the bundled copy on both sides: SSR.
+    const unsatisfied = setup()
+    unsatisfied.runtime.registerShared({
+      lib: { version: '1.0.0', module: {} },
+    })
+    expect(
+      await unsatisfied.runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).not.toBeNull()
+  })
+
   test('server: a stale share cache (another instance of a host module) never seeds a fallback copy', async () => {
     ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
       share: { 'default:ctx': { other: true } },
