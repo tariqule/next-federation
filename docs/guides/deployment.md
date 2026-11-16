@@ -17,10 +17,16 @@ A remote is a server. `vite build` writes `dist/<buildId>/{client,ssr,rsc}` and
 
 ### Vercel
 
-Vercel keeps old deployments reachable, so build-pinned assets and handlers of an earlier build keep
-answering, the same behaviour `nf-serve` provides for self-hosting. Whatever you use, `base` must be the absolute URL that hosts
-reach the remote at, and the host's cache must not outlive how long an old build stays reachable
-([Caching](caching.md)).
+Serve the remote from the project's production domain: static assets plus one Vercel Function for
+`/_nf/*`. A deployment holds only its own build, and the production domain always serves the newest
+deployment, so after a deploy an earlier build's assets answer `404` there. Older deployments stay
+reachable only at their generated URLs, behind Deployment Protection. Without Skew Protection (Hobby,
+verified 2026-11-16) an island from a cached envelope of the previous build goes inert until the
+host renders a fresh one. Setup, observed behaviour and the skew options:
+[Deploying an island remote on Vercel](deploying-a-remote-on-vercel.md).
+
+Whatever you use, `base` must be the absolute URL that hosts reach the remote at, and the host's
+cache must not outlive how long an old build stays reachable ([Caching](caching.md)).
 
 ### Self-hosted: `nf-serve`
 

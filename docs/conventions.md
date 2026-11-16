@@ -40,5 +40,4 @@ Sources: the Next.js repo (`vercel/next.js`) and the Module Federation repo
 - A `README.md` in every package folder. Read the READMEs on the path before editing a file.
 
 ## Git
-- Don't mention Claude or Anthropic in PR descriptions or repo descriptions (user rule). Commit
-  trailers follow the user's organization's managed Claude Code settings.
+- No tool attribution in commit messages, PR descriptions or repo descriptions.

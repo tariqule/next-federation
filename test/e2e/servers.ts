@@ -33,6 +33,8 @@
 //                         its build folder is `.next-base`.
 //   NF_SIGNING_KEY        hosts: the test-only private JWK from
 //                         fixtures/test-signing-key.json.
+//   NF_REMOTE_A_ORIGIN    host-app: remote `a`'s origin, set from
+//                         NF_VERCEL_PROD_URL when that is set (vercel.spec.ts).
 //   VITE_NF_ORIGIN_*      host-spa: remote origins (A, B, FAKE, C, RETIRED).
 //   VITE_NF_COMPONENTS_*  host-spa: the Mode A remote (ORIGIN) and a down one
 //                         (DOWN). Mode A ports: fixtures/components-keys.ts.
@@ -235,6 +237,9 @@ const spaEnv: Record<string, string> = {
 const hostEnv = (port: number): Record<string, string> => ({
   NF_PORT: String(port),
   NF_SIGNING_KEY: SIGNING_KEY,
+  ...(process.env.NF_VERCEL_PROD_URL
+    ? { NF_REMOTE_A_ORIGIN: process.env.NF_VERCEL_PROD_URL.replace(/\/+$/, '') }
+    : {}),
 })
 
 export const APPS: App[] = [

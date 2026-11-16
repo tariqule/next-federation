@@ -14,7 +14,10 @@ const remote = (base: number) => ({
 
 export const federation = defineFederation({
   remotes: {
-    a: remote(4100),
+    // NF_REMOTE_A_ORIGIN: remote `a` deployed elsewhere (the Vercel e2e).
+    a: process.env.NF_REMOTE_A_ORIGIN
+      ? { origin: process.env.NF_REMOTE_A_ORIGIN }
+      : remote(4100),
     b: remote(4101),
     fake: remote(4102),
     // Nothing listens here: used by the remote-down cases.

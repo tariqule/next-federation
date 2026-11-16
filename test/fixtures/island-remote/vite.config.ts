@@ -12,6 +12,20 @@ const LANE = laneName()
 const hostOrigin = (p: number) => `http://localhost:${lanePort(p)}`
 const HOSTS = [3100, 3101, 3102, 3103, 4200].map(hostOrigin)
 const ROOT = import.meta.dirname
+// Vercel (vercel.json's buildCommand sets NF_VERCEL=1): the remote is served
+// from the project's production domain, never from a generated deployment
+// URL (Deployment Protection puts those behind auth). Vercel sets
+// VERCEL_PROJECT_PRODUCTION_URL, without the scheme, at build time.
+const VERCEL = process.env.NF_VERCEL === '1'
+const vercelBase = (): string => {
+  const domain = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  if (!domain) {
+    throw new Error('NF_VERCEL=1 needs VERCEL_PROJECT_PRODUCTION_URL')
+  }
+  return `https://${domain}/`
+}
+// The hosts that embed the Vercel remote: the e2e host-app in lanes a and b.
+const VERCEL_HOSTS = [3100, 5100].map((p) => `http://localhost:${p}`)
 
 export type IslandRemoteFixture = {
   /**
@@ -41,24 +55,30 @@ export function islandRemoteConfig(fixture: IslandRemoteFixture = {}) {
       ...extra,
       ...nextFederationIslands({
         name: NAME,
-        base: `http://127.0.0.1:${PORT}/`,
+        base: VERCEL ? vercelBase() : `http://127.0.0.1:${PORT}/`,
         // Remotes `a` and `b` build from this one folder: one output folder each.
-        outDir: laneOutDir(fixture.outDir ?? `dist/${NAME}`),
+        outDir: VERCEL
+          ? 'dist/vercel'
+          : laneOutDir(fixture.outDir ?? `dist/${NAME}`),
         // React sharing is on by default in production builds; NF_SHARE=0
         // builds the remotes without it (the e2e "share: false" runs).
         share: process.env.NF_SHARE !== '0',
-        hosts: HOSTS,
-        issuers: Object.fromEntries([
-          ...[3100, 3102, 3101].map((p) => [
-            hostOrigin(p),
-            `${hostOrigin(p)}/api/next-federation/jwks`,
-          ]),
-          [
-            `${hostOrigin(3103)}/base`,
-            `${hostOrigin(3103)}/base/api/next-federation/jwks`,
-          ],
-          [hostOrigin(3999), `${hostOrigin(3999)}/jwks`],
-        ]),
+        hosts: VERCEL ? VERCEL_HOSTS : HOSTS,
+        // The Vercel remote serves public islands only: it cannot reach a
+        // local host's JWKS.
+        issuers: VERCEL
+          ? {}
+          : Object.fromEntries([
+              ...[3100, 3102, 3101].map((p) => [
+                hostOrigin(p),
+                `${hostOrigin(p)}/api/next-federation/jwks`,
+              ]),
+              [
+                `${hostOrigin(3103)}/base`,
+                `${hostOrigin(3103)}/base/api/next-federation/jwks`,
+              ],
+              [hostOrigin(3999), `${hostOrigin(3999)}/jwks`],
+            ]),
         islands: {
           ProductPanel: './src/islands/ProductPanel.tsx',
           Banner: './src/islands/Banner.tsx',

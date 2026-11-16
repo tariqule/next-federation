@@ -36,6 +36,8 @@ export default tseslint.config(
       '**/playwright-report/**',
       '.superpowers/**',
       '**/next-env.d.ts',
+      // `vercel build` output (test/fixtures/island-remote).
+      '**/.vercel/**',
     ],
   },
   tseslint.configs.recommended,

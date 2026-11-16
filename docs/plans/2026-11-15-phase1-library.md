@@ -40,7 +40,7 @@ Every task's requirements include this section.
 - Unit tests: rstest, `packages/<name>/__tests__/*.spec.ts(x)`. e2e: Playwright under `test/e2e/`, every suite in the four cells `{dev, prod} × {turbopack, webpack}`; `reuseExistingServer: false`. Fixtures are real apps under `test/fixtures/`.
 - Every package: `src/`, `__tests__/`, `README.md`, `CHANGELOG.md`, `tsconfig.json`, `tsconfig.lib.json`, `tsdown.config.ts`, `exports` map, `"type": "module"`, `"sideEffects": false`, `publishConfig.access: public`. tsdown runs with `unbundle: true` so `'use client'` and `'use cache'` directives survive per file.
 - Every thrown or logged user-facing error is an `NFError` (or `logger.warn/error` with a code) whose message ends with its docs URL; each code has `docs/errors/<slug>.md`.
-- Commits: conventional commits. **No mention of Claude or Anthropic, no `Co-Authored-By` or session trailers.** The user commits manually; each task's last step lists the commands.
+- Commits: conventional commits. **No tool attribution, no `Co-Authored-By` or session trailers.** The user commits manually; each task's last step lists the commands.
 - Licence: **MIT** (user decision). Root `LICENSE` (MIT, copyright holder: the repository owner) and `"license": "MIT"` in every package; each package's `files` includes a copy of `LICENSE`. Publishing itself is still outside this plan.
 - Error docs links are GitHub blob links on the repo (user decision) until a docs site exists; `DOCS_BASE` in `@next-federation/sdk` is the single place to change later.
 

@@ -32,6 +32,7 @@ which logs the live builds when it starts.
 Keep builds for at least `max(host island revalidate, longest expected open tab)`. Raise
 `--min-age-hours` if tabs stay open for days. Deleting a retired build's folder is safe. Before you
 rebuild into an output directory, delete that build's folder first so stale files never mix with the
-new build. Vercel deployments already behave this way: old deployments stay reachable.
+new build. On Vercel the production domain serves only the newest deployment's build: see
+[Deploying an island remote on Vercel](deploying-a-remote-on-vercel.md).
 
 See [NF-023](../errors/build-retired.md).
