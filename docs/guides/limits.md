@@ -51,8 +51,10 @@ fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
   server): any other `@module-federation/vite` app on the page that bundles the same version reads
   the host's copy, even when its own range is narrower. If two remotes bundle the same version with
   different ranges, they share whichever copy loaded first. A server process that hosts more than
-  one React (an App Router and a Pages Router route), or whose share cache holds another instance
-  of a host module, never seeds: there the remote always uses its bundled copy.
+  one React (an App Router and a Pages Router route, or `next dev --webpack` after it re-created the
+  host's modules), or whose share cache holds another instance of a host module, never seeds. A
+  component whose host copy satisfies the range then renders in the browser only (`NF-028`), where
+  it gets the host's copy, so server and browser never render different copies.
 - **Register shared modules early.** Provide them at module scope, in a module every page imports
   (the root layout or `_app`). A module first registered after a remote component has loaded (for
   example by a page reached through a client navigation) makes the runtime start over for later
