@@ -80,8 +80,11 @@ export async function fetchIsland(
     { token: request.token, host: request.host }
   )
   const doFetch = request.fetch ?? globalThis.fetch
-  const started = Date.now()
-  const elapsed = (): number => Date.now() - started
+  // performance.now(), not Date.now(): Next aborts cacheComponents prerenders
+  // that read the wall clock outside a cache scope, which would turn a
+  // `no-store` island into a build error instead of a dynamic hole.
+  const started = performance.now()
+  const elapsed = (): number => Math.round(performance.now() - started)
   let attempts = 0
   let bytes = 0
   const meta = (): IslandFetchMeta => ({ ms: elapsed(), bytes, attempts })

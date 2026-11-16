@@ -22,6 +22,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Old-React island remote (outside the workspace)
+        # The React sharing e2e's remote `c` pins the previous React patch,
+        # so it has its own install (pnpm-workspace.yaml excludes it).
+        run: pnpm install --frozen-lockfile --ignore-workspace
+        working-directory: test/fixtures/island-remote-old-react
       - name: Commit messages
         if: github.event_name == 'pull_request'
         run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
@@ -61,3 +66,105 @@ jobs:
         # links work. Runs on the Node floor.
         run: pnpm install --frozen-lockfile --prod --ignore-scripts --filter "./packages/*"
       - run: node scripts/smoke-dist.mjs
+
+  e2e:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: [dev, 'dev:webpack', prod, 'prod:webpack', skew]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Old-React island remote (outside the workspace)
+        run: pnpm install --frozen-lockfile --ignore-workspace
+        working-directory: test/fixtures/island-remote-old-react
+      - run: pnpm build
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e:${{ matrix.cell }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-${{ strategy.job-index }}
+          path: |
+            test/e2e/test-results*
+            test/e2e/.logs*
+          if-no-files-found: ignore
+
+  e2e-measure:
+    # Size budgets: the unshared control run must come first (it writes the
+    # control file the shared run compares against).
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-workspace
+        working-directory: test/fixtures/island-remote-old-react
+      - run: pnpm build
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: Unshared control
+        run: pnpm e2e:prod -- sharing measure
+        env:
+          NF_MEASURE: '1'
+          NF_SHARE: '0'
+      - name: Shared (asserts budgets)
+        run: pnpm e2e:prod -- sharing measure
+        env:
+          NF_MEASURE: '1'
+
+  e2e-browsers:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-workspace
+        working-directory: test/fixtures/island-remote-old-react
+      - run: pnpm build
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium firefox webkit
+      - run: pnpm e2e:browsers
+
+  examples-smoke:
+    # Builds every example in examples/, serves them on ports 3300-3304 and
+    # checks the remote's /_nf/health and the host pages' island HTML.
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Link nf-serve (its bin target exists only after the build)
+        run: pnpm install --frozen-lockfile --offline
+      - run: pnpm examples:smoke
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: examples-logs
+          path: examples/.logs
+          if-no-files-found: ignore

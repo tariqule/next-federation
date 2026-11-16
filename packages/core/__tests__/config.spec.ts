@@ -285,3 +285,86 @@ test('assetOrigins are deduplicated and the remote origin comes first', () => {
     'https://img.example',
   ])
 })
+
+describe('plain http outside development', () => {
+  let before: string | undefined
+  beforeEach(() => {
+    before = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+  })
+  afterEach(() => {
+    process.env.NODE_ENV = before
+  })
+
+  const nf002 = (config: unknown): string => {
+    try {
+      defineFederation(config as FederationConfig)
+    } catch (error) {
+      expect(isNFError(error, 'NF-002')).toBe(true)
+      return (error as Error).message
+    }
+    throw new Error('expected NF-002')
+  }
+
+  test.each([
+    ['origin', { a: { origin: 'http://shop.example' } }, /remotes\.a\.origin/],
+    [
+      'assetOrigins',
+      {
+        a: {
+          origin: 'https://shop.example',
+          assetOrigins: ['http://cdn.example'],
+        },
+      },
+      /remotes\.a\.assetOrigins\[0\]/,
+    ],
+  ])('a non-loopback http %s is NF-002', (_what, remotes, key) => {
+    const message = nf002({ remotes })
+    expect(message).toMatch(key)
+    expect(message).toMatch(/https/)
+  })
+
+  test('a non-loopback http issuer is NF-002 naming its origin only', () => {
+    const message = nf002({
+      remotes: shop,
+      identity: { issuer: 'http://host.example/auth', signingKeys: 'k' },
+    })
+    expect(message).toMatch(/identity\.issuer.*http:\/\/host\.example/)
+    expect(message).not.toContain('/auth')
+  })
+
+  test('loopback http is accepted', () => {
+    const f = defineFederation({
+      remotes: {
+        a: { origin: 'http://localhost:4000' },
+        b: { origin: 'http://127.0.0.1:4001' },
+        c: { origin: 'http://[::1]:4002' },
+      },
+      identity: { issuer: 'http://localhost:3000', signingKeys: 'k' },
+    })
+    expect(f.remotes).toEqual(['a', 'b', 'c'])
+  })
+
+  test('allowInsecureHttp: true accepts it; a non-boolean is NF-002', () => {
+    const f = defineFederation({
+      remotes: { a: { origin: 'http://shop.example' } },
+      identity: { issuer: 'http://host.example', signingKeys: 'k' },
+      allowInsecureHttp: true,
+    })
+    expect(f.target('a').origin).toBe('http://shop.example')
+    expect(
+      nf002({ remotes: shop, allowInsecureHttp: 'yes' as unknown as boolean })
+    ).toMatch(/allowInsecureHttp/)
+  })
+})
+
+test('identity.ttlSeconds above 900 is NF-002 (remotes refuse older tokens)', () => {
+  const config = (ttlSeconds: number) => ({
+    remotes: shop,
+    identity: { issuer: 'https://h.example', signingKeys: 'k', ttlSeconds },
+  })
+  expect(defineFederation(config(900)).identity?.ttlSeconds).toBe(900)
+  expect(() => defineFederation(config(901))).toThrow(
+    /NF-002.*identity\.ttlSeconds.*900/
+  )
+})

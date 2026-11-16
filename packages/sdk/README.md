@@ -31,3 +31,10 @@ pnpm add @next-federation/sdk
 The protocol the packages speak is specified in [`docs/protocol/v1.md`](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md).
 
 License: MIT
+
+## Constraints
+
+- Every `NF-xxx` code has a page under `docs/errors`; `scripts/check-error-docs.mjs` fails CI when one is missing.
+- Library code logs through `logger` only. `debug` output needs `NF_DEBUG=1`.
+
+Guides: [docs/guides](https://github.com/tariqule/next-federation/tree/main/docs/guides).

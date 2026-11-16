@@ -1,0 +1,81 @@
+{
+  "name": "@next-federation/next",
+  "version": "0.0.0",
+  "description": "Next.js adapter for next-federation: the withNextFederation config wrapper and island caching for both Next caching models.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tariqule/next-federation.git",
+    "directory": "packages/next"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./island-cache": {
+      "types": "./dist/server/island-cache.legacy.d.ts",
+      "default": "./dist/server/island-cache.legacy.js"
+    },
+    "./island-cache/legacy": {
+      "types": "./dist/server/island-cache.legacy.d.ts",
+      "default": "./dist/server/island-cache.legacy.js"
+    },
+    "./island-cache/cache-components": {
+      "types": "./dist/server/island-cache.cc.d.ts",
+      "default": "./dist/server/island-cache.cc.js"
+    },
+    "./routes": {
+      "types": "./dist/routes.d.ts",
+      "default": "./dist/routes.js"
+    },
+    "./pages": {
+      "types": "./dist/pages/index.d.ts",
+      "default": "./dist/pages/index.js"
+    },
+    "./pages/server": {
+      "types": "./dist/pages/server.d.ts",
+      "default": "./dist/pages/server.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@next-federation/core": "workspace:*",
+    "@next-federation/protocol": "workspace:*",
+    "@next-federation/react": "workspace:*",
+    "@next-federation/sdk": "workspace:*",
+    "server-only": "0.0.1"
+  },
+  "peerDependencies": {
+    "next": ">=16.0.0 <17",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "scripts": {
+    "build": "tsdown"
+  }
+}

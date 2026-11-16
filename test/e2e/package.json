@@ -1,0 +1,17 @@
+{
+  "name": "e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run.ts"
+  },
+  "dependencies": {
+    "jose": "6.2.17"
+  },
+  "devDependencies": {
+    "@next-federation/protocol": "workspace:*",
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.10.1",
+    "typescript": "6.0.3"
+  }
+}

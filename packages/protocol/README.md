@@ -25,13 +25,24 @@ pnpm add @next-federation/protocol
 
 ## API
 
-| Export                                       | Purpose                                                        |
-| -------------------------------------------- | -------------------------------------------------------------- |
-| `parseEnvelope(json)`                        | Validate an envelope (`NF-003`, `NF-004`).                     |
-| `assertEnvelopeUrls(envelope, origins)`      | Require `bootstrap` and `css` on an allowed origin (`NF-005`). |
-| `encodeIslandRequest`, `decodeIslandRequest` | Request codec for `GET` island requests.                       |
-| `canonicalJson`, `applyIdPrefix`             | Deterministic props encoding and per-mount id prefixing.       |
-| `PROTOCOL_VERSION`, `ISLAND_PATH`, ...       | Protocol constants.                                            |
-| `IslandBootstrapModule` and related types    | The browser bootstrap contract.                                |
+| Export                                                                         | Purpose                                                                                  |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `parseEnvelope(json)`                                                          | Validate an envelope (`NF-003`, `NF-004`).                                               |
+| `assertEnvelopeUrls(envelope, origins)`                                        | Require `bootstrap` and `css` on an allowed origin (`NF-005`).                           |
+| `encodeIslandRequest`, `decodeIslandRequest`                                   | Request codec for `GET` island requests.                                                 |
+| `canonicalJson`, `applyIdPrefix`                                               | Deterministic props encoding and per-mount id prefixing.                                 |
+| `PROTOCOL_VERSION`, `ISLAND_PATH`, ...                                         | Protocol constants.                                                                      |
+| `IslandBootstrapModule` and related types                                      | The browser bootstrap contract.                                                          |
+| `parseComponentDescriptorFile`, `componentDescriptorDigest`, `sha384Integrity` | Mode A build descriptor (`/_nf/components.json`): validation, pinned digest, SRI hashes. |
+| `RemoteComponentDescriptor` and related types                                  | What a host passes to `RemoteComponent`.                                                 |
 
 License: MIT
+
+## Constraints
+
+- Props are plain JSON (`NF-009` otherwise). `canonicalJson` sorts keys, so equal props give equal URLs.
+- Island names match `NAME_PATTERN` (`^[A-Za-z][A-Za-z0-9_-]*$`). A `GET` request carries props in `p`; above 2048 characters of `p` a `POST` is used.
+- `bootstrap` and `css` URLs must be `http(s)` and on an allowed origin (`NF-005`).
+- An unknown protocol major renders the host fallback (`NF-003`).
+
+See [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md).

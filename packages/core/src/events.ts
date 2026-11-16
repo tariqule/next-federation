@@ -19,6 +19,22 @@ export type FederationEvent =
       code: NFErrorCode
       status?: number
     }
+  | {
+      /** Mode A: a components remote's build descriptor was resolved. */
+      type: 'component:descriptor'
+      remote: string
+      buildId: string
+      /** The host may server-render this build (verified). */
+      ssr: boolean
+      ms: number
+    }
+  | {
+      type: 'component:error'
+      remote: string
+      code: NFErrorCode
+      ms: number
+      status?: number
+    }
 
 /**
  * Calls `onEvent` and never throws. A throwing handler is caught and logged

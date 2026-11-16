@@ -58,6 +58,10 @@ export default defineConfig({
         'packages/*/__tests__/**/*.spec.ts',
         'scripts/__tests__/*.spec.ts',
       ],
+      // Node specs may import .tsx sources (e.g. Server Components).
+      tools: {
+        swc: { jsc: { transform: { react: { runtime: 'automatic' } } } },
+      },
     },
     {
       ...common,

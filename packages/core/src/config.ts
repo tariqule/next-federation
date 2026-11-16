@@ -1,4 +1,14 @@
-import { NAME_PATTERN } from '@next-federation/protocol'
+import {
+  BUILD_ID_PATTERN,
+  NAME_PATTERN,
+  SHA384_PATTERN,
+  assertSecureUrl,
+  componentTrustRegistry,
+  isDevelopmentOrTest,
+  parseAllowInsecureHttp,
+  redactUrl,
+  verifiedKey,
+} from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import { safeEmit } from './events.ts'
 import type { FederationEvent } from './events.ts'
@@ -8,6 +18,63 @@ export type RemoteConfig = {
   assetOrigins?: string[]
   timeoutMs?: number
   retries?: number
+  /** Mode A: this remote also serves Module Federation client components. */
+  components?: RemoteComponentsConfig
+}
+
+/** A public EC P-256 JWK (`kty`, `crv`, `x`, `y`, optional `kid`). */
+export type ComponentPublicKey = {
+  kty: 'EC'
+  crv: 'P-256'
+  x: string
+  y: string
+  kid?: string
+}
+
+export type RemoteComponentsConfig = {
+  /** Descriptor URL. Default `${origin}/_nf/components.json`. */
+  descriptor?: string
+  /** Seconds the host caches the descriptor. Default `islands.revalidate`. */
+  revalidate?: number
+  /** Distinct builds of this remote a process keeps loaded. Default 5. */
+  maxBuilds?: number
+  /**
+   * Server rendering. The host evaluates the remote's server code only for a
+   * build it can verify: a descriptor signed by one of `publicKeys`, or a
+   * `pinned` buildId -> digest pair; `integrity: 'unsafe-dev'` (not in
+   * production) trusts the descriptor as served. Anything else renders in the
+   * browser only. `false`: never server-render this remote.
+   */
+  ssr?:
+    | false
+    | {
+        publicKeys?: ComponentPublicKey[]
+        pinned?: Record<string, string>
+        integrity?: 'unsafe-dev'
+        /** Seconds a signed build stays acceptable after its build time (`iat`). */
+        maxAge?: number
+      }
+  /** The expected Module Federation container name; a descriptor naming another is refused. */
+  name?: string
+}
+
+/** Plain, serializable description of a components remote: safe as a 'use cache' argument. */
+export type ComponentTarget = {
+  remote: string
+  descriptorUrl: string
+  allowedOrigins: string[]
+  timeoutMs: number
+  revalidate: number
+  maxBuilds: number
+  /** The expected container name, or null. */
+  name: string | null
+  ssr: null | {
+    publicKeys: ComponentPublicKey[]
+    pinned: Record<string, string>
+    unsafeDev: boolean
+    /** Seconds a signed build stays acceptable after its `iat`, or null. */
+    maxAgeSeconds: number | null
+  }
 }
 
 export type FederationConfig = {
@@ -21,8 +88,16 @@ export type FederationConfig = {
   identity?: {
     issuer: string
     signingKeys: string | string[]
+    /** Token lifetime in seconds. Default 300, at most 900 (remotes refuse older tokens). */
     ttlSeconds?: number
   }
+  /**
+   * Accept plain `http:` remote origins, asset origins and issuer for
+   * non-loopback hosts outside development (warned once per process).
+   * Default false: http is accepted only for localhost, 127.0.0.0/8 and
+   * [::1], or when NODE_ENV is "development" or "test".
+   */
+  allowInsecureHttp?: boolean
   /** Default `/api/next-federation`. */
   routesPath?: string
   /**
@@ -46,6 +121,8 @@ export type Federation = {
   readonly remotes: readonly string[]
   /** Throws NF-001 when the remote is unknown. */
   target(remote: string): IslandTarget
+  /** Throws NF-001 when the remote is unknown, NF-002 when it has no `components`. */
+  componentTarget(remote: string): ComponentTarget
   readonly islands: { revalidate: number; warnBytes: number }
   readonly identity: {
     issuer: string
@@ -62,6 +139,8 @@ const DEFAULT_RETRIES = 1
 const DEFAULT_REVALIDATE = 60
 const DEFAULT_WARN_BYTES = 102400
 const DEFAULT_TTL_SECONDS = 300
+/** Remotes refuse tokens older than 900 s (`createIdentityVerifier` default). */
+const MAX_TTL_SECONDS = 900
 const DEFAULT_ROUTES_PATH = '/api/next-federation'
 
 function invalid(detail: string): NFError {
@@ -82,22 +161,11 @@ function parseNumber(value: unknown, key: string, fallback: number): number {
   return value
 }
 
-/** Never echo credentials from a rejected URL into messages or logs. */
-function redact(value: string): string {
-  try {
-    const url = new URL(value)
-    if (url.username || url.password) {
-      url.username = ''
-      url.password = ''
-      return url.href.replace('//', '//***@')
-    }
-    return value
-  } catch {
-    return value.replace(/\/\/[^/?#]*@/, '//***@')
-  }
-}
-
-function parseUrl(value: unknown, key: string): URL {
+function parseUrl(
+  value: unknown,
+  key: string,
+  allowInsecureHttp: boolean
+): URL {
   if (typeof value !== 'string') {
     throw invalid(`\`${key}\` must be an absolute http(s) URL string.`)
   }
@@ -106,18 +174,25 @@ function parseUrl(value: unknown, key: string): URL {
     url = new URL(value)
   } catch {
     throw invalid(
-      `\`${key}\` must be an absolute http(s) URL, got "${redact(value)}".`
+      `\`${key}\` must be an absolute http(s) URL, got "${redactUrl(value)}".`
     )
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw invalid(`\`${key}\` must use http or https, got "${redact(value)}".`)
+    throw invalid(
+      `\`${key}\` must use http or https, got "${redactUrl(value)}".`
+    )
   }
+  assertSecureUrl(url, key, { allowInsecureHttp })
   return url
 }
 
 /** An origin: scheme and host only; a trailing slash is normalised away. */
-function parseOrigin(value: unknown, key: string): string {
-  const url = parseUrl(value, key)
+function parseOrigin(
+  value: unknown,
+  key: string,
+  allowInsecureHttp: boolean
+): string {
+  const url = parseUrl(value, key, allowInsecureHttp)
   // `new URL` drops an empty query or fragment, so the raw string is checked too.
   const hasExtra =
     String(value).includes('?') ||
@@ -129,10 +204,179 @@ function parseOrigin(value: unknown, key: string): string {
     url.password !== ''
   if (hasExtra) {
     throw invalid(
-      `\`${key}\` must be an origin without path, query or credentials, got "${redact(String(value))}".`
+      `\`${key}\` must be an origin without path, query or credentials, got "${redactUrl(String(value))}".`
     )
   }
   return url.origin
+}
+
+const DEFAULT_MAX_BUILDS = 5
+
+function parsePublicKey(value: unknown, key: string): ComponentPublicKey {
+  if (
+    !isRecord(value) ||
+    value.kty !== 'EC' ||
+    value.crv !== 'P-256' ||
+    typeof value.x !== 'string' ||
+    typeof value.y !== 'string' ||
+    'd' in value ||
+    (value.kid !== undefined && typeof value.kid !== 'string')
+  ) {
+    throw invalid(
+      `\`${key}\` must be a public EC P-256 JWK ({ kty: 'EC', crv: 'P-256', x, y, kid? }) without "d".`
+    )
+  }
+  const { kty, crv, x, y, kid } = value as ComponentPublicKey
+  return kid === undefined ? { kty, crv, x, y } : { kty, crv, x, y, kid }
+}
+
+function parseComponents(
+  value: unknown,
+  ctx: {
+    where: string
+    remote: string
+    origin: string
+    allowedOrigins: string[]
+    timeoutMs: number
+    revalidate: number
+    allowInsecureHttp: boolean
+  }
+): ComponentTarget {
+  const { where } = ctx
+  if (!isRecord(value)) throw invalid(`\`${where}\` must be an object.`)
+  let descriptorUrl = `${ctx.origin}/_nf/components.json`
+  if (value.descriptor !== undefined) {
+    const url = parseUrl(
+      value.descriptor,
+      `${where}.descriptor`,
+      ctx.allowInsecureHttp
+    )
+    if (!ctx.allowedOrigins.includes(url.origin)) {
+      throw invalid(
+        `\`${where}.descriptor\` must be on the remote's origin or assetOrigins, got "${redactUrl(url.href)}".`
+      )
+    }
+    descriptorUrl = url.href
+  }
+  const maxBuilds = parseNumber(
+    value.maxBuilds,
+    `${where}.maxBuilds`,
+    DEFAULT_MAX_BUILDS
+  )
+  if (!Number.isInteger(maxBuilds) || maxBuilds < 1) {
+    throw invalid(`\`${where}.maxBuilds\` must be an integer >= 1.`)
+  }
+  let ssr: ComponentTarget['ssr']
+  if (value.ssr === false) {
+    ssr = null
+  } else {
+    const raw = value.ssr ?? {}
+    if (!isRecord(raw)) {
+      throw invalid(`\`${where}.ssr\` must be false or an object.`)
+    }
+    const keys = raw.publicKeys ?? []
+    if (!Array.isArray(keys)) {
+      throw invalid(`\`${where}.ssr.publicKeys\` must be an array of JWKs.`)
+    }
+    const pinnedRaw = raw.pinned ?? {}
+    if (!isRecord(pinnedRaw)) {
+      throw invalid(
+        `\`${where}.ssr.pinned\` must map buildIds to sha384 digests.`
+      )
+    }
+    const pinned: Record<string, string> = {}
+    for (const [buildId, digest] of Object.entries(pinnedRaw)) {
+      if (
+        !BUILD_ID_PATTERN.test(buildId) ||
+        typeof digest !== 'string' ||
+        !SHA384_PATTERN.test(digest)
+      ) {
+        throw invalid(
+          `\`${where}.ssr.pinned\` must map buildIds to "sha384-..." digests, got ${JSON.stringify(buildId)}.`
+        )
+      }
+      pinned[buildId] = digest
+    }
+    if (raw.integrity !== undefined && raw.integrity !== 'unsafe-dev') {
+      throw invalid(
+        `\`${where}.ssr.integrity\` can only be 'unsafe-dev', got ${JSON.stringify(raw.integrity)}.`
+      )
+    }
+    const unsafeDev = raw.integrity === 'unsafe-dev'
+    if (unsafeDev && !isDevelopmentOrTest()) {
+      throw invalid(
+        `\`${where}.ssr.integrity: 'unsafe-dev'\` runs unverified remote code on the server and is allowed only when NODE_ENV is "development" or "test". Sign the remote's descriptor (publicKeys) or pin its builds (pinned).`
+      )
+    }
+    let maxAgeSeconds: number | null = null
+    if (raw.maxAge !== undefined) {
+      maxAgeSeconds = parseNumber(raw.maxAge, `${where}.ssr.maxAge`, 0)
+      if (maxAgeSeconds <= 0) {
+        throw invalid(
+          `\`${where}.ssr.maxAge\` must be a number of seconds > 0.`
+        )
+      }
+    }
+    ssr = {
+      publicKeys: keys.map((k: unknown, i: number) =>
+        parsePublicKey(k, `${where}.ssr.publicKeys[${i}]`)
+      ),
+      pinned,
+      unsafeDev,
+      maxAgeSeconds,
+    }
+  }
+  return {
+    remote: ctx.remote,
+    descriptorUrl,
+    allowedOrigins: [...ctx.allowedOrigins],
+    timeoutMs: ctx.timeoutMs,
+    revalidate: parseNumber(
+      value.revalidate,
+      `${where}.revalidate`,
+      ctx.revalidate
+    ),
+    maxBuilds,
+    name: parseContainerName(value.name, `${where}.name`),
+    ssr,
+  }
+}
+
+function parseContainerName(value: unknown, key: string): string | null {
+  if (value === undefined) return null
+  if (typeof value !== 'string' || !NAME_PATTERN.test(value)) {
+    throw invalid(`\`${key}\` must match ${String(NAME_PATTERN)}.`)
+  }
+  return value
+}
+
+/**
+ * Server only: publish each remote's trust policy to the process-wide
+ * registry the server loader re-verifies descriptors against.
+ */
+function registerTrust(target: ComponentTarget): void {
+  if ((globalThis as { window?: unknown }).window) return
+  const registry = componentTrustRegistry()
+  const policy = target.ssr && {
+    publicKeys: target.ssr.publicKeys.map((k) => ({ ...k })),
+    pinned: { ...target.ssr.pinned },
+    unsafeDev: target.ssr.unsafeDev,
+    maxAgeSeconds: target.ssr.maxAgeSeconds,
+    name: target.name,
+    allowedOrigins: [...target.allowedOrigins],
+  }
+  const before = registry.trust.get(target.remote)
+  if (JSON.stringify(before ?? null) === JSON.stringify(policy && [policy])) {
+    return // the same policy (another bundle layer evaluating the config)
+  }
+  // Replaced, never appended: a dev reload must drop removed keys and
+  // unsafe-dev, and the builds verified under the old policy.
+  const prefix = verifiedKey(target.remote, '')
+  for (const key of registry.verified.keys()) {
+    if (key.startsWith(prefix)) registry.verified.delete(key)
+  }
+  if (policy) registry.trust.set(target.remote, [policy])
+  else registry.trust.delete(target.remote)
 }
 
 export function defineFederation(config: FederationConfig): Federation {
@@ -143,6 +387,7 @@ export function defineFederation(config: FederationConfig): Federation {
     throw invalid('`onEvent` must be a function.')
   }
 
+  const allowInsecureHttp = parseAllowInsecureHttp(config.allowInsecureHttp)
   const islandsIn = config.islands ?? {}
   if (!isRecord(islandsIn)) throw invalid('`islands` must be an object.')
   const revalidate = parseNumber(
@@ -167,6 +412,7 @@ export function defineFederation(config: FederationConfig): Federation {
   )
 
   const targets = new Map<string, IslandTarget>()
+  const componentTargets = new Map<string, ComponentTarget>()
   for (const [name, remote] of Object.entries(config.remotes)) {
     if (!NAME_PATTERN.test(name)) {
       throw invalid(
@@ -175,14 +421,18 @@ export function defineFederation(config: FederationConfig): Federation {
     }
     const where = `remotes.${name}`
     if (!isRecord(remote)) throw invalid(`\`${where}\` must be an object.`)
-    const origin = parseOrigin(remote.origin, `${where}.origin`)
+    const origin = parseOrigin(
+      remote.origin,
+      `${where}.origin`,
+      allowInsecureHttp
+    )
     let assetOrigins: string[] = []
     if (remote.assetOrigins !== undefined) {
       if (!Array.isArray(remote.assetOrigins)) {
         throw invalid(`\`${where}.assetOrigins\` must be an array of origins.`)
       }
       assetOrigins = remote.assetOrigins.map((value: unknown, i: number) =>
-        parseOrigin(value, `${where}.assetOrigins[${i}]`)
+        parseOrigin(value, `${where}.assetOrigins[${i}]`, allowInsecureHttp)
       )
     }
     targets.set(name, {
@@ -196,6 +446,19 @@ export function defineFederation(config: FederationConfig): Federation {
       ),
       retries: parseNumber(remote.retries, `${where}.retries`, defaultRetries),
     })
+    if (remote.components !== undefined) {
+      const componentTarget = parseComponents(remote.components, {
+        where: `${where}.components`,
+        remote: name,
+        origin,
+        allowedOrigins: targets.get(name)!.allowedOrigins,
+        timeoutMs: targets.get(name)!.timeoutMs,
+        revalidate,
+        allowInsecureHttp,
+      })
+      componentTargets.set(name, componentTarget)
+      registerTrust(componentTarget)
+    }
   }
 
   let identity: Federation['identity'] = null
@@ -204,7 +467,7 @@ export function defineFederation(config: FederationConfig): Federation {
     if (!isRecord(raw)) throw invalid('`identity` must be an object.')
     // The issuer is compared literally against the token `iss` claim, so it is
     // validated but kept exactly as written.
-    parseUrl(raw.issuer, 'identity.issuer')
+    parseUrl(raw.issuer, 'identity.issuer', allowInsecureHttp)
     const keys =
       typeof raw.signingKeys === 'string' ? [raw.signingKeys] : raw.signingKeys
     if (
@@ -216,14 +479,20 @@ export function defineFederation(config: FederationConfig): Federation {
         '`identity.signingKeys` must be a non-empty string or array of non-empty strings.'
       )
     }
+    const ttlSeconds = parseNumber(
+      raw.ttlSeconds,
+      'identity.ttlSeconds',
+      DEFAULT_TTL_SECONDS
+    )
+    if (ttlSeconds > MAX_TTL_SECONDS) {
+      throw invalid(
+        `\`identity.ttlSeconds\` must be at most ${MAX_TTL_SECONDS} (remotes refuse tokens older than that), got ${ttlSeconds}.`
+      )
+    }
     identity = {
       issuer: raw.issuer as string,
       signingKeys: [...(keys as string[])],
-      ttlSeconds: parseNumber(
-        raw.ttlSeconds,
-        'identity.ttlSeconds',
-        DEFAULT_TTL_SECONDS
-      ),
+      ttlSeconds,
     }
   }
 
@@ -236,18 +505,28 @@ export function defineFederation(config: FederationConfig): Federation {
 
   const remotes = Object.freeze([...targets.keys()])
   const onEvent = config.onEvent
+  const unknownRemote = (remote: string): NFError =>
+    new NFError(
+      'NF-001',
+      `Remote "${remote}" is not in defineFederation().remotes (known: ${remotes.join(', ') || 'none'}).`
+    )
 
   return {
     remotes,
     target(remote) {
       const found = targets.get(remote)
+      if (!found) throw unknownRemote(remote)
+      return { ...found, allowedOrigins: [...found.allowedOrigins] }
+    },
+    componentTarget(remote) {
+      const found = componentTargets.get(remote)
       if (!found) {
-        throw new NFError(
-          'NF-001',
-          `Remote "${remote}" is not in defineFederation().remotes (known: ${remotes.join(', ') || 'none'}).`
+        if (!targets.has(remote)) throw unknownRemote(remote)
+        throw invalid(
+          `Remote "${remote}" has no \`components\` settings in defineFederation().remotes.`
         )
       }
-      return { ...found, allowedOrigins: [...found.allowedOrigins] }
+      return structuredClone(found)
     },
     islands: Object.freeze({ revalidate, warnBytes }),
     identity,

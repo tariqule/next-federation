@@ -1,0 +1,183 @@
+{
+  "about": "Written by test/e2e/measure.spec.ts. islandJs: JS downloaded per remote origin (gzip). duplication: copies of an island HTML marker and of an RSC-payload-only marker in each host document.",
+  "budgetsKB": {
+    "ownReact": 84,
+    "sharedReact": 30
+  },
+  "runs": {
+    "share: true": {
+      "measuredAt": "2026-11-16T09:46:49.498Z",
+      "bundler": "turbopack",
+      "islandJs": {
+        "spa": {
+          "a": {
+            "files": 9,
+            "rawKB": 245,
+            "gzipKB": 78.2
+          },
+          "b": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          }
+        },
+        "appRouter": {
+          "a": {
+            "files": 9,
+            "rawKB": 245,
+            "gzipKB": 78.2
+          },
+          "b": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          }
+        },
+        "pagesRouter": {
+          "a": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          },
+          "b": {
+            "files": 9,
+            "rawKB": 245,
+            "gzipKB": 78.2
+          }
+        },
+        "spaHostReact": {
+          "a": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          },
+          "b": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          }
+        },
+        "pagesRouterHostReact": {
+          "a": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          },
+          "b": {
+            "files": 8,
+            "rawKB": 30.7,
+            "gzipKB": 12
+          }
+        }
+      },
+      "duplication": {
+        "envelope": {
+          "htmlKB": 0.2,
+          "rscPayloadKB": 0.3
+        },
+        "appRouter": {
+          "documentKB": 7.5,
+          "htmlMarkerCopies": 3,
+          "rscPayloadCopies": 1
+        },
+        "appRouterCacheComponents": {
+          "documentKB": 7.8,
+          "htmlMarkerCopies": 3,
+          "rscPayloadCopies": 1
+        },
+        "pagesRouter": {
+          "documentKB": 3.3,
+          "htmlMarkerCopies": 3,
+          "rscPayloadCopies": 1
+        }
+      }
+    },
+    "share: false": {
+      "measuredAt": "2026-11-16T08:07:14.444Z",
+      "bundler": "turbopack",
+      "islandJs": {
+        "spa": {
+          "a": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          },
+          "b": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          }
+        },
+        "appRouter": {
+          "a": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          },
+          "b": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          }
+        },
+        "pagesRouter": {
+          "a": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          },
+          "b": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          }
+        },
+        "spaHostReact": {
+          "a": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          },
+          "b": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          }
+        },
+        "pagesRouterHostReact": {
+          "a": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          },
+          "b": {
+            "files": 4,
+            "rawKB": 239.3,
+            "gzipKB": 75.4
+          }
+        }
+      },
+      "duplication": {
+        "envelope": {
+          "htmlKB": 0.2,
+          "rscPayloadKB": 0.3
+        },
+        "appRouter": {
+          "documentKB": 7.4,
+          "htmlMarkerCopies": 3,
+          "rscPayloadCopies": 1
+        },
+        "appRouterCacheComponents": {
+          "documentKB": 7.7,
+          "htmlMarkerCopies": 3,
+          "rscPayloadCopies": 1
+        },
+        "pagesRouter": {
+          "documentKB": 3.3,
+          "htmlMarkerCopies": 3,
+          "rscPayloadCopies": 1
+        }
+      }
+    }
+  }
+}

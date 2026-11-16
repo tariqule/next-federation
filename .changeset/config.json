@@ -7,5 +7,13 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["host-app", "host-pages", "host-spa", "island-remote", "e2e"]
+  "ignore": [
+    "host-app",
+    "host-pages",
+    "host-spa",
+    "island-remote",
+    "components-remote",
+    "e2e",
+    "example-*"
+  ]
 }

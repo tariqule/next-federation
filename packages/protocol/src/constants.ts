@@ -15,3 +15,7 @@ export const ID_PLACEHOLDER_PATTERN: RegExp = /^[A-Za-z0-9_-]{4,}$/
  * bootstrap and the Vite plugin so a rename cannot desynchronise them.
  */
 export const FLIGHT_REGISTRY_GLOBAL = '__nf_rsc__'
+/** A build id: a leading letter or digit, then up to 127 of `A-Za-z0-9._-` (URL- and path-safe). */
+export const BUILD_ID_PATTERN: RegExp = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+/** A Subresource Integrity sha384 value: `sha384-<base64>`. */
+export const SHA384_PATTERN: RegExp = /^sha384-[A-Za-z0-9+/]+={0,2}$/

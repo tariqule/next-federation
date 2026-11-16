@@ -1,4 +1,9 @@
-import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from 'jose'
+import {
+  createLocalJWKSet,
+  decodeJwt,
+  decodeProtectedHeader,
+  jwtVerify,
+} from 'jose'
 import { isNFError } from '@next-federation/sdk'
 import { defineFederation } from '../src/index.ts'
 import {
@@ -26,6 +31,36 @@ async function codeOf(p: Promise<unknown>) {
   }
   return 'none'
 }
+
+test('only `sub` and `claims` reach the token: other identity fields are not copied', async () => {
+  const f = await fed([await generateSigningKey('k1')])
+  // A host session object passed through as-is, with extra fields.
+  const identity = {
+    sub: 'user-1',
+    email: 'user-1@example.com',
+    name: 'User One',
+  } as { sub: string }
+  const { token } = await mintIslandToken(f, { remote: 'shop', identity })
+  expect(Object.keys(decodeJwt(token)).sort()).toEqual([
+    'aud',
+    'exp',
+    'iat',
+    'iss',
+    'sub',
+  ])
+  const withClaims = await mintIslandToken(f, {
+    remote: 'shop',
+    identity: { ...identity, claims: { role: 'admin' } },
+  })
+  expect(Object.keys(decodeJwt(withClaims.token)).sort()).toEqual([
+    'aud',
+    'exp',
+    'iat',
+    'iss',
+    'role',
+    'sub',
+  ])
+})
 
 test('mints an ES256 token with iss, aud, sub, exp = iat + 300 and the kid of the first key', async () => {
   const k1 = await generateSigningKey('k1')

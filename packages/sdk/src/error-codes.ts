@@ -27,6 +27,11 @@ export type NFErrorCode =
   | 'NF-023'
   | 'NF-024'
   | 'NF-025'
+  | 'NF-026'
+  | 'NF-027'
+  | 'NF-028'
+  | 'NF-029'
+  | 'NF-030'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
   {
@@ -114,6 +119,27 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
     'NF-025': {
       slug: 'unsupported-plugin-rsc',
       title: 'Unsupported `@vitejs/plugin-rsc` version',
+    },
+    'NF-026': {
+      slug: 'unsupported-module-federation-vite',
+      title: 'Unsupported `@module-federation/vite` version',
+    },
+    'NF-027': {
+      slug: 'component-integrity-failed',
+      title: 'Remote component server code failed its integrity check',
+    },
+    'NF-028': {
+      slug: 'component-browser-only',
+      title: 'Remote component rendered in the browser only',
+    },
+    'NF-029': {
+      slug: 'component-load-failed',
+      title: 'Remote component failed to load',
+    },
+    'NF-030': {
+      slug: 'component-require-refused',
+      title:
+        'Remote component server code required a module the host does not provide',
     },
   }
 

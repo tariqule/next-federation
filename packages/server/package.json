@@ -1,0 +1,52 @@
+{
+  "name": "@next-federation/server",
+  "version": "0.0.0",
+  "description": "Server-side helpers for next-federation islands: tokenizer-based SSR HTML cleanup.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tariqule/next-federation.git",
+    "directory": "packages/server"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@next-federation/protocol": "workspace:*",
+    "@next-federation/sdk": "workspace:*",
+    "jose": "^6.2.17",
+    "parse5": "8.1.1"
+  },
+  "devDependencies": {
+    "@next-federation/core": "workspace:*"
+  },
+  "bin": {
+    "nf-serve": "./dist/node/cli.js"
+  }
+}

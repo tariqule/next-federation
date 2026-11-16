@@ -1843,3 +1843,31 @@ Answered 2026-11-15: licence (MIT), required config wrapper (accepted), Node flo
 # Execution Handoff
 
 The tasks share exact interfaces across eight packages, and a wrong wire-format or lifecycle decision ships to every host, so **subagent-driven execution** (fresh implementer + fresh reviewer per task) is recommended. e2e steps need ports 3100–3103, 3999, 4100–4104 and 4200 free and are run by the user.
+
+### Task 27: Example apps and end-to-end walkthrough (added at the user's request, 2026-11-16)
+
+**Goal:** clean, documented examples users can copy, kept working by CI, plus a final hands-on verification.
+
+**Files:**
+- Create: `examples/vite-remote/` (islands: a public product panel with a client child, a private "my orders" island, a links island), `examples/next-app-router/`, `examples/next-pages-router/`, `examples/react-spa/` — each with `package.json`, a README (what it shows, how to run), and only published-style `@next-federation/*` imports (workspace-linked in this repo).
+- Create: `examples/README.md` (one command to run all four, ports, what to click), root script `examples:dev`.
+- Modify: `.github/workflows/ci.yml` (examples smoke job: build each example and boot it; assert the remote's `/_nf/health` and one host page containing island HTML).
+
+**Rules:** no test hooks (no probe pages, fake remotes, test cookies or failure-injection routes); never ports 3000–3002; follow `docs/conventions.md`.
+
+- [ ] **Step 1:** build the four examples from the test fixtures' proven patterns, minus test-only code.
+- [ ] **Step 2:** add the CI smoke job; run it locally (`pnpm examples:smoke`) → all four pass.
+- [ ] **Step 3: Walkthrough.** Run all four (`pnpm examples:dev`), drive them in a real browser (Playwright), and save screenshots to `docs/examples/screenshots/`: (a) App Router page with a server-rendered island, (b) per-user island after signing in, (c) island link navigating the host without a reload, (d) Pages Router page in French with basePath, (e) SPA with two remotes, (f) redeploying the remote (new build) while a page is open.
+- [ ] **Step 4:** user commits (command given at the end).
+
+### Task 28: Mode A — Module Federation client components (added on autopilot, 2026-11-16)
+
+**Goal:** a host renders a remote's *client* component inside its own React tree through the Module Federation 2.0 runtime, sharing the host's React — in Next App Router (`'use client'` file), Pages Router, and SPA hosts. Browser-only in v1.0 (server renders the fallback), per design §6 Mode A and §7.
+
+**Files:** `@next-federation/react` (`RemoteComponent`, MF runtime instance per host with host-provided `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime` as shared singletons; externalization guard), `@next-federation/next` re-export for `'use client'` usage, a Mode A remote fixture (Vite + `@module-federation/vite`, absolute `publicPath`, exposed modules excluded from Fast Refresh), host pages in host-app, host-pages and host-spa, `test/e2e/mode-a.spec.ts`.
+
+**Tests:** unit tests for the runtime instance and guard; e2e in all three hosts (dev + prod, Turbopack + webpack for Next): server HTML shows the fallback, the remote component renders after load, uses a hook (no "Invalid hook call"), reads a host React context value, and a remote that's down shows the fallback.
+
+**Amendment (2026-11-16): Mode A supports SSR.** Gated by spike Task 28S (`spike/mode-a-ssr/`, results in `docs/spike/mode-a-ssr-results.md`). Host loads the remote's server build at runtime through the Module Federation runtime, shares the host's React per layer, SSR awaits the module, and the client hydrates through Suspense pinned to the same build. Pages Router preloads in `getServerSideProps`. SPA hosts stay browser-only.
+
+**Spike 28S verdict (2026-11-16): PASS on all eight gates** — see `docs/spike/mode-a-ssr-results.md`. Task 28's binding brief, with 11 rulings (integrity before server evaluation, Node ≥ 20.16 feature detection, one-React guard, build cap, inert server HTML on client failure, pinned `@module-federation/vite`), lives in the SDD workspace as `task-28-brief.md`.

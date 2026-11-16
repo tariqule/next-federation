@@ -1,0 +1,16 @@
+{
+  "name": "components-context",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

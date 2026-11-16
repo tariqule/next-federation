@@ -21,6 +21,10 @@
     "remains",
     "easy",
     "died",
-    "crash"
+    "crash",
+    "hooks",
+    "reject",
+    "slope",
+    "dies"
   ]
 }

@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

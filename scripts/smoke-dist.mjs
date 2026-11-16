@@ -23,6 +23,21 @@ function collectTargets(value, out = []) {
   return out
 }
 
+// Entries that import Next's bare subpaths (`next/cache`, `next/navigation`).
+// Next has no exports map, so plain Node ESM cannot resolve them; only Next's
+// bundlers can. They are checked structurally below instead of imported.
+const NEXT_BUNDLER_ONLY = new Set([
+  '@next-federation/next:./dist/server/island-cache.cc.js',
+])
+// Next runtime entries (`next/headers`, `next/navigation`, `server-only`):
+// also resolvable only by Next's bundlers. Checked for existence below.
+const NEXT_RUNTIME_ONLY = new Set([
+  '@next-federation/next:./dist/routes.js',
+  '@next-federation/next:./dist/server/index.js',
+  // `next/head`, `next/router`.
+  '@next-federation/next:./dist/pages/index.js',
+])
+
 const failures = []
 const imported = new Map()
 
@@ -37,6 +52,8 @@ if (existsSync(packagesDir)) {
     }
     for (const target of new Set(collectTargets(manifest.exports))) {
       const file = join(packagesDir, dir, target)
+      if (NEXT_BUNDLER_ONLY.has(`${manifest.name}:${target}`)) continue
+      if (NEXT_RUNTIME_ONLY.has(`${manifest.name}:${target}`)) continue
       try {
         const mod = await import(pathToFileURL(file).href)
         imported.set(`${manifest.name}:${target}`, mod)
@@ -48,6 +65,32 @@ if (existsSync(packagesDir)) {
 }
 
 // Behavioural checks (appended by later tasks) go below this line.
+
+for (const key of NEXT_RUNTIME_ONLY) {
+  const [name, target] = key.split(':')
+  if (!existsSync(join(packagesDir, name.split('/')[1], target))) {
+    failures.push(`${name} ${target}: missing`)
+  }
+}
+
+{
+  const before = failures.length
+  for (const key of NEXT_BUNDLER_ONLY) {
+    const [name, target] = key.split(':')
+    const file = join(packagesDir, name.split('/')[1], target)
+    if (!existsSync(file)) {
+      failures.push(`${name} ${target}: missing`)
+      continue
+    }
+    const text = readFileSync(file, 'utf8')
+    if (!text.includes('"use cache"') || !text.includes('from "next/cache"')) {
+      failures.push(`${name} ${target}: 'use cache' or next/cache import lost`)
+    }
+  }
+  if (failures.length === before) {
+    console.log('smoke-dist: next island-cache (structural) ok')
+  }
+}
 
 {
   const protocol = imported.get('@next-federation/protocol:./dist/index.js')
@@ -124,6 +167,152 @@ if (existsSync(packagesDir)) {
     } else {
       console.log('smoke-dist: react error-boundary keeps "use client"')
     }
+  }
+}
+
+{
+  // Task 16: the built island mount keeps 'use client' and the bundler-ignore
+  // comments on the bootstrap import(), so host bundlers leave the remote URL alone.
+  const file = join(packagesDir, 'react', 'dist', 'island-mount.js')
+  if (existsSync(file)) {
+    const source = readFileSync(file, 'utf8')
+    const call = /import\(\s*((?:\/\*[^]*?\*\/\s*)+)url\s*\)/.exec(source)
+    const comments = call?.[1] ?? ''
+    const missing = [
+      'webpackIgnore: true',
+      'turbopackIgnore: true',
+      '@vite-ignore',
+    ].filter((c) => !comments.includes(c))
+    if (!/^['"]use client['"]/.test(source)) {
+      failures.push('react: dist/island-mount.js lost its "use client"')
+    } else if (missing.length > 0) {
+      failures.push(
+        `react: dist/island-mount.js bootstrap import() lost ${missing.join(', ')}`
+      )
+    } else {
+      console.log(
+        'smoke-dist: react island-mount keeps "use client" and import() ignore comments'
+      )
+    }
+  }
+}
+
+{
+  // Task 10: the built server verifier accepts a token minted by built core/identity.
+  const server = imported.get('@next-federation/server:./dist/index.js')
+  const identity = imported.get(
+    '@next-federation/core:./dist/identity/index.js'
+  )
+  const core = imported.get('@next-federation/core:./dist/index.js')
+  if (server && identity && core) {
+    const { createServer } = await import('node:http')
+    const issuer = 'https://host.example.com'
+    const federation = core.defineFederation({
+      remotes: { shop: { origin: 'https://shop.example.com' } },
+      identity: {
+        issuer,
+        signingKeys: [await identity.generateSigningKey('smoke')],
+      },
+    })
+    const jwks = JSON.stringify(await identity.publicJwks(federation))
+    const http = createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(jwks)
+    })
+    await new Promise((r) => http.listen(0, '127.0.0.1', r))
+    try {
+      const verify = server.createIdentityVerifier({
+        audience: 'shop',
+        issuers: { [issuer]: `http://127.0.0.1:${http.address().port}/jwks` },
+      })
+      const { token } = await identity.mintIslandToken(federation, {
+        remote: 'shop',
+        identity: { sub: 'user-1' },
+      })
+      const out = await verify(
+        new Request('https://shop.example.com/', {
+          headers: { authorization: `Bearer ${token}` },
+        })
+      )
+      const seen = await server.runWithIdentity(
+        out.kind === 'verified' ? out.identity : null,
+        async () => server.getIdentity()?.sub
+      )
+      if (out.kind !== 'verified' || seen !== 'user-1') {
+        failures.push('server/identity: built verify of a core token failed')
+      } else {
+        console.log('smoke-dist: server identity verify (core token) ok')
+      }
+    } finally {
+      http.close()
+    }
+  }
+}
+
+{
+  // Task 12: the built multi-build server runs each build in a child process and 410s retired builds.
+  const node = imported.get('@next-federation/server:./dist/node/index.js')
+  if (node) {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } =
+      await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const dir = mkdtempSync(join(tmpdir(), 'nf-smoke-'))
+    let served
+    try {
+      mkdirSync(join(dir, 'b1', 'rsc'), { recursive: true })
+      writeFileSync(
+        join(dir, 'b1', 'nf-build.json'),
+        JSON.stringify({ buildId: 'b1', builtAt: Date.now() })
+      )
+      writeFileSync(
+        join(dir, 'b1', 'rsc', 'index.js'),
+        'export default async () => new Response(`${process.pid}:${process.env.NODE_ENV}`)'
+      )
+      served = await node.serveBuilds({ dir, port: 0 })
+      const base = `http://127.0.0.1:${served.port}`
+      const [pid, env] = (await (await fetch(`${base}/_nf/x`)).text()).split(
+        ':'
+      )
+      const gone = await fetch(`${base}/b/old/_nf/x`)
+      if (
+        Number(pid) === process.pid ||
+        env !== 'production' ||
+        gone.status !== 410 ||
+        (await gone.json()).error !== 'NF-023'
+      ) {
+        failures.push('server/node: built serveBuilds behaved unexpectedly')
+      } else {
+        console.log('smoke-dist: server/node serveBuilds ok')
+      }
+    } catch (error) {
+      failures.push(`server/node: ${error?.message ?? error}`)
+    } finally {
+      await served?.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+}
+
+{
+  // island: dist-shape checks (client entry stays server-free; 'use client' survives the build).
+  const islandDist = join(packagesDir, 'island', 'dist')
+  if (existsSync(islandDist)) {
+    const read = (f) => readFileSync(join(islandDist, f), 'utf8')
+    if (/async_hooks/.test(read('index.client.js'))) {
+      failures.push('island: index.client.js imports node:async_hooks')
+    }
+    if (/@next-federation\/server/.test(read('index.client.js'))) {
+      failures.push('island: index.client.js imports @next-federation/server')
+    }
+    if (!/@next-federation\/server/.test(read('index.server.js'))) {
+      failures.push('island: index.server.js does not re-export the server')
+    }
+    for (const f of ['link.js', 'bridge-context.js']) {
+      if (!/^['"]use client['"]/.test(read(f))) {
+        failures.push(`island: ${f} does not start with "use client"`)
+      }
+    }
+    console.log('smoke-dist: island dist checks ok')
   }
 }
 

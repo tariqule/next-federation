@@ -21,8 +21,16 @@ export type MountIslandOptions = {
 }
 
 export type IslandHandle = {
+  /** Updates sent before `hydrated` settles are held and the newest is applied after it. */
   update(next: { rscPayload: string }): void
   destroy(): void
+  /**
+   * Resolves once the island root's first commit (hydration) is done; the
+   * island is interactive from then on. Never settles if the root fails or is
+   * destroyed first. Optional for older bootstraps; a host treats a handle
+   * without it as hydrated when `mountIsland` returns.
+   */
+  hydrated?: Promise<void>
 }
 
 /** The contract of the ES module named by `IslandEnvelope.bootstrap`. */

@@ -15,6 +15,18 @@
     },
     {
       "path": "./packages/react"
+    },
+    {
+      "path": "./packages/server"
+    },
+    {
+      "path": "./packages/island"
+    },
+    {
+      "path": "./packages/vite"
+    },
+    {
+      "path": "./packages/next"
     }
   ]
 }

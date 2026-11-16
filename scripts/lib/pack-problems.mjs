@@ -1,6 +1,6 @@
 /** Pure checks for a packed tarball; dependency-free so unit tests import it directly. */
 
-const REQUIRED = ['package.json', 'README.md', 'LICENSE']
+const REQUIRED = ['package.json', 'README.md', 'LICENSE', 'CHANGELOG.md']
 
 /** @param {unknown} value @param {string[]} [out] @returns {string[]} */
 export function collectExportTargets(value, out = []) {

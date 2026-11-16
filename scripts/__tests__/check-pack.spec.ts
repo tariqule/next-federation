@@ -4,6 +4,7 @@ const ok = [
   'package.json',
   'README.md',
   'LICENSE',
+  'CHANGELOG.md',
   'dist/index.js',
   'dist/index.d.ts',
 ]
@@ -51,6 +52,16 @@ test('flags missing README or LICENSE', () => {
       exportsMap
     )
   ).toEqual(['@x/a: required file LICENSE is not in the tarball'])
+})
+
+test('flags a missing CHANGELOG.md', () => {
+  expect(
+    checkPack(
+      '@x/a',
+      ok.filter((f) => f !== 'CHANGELOG.md'),
+      exportsMap
+    )
+  ).toEqual(['@x/a: required file CHANGELOG.md is not in the tarball'])
 })
 
 test('fails when exports collect to nothing', () => {

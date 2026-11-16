@@ -1,8 +1,11 @@
 export { defineFederation } from './config.ts'
 export type {
+  ComponentPublicKey,
+  ComponentTarget,
   Federation,
   FederationConfig,
   IslandTarget,
+  RemoteComponentsConfig,
   RemoteConfig,
 } from './config.ts'
 export type { FederationEvent } from './events.ts'

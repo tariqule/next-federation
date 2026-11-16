@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,6 +26,10 @@
       "types": "./dist/identity/index.d.ts",
       "default": "./dist/identity/index.js"
     },
+    "./components": {
+      "types": "./dist/components.d.ts",
+      "default": "./dist/components.js"
+    },
     "./package.json": "./package.json"
   },
   "engines": {
@@ -36,7 +41,7 @@
   "dependencies": {
     "@next-federation/protocol": "workspace:*",
     "@next-federation/sdk": "workspace:*",
-    "jose": "6.2.17"
+    "jose": "^6.2.17"
   },
   "scripts": {
     "build": "tsdown"

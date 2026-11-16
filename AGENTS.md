@@ -13,35 +13,49 @@ rstest.config.ts  .alexrc  .changeset/config.json  AGENTS.md  README.md
 scripts/
   check-guardrails.mjs          grep guardrail (design §11), with __tests__/check-guardrails.spec.ts
   check-error-docs.mjs          every NF code has docs/errors/<slug>.md
+  check-pack.mjs                every package packs its README, LICENSE and CHANGELOG
 docs/
   protocol/v1.md                published island protocol spec
   errors/<slug>.md              one page per NF code
   guides/self-hosted-skew.md    build retention policy
 packages/
   sdk/        logger.ts, error-codes.ts, nf-error.ts, index.ts
-  protocol/   constants.ts, envelope.ts, request.ts, props.ts, id-prefix.ts, bootstrap.ts (types), index.ts
+  protocol/   constants.ts, envelope.ts, request.ts, props.ts, id-prefix.ts, bootstrap.ts (types),
+              share-scope.ts (island React share scope), secure-url.ts (https rule),
+              components.ts (Mode A descriptor, trust registry), index.ts
   core/       config.ts (defineFederation), fetch-island.ts, events.ts, index.ts,
-              identity/ (keys.ts, mint.ts, identity-key.ts, index.ts)   → export "./identity"
-  react/      error-boundary.tsx, island-mount.tsx, island-registry.ts, token-client.ts, events.ts, index.ts
+              identity/ (keys.ts, mint.ts, identity-key.ts, index.ts)   → export "./identity",
+              components.ts (Mode A descriptor fetch + verify)         → export "./components"
+  react/      error-boundary.tsx, island-mount.tsx, island-registry.ts, token-client.ts, events.ts,
+              host-react.ts, index.ts; provide-host-react.ts → export "./share";
+              components/ (index.tsx, render.tsx, runtime.ts) → export "./components",
+              components/server-loader.ts (+ .browser.ts) → export "./components/server-loader"
   server/     strip-html.ts, identity-verify.ts, identity-context.ts, cors.ts, handler.ts, index.ts,
               node/ (listener.ts, serve-builds.ts, retention.ts, cli.ts) → export "./node", bin "nf-serve"
   island/     bridge-context.tsx, link.tsx, index.client.ts, index.server.ts,
-              bootstrap/ (create-bootstrap.tsx, flight-scope.ts, index.ts) → export "./bootstrap"
-  vite/       index.ts, options.ts, scope-flight-client.ts, checks.ts,
-              plugin-rsc/ (plugin.ts, entry.rsc.tsx, entry.ssr.tsx, entry.client.tsx, css.ts)
+              bootstrap/ (create-bootstrap.tsx, flight-scope.ts, share-scope.ts, index.ts) → export
+              "./bootstrap"; bootstrap/share-scope.ts → export "./share-scope"
+  vite/       index.ts, options.ts, scope-flight-client.ts, checks.ts, share.ts (React sharing),
+              plugin-rsc/ (plugin.ts, entry.rsc.tsx, entry.ssr.tsx, entry.client.tsx,
+              bootstrap.client.tsx, css.ts), components/ (plugin.ts, options.ts, descriptor.ts,
+              version.ts: the Mode A components remote, nextFederationComponents)
   next/       config.ts → "./config"; server/ (create-islands.tsx, island-cache.legacy.ts,
-              island-cache.cc.ts, private-envelope.ts) → "./server"; client/next-island-mount.tsx;
-              routes.ts → "./routes"; pages/ (create-pages-islands.ts, remote-island.tsx,
-              api-handler.ts) → "./pages", "./pages/server"; bridge.ts
+              island-cache.cc.ts, private-envelope.ts, component-descriptor.ts,
+              get-component-descriptor.ts) → "./server"; client/next-island-mount.tsx;
+              routes.ts, route-core.ts → "./routes"; pages/ (create-pages-islands.ts,
+              remote-island.tsx, api-handler.ts, component-descriptor.ts) → "./pages",
+              "./pages/server"; bridge.ts
 test/
   fixtures/island-remote/   Vite remote (names a, b), built with @next-federation/vite
   fixtures/host-app/        App Router host (with and without cacheComponents)
   fixtures/host-pages/      Pages Router host (with and without basePath + i18n)
   fixtures/host-spa/        Vite SPA host (StrictMode on) for lifecycle and skew
+  fixtures/components-remote/  Mode A Vite components remote (signed, tampered and unsigned builds)
+  fixtures/components-context/ the React context hosts share with it
   e2e/                      playwright.config.ts, servers.ts, *.spec.ts, fixtures/jwks-server.ts
+examples/                   runnable remotes and hosts (README.md, scripts/run.mjs; `pnpm examples:dev`)
 ```
 
-`spike/` is Phase 0 reference code, kept runnable and excluded from lint and Prettier until it is removed.
 
 ## Commands
 
@@ -56,7 +70,9 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 - `pnpm guardrail`: grep guardrail (run before building)
 - `pnpm check:error-docs`: every error code has a docs page (run after building)
 - `pnpm format` / `pnpm format:check`: Prettier
-- `pnpm e2e`: Playwright suites (added in Task 15)
+- `pnpm check:pack`: every package's tarball contents (run after building)
+- `pnpm e2e`: Playwright suites (`NF_LANE=b` runs on a second port range)
+- `pnpm examples:smoke`: start the examples and check every page
 
 ## Hard rules
 
@@ -66,7 +82,7 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 - All `@vitejs/plugin-rsc*` and `virtual:vite-rsc/*` imports and every `import.meta.viteRsc` use live under `packages/vite/src/plugin-rsc/` only. ESLint enforces it. `@vitejs/plugin-rsc` is pinned to exactly `0.5.39` as a dependency of `@next-federation/vite`.
 - The protocol is bundler-neutral. Nothing in `protocol`, `core`, `react`, `server`, `island` may assume Vite. A remote is anything that serves the envelope and a bootstrap ES module honouring `IslandBootstrapModule` (Task 3).
 - No dependence on Next/Vercel upstream changes. No `require.cache` patching, no React monkey-patching, no forcing `--webpack`.
-- The host never runs remote code on its server. Host cookies are never forwarded to remotes. Identity tokens never appear in HTML, prerendered output, Next's RSC payload, `__NEXT_DATA__`, or any browser storage (memory only).
+- The host never runs island code on its server. The one exception is Mode A (client components) server rendering: the host evaluates a remote's server build only when its descriptor is verified in that process (signed or pinned; `unsafe-dev` only when `NODE_ENV` is development or test) and every fetched file matches its sha384; anything else renders in the browser only. Host cookies are never forwarded to remotes. Identity tokens never appear in HTML, prerendered output, Next's RSC payload, `__NEXT_DATA__`, or any browser storage (memory only).
 - Never silently make a static/ISR page dynamic. In `@next-federation/next`, every `catch` around a Next call or a fetch calls `unstable_rethrow(error)` from `next/navigation` first, so Next's control-flow errors are never swallowed.
-- Browser globals the library may create: exactly one, `globalThis.__nf_rsc__` (flight-scope registry keyed by a build's absolute base URL). No other `globalThis`/`window` writes in library code. (Finding 1: "no colliding globals".) The Module Federation runtime's own `__FEDERATION__` global is the one permitted third-party global, and only when island React sharing is on (Task 18B).
-- Island React sharing (user decision 2026-11-15): islands share `react` and `react-dom` in a Module Federation share scope named `nf-islands`, separate from the host's Mode A scope (`default`, Phase 4). Singletons with **exact-version** matching (`strictVersion`, `requiredVersion` = the remote's exact React version; the RSC wire format is only guaranteed between identical React versions). On a mismatch a remote uses its own bundled copy — sharing is an optimisation, never a requirement, and never couples a remote to the host's React. `react-server-dom-webpack/client` is **never** shared: each build keeps its own flight client and registry slot. Production builds only; dev remotes never share. App Router hosts never provide React (canary). The whole feature is conditional on the Task 18A gate.
+- Browser globals the library may create: exactly one, `globalThis.__nf_rsc__` (flight-scope registry keyed by a build's absolute base URL). No other `globalThis`/`window` writes in library code. (Finding 1: "no colliding globals".) Permitted third-party globals: the Module Federation runtime's own `__FEDERATION__` (island React sharing, Task 18B, and Mode A), and for Mode A the ones Module Federation and `@module-federation/vite` remote code create (`__mf_module_cache__`, the `__mf_init__*` entries). On the server, Mode A keeps one process-wide registry under `Symbol.for('nf.components.verified')` (our `componentTrustRegistry()`, `@next-federation/protocol`): verified descriptor digests and each remote's trust policy.
+- Island React sharing (user decision 2026-11-15): islands share `react` and `react-dom` in a Module Federation share scope named `nf-islands`, separate from the host's Mode A scope (`default`, shipped in Phase 1), under the library-only key `__FEDERATION__.__SHARE__['@next-federation/island-share@1']`. One instance per **exact version** (MF `singleton: false`, `strictVersion`, `requiredVersion` = the remote's exact React version; Task 18A showed `singleton: true` breaks mixed versions; the RSC wire format is only guaranteed between identical React versions). "One provider" means one per name@key on the page: the key is the exact version for React's own entries, and `<version>+react@<reactVersion>` for any other shared lib, which is bound to the React it imports. Libs of one build may therefore come from different providers (react from one remote, a design-system lib from another on the same React), but each name@key is one object page-wide. A non-production build never shares. On a mismatch a remote uses its own bundled copy — sharing is an optimisation, never a requirement, and never couples a remote to the host's React. `react-server-dom-webpack/client` is **never** shared: each build keeps its own flight client and registry slot. Production builds only; dev remotes never share. App Router hosts never provide React (canary); an SPA or Pages Router host on the identical stable React may opt in with `provideHostReact()` (`@next-federation/react/share`). The whole feature is conditional on the Task 18A gate.

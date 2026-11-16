@@ -35,7 +35,6 @@ export default tseslint.config(
       '**/test-results/**',
       '**/playwright-report/**',
       '.superpowers/**',
-      'spike/**',
       '**/next-env.d.ts',
     ],
   },
@@ -53,6 +52,11 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  {
+    // Fixtures and e2e suites reach plugin-rsc only through @next-federation/vite.
+    files: ['test/**/*.{ts,tsx,mts,cts,js,mjs}'],
+    rules: restrict(pluginRsc),
   },
   {
     files: FRAMEWORK_FREE.map(

@@ -13,5 +13,4 @@ pnpm-lock.yaml
 .superpowers
 **/next-env.d.ts
 # Spike-era code keeps its own formatting until it is removed (Task 25).
-spike/
 .changeset/*.md
