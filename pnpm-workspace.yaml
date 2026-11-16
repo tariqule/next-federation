@@ -7,3 +7,5 @@ packages:
   - 'test/e2e'
   # Example apps (private, never published).
   - 'examples/*'
+  # Documentation website (private, never published).
+  - 'docs-site'

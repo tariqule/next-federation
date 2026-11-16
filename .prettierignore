@@ -14,3 +14,7 @@ pnpm-lock.yaml
 **/next-env.d.ts
 # Spike-era code keeps its own formatting until it is removed (Task 25).
 .changeset/*.md
+# Docs site generated output.
+/docs-site/.source
+/docs-site/content
+**/.vercel/**

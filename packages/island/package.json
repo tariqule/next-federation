@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "description": "Remote-side runtime for next-federation islands: Link, navigation bridge, getIdentity and the browser bootstrap.",
   "license": "MIT",
+  "author": "tariqule",
+  "homepage": "https://github.com/tariqule/next-federation#readme",
+  "bugs": "https://github.com/tariqule/next-federation/issues",
+  "keywords": [
+    "module-federation",
+    "nextjs",
+    "react-server-components",
+    "micro-frontends",
+    "islands",
+    "remote",
+    "bootstrap"
+  ],
   "type": "module",
   "sideEffects": false,
   "repository": {

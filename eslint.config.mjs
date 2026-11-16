@@ -38,6 +38,8 @@ export default tseslint.config(
       '**/next-env.d.ts',
       // `vercel build` output (test/fixtures/island-remote).
       '**/.vercel/**',
+      'docs-site/.source/**',
+      'docs-site/content/**',
     ],
   },
   tseslint.configs.recommended,

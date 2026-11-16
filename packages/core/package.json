@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "description": "defineFederation: validated host config, remote registry and event API for next-federation.",
   "license": "MIT",
+  "author": "tariqule",
+  "homepage": "https://github.com/tariqule/next-federation#readme",
+  "bugs": "https://github.com/tariqule/next-federation/issues",
+  "keywords": [
+    "module-federation",
+    "nextjs",
+    "react-server-components",
+    "micro-frontends",
+    "islands",
+    "federation-config",
+    "identity"
+  ],
   "type": "module",
   "sideEffects": false,
   "repository": {

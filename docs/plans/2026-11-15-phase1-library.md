@@ -1,7 +1,5 @@
 # next-federation Library (Phases 1–2: core, protocol, islands) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Replace the Phase 0 spike with real, publishable `@next-federation/*` packages that deliver server-rendered, hydrated RSC islands from separately deployed remotes into Next.js 16 App Router and Pages Router hosts, tested in dev and production under Turbopack and webpack.
 
 **Architecture:** A versioned, bundler-neutral island protocol (JSON envelope: HTML + RSC payload + CSS URLs + bootstrap module URL + `buildId`) sits between a framework-free remote handler and framework-free host pieces (`core` fetch/registry/identity, `react` mount). Thin adapters on top use only public APIs: `@next-federation/next` for hosts, `@next-federation/vite` (wrapping `@vitejs/plugin-rsc`) for remote builds. Islands bring their own React; the host never executes remote code on its server.
