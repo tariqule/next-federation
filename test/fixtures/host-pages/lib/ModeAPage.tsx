@@ -3,6 +3,7 @@ import { getComponentDescriptor } from '@next-federation/next/pages/server'
 import type { RemoteComponentDescriptor } from '@next-federation/next/pages/server'
 import { MODE_A_REMOTES, componentsFederation } from './components'
 import { HostProviders } from './HostProviders'
+import { ModeALink } from './ModeALink'
 import { ReactProbe } from './ReactProbe'
 import { RemoteCounter } from './RemoteCounter'
 
@@ -26,6 +27,7 @@ export function ModeAPage({ descriptor }: ModeAProps) {
   return (
     <main>
       <h1>Mode A (Pages Router)</h1>
+      <ModeALink />
       <p data-testid="rendered-build">{descriptor?.buildId ?? 'none'}</p>
       <HostProviders value="from-pages-host">
         <RemoteCounter descriptor={descriptor} start={1} />

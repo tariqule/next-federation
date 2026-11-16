@@ -81,6 +81,9 @@ per remote up to the descriptor's `maxBuilds` (oldest evicted); failures are cac
 retries after 1 s, the browser retries 3 times with backoff while keeping the server HTML), and
 one load attempt times out after 10 s. A host module that the process-wide share cache holds in
 another instance (two Reacts, or a dev server reload) makes the server render browser-only.
+Stylesheets listed in the descriptor are React stylesheet resources (`precedence="next-federation"`,
+one link per URL): rendered with a server-rendered component, inserted with `preinit` by one first
+mounted in the browser; a server render also modulepreloads the remote entry and chunks.
 Guide: [Client components](../../docs/guides/client-components.md).
 
 **Trust.** The server never trusts a `descriptor` prop by itself: it evaluates a build only when

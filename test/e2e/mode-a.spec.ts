@@ -184,6 +184,71 @@ for (const host of HOSTS) {
       expect(bad, all.join('\n')).toEqual([])
     })
 
+    test("the remote's stylesheet applies, one link per href; the server HTML links it and modulepreloads the entry + chunks", async ({
+      page,
+    }) => {
+      const build = `${SIGNED}/b/c1/`
+      if (host.ssr) {
+        const res = await fetch(`${host.url}/mode-a`, {
+          signal: AbortSignal.timeout(30_000),
+        })
+        const body = await res.text()
+        expectServerMarkup(markup(body), `host=${host.value} build=c1`)
+        const links = [...body.matchAll(/<link\b[^>]*>/g)].map((m) => m[0])
+        // A stylesheet resource of the boundary: a <link precedence>
+        // (inline boundary, Pages Router), or a preload from the shell plus
+        // React's reveal instruction for a streamed one (App Router).
+        const css = links
+          .filter(
+            (l) =>
+              (l.includes('rel="preload"') && l.includes('as="style"')) ||
+              l.includes('rel="stylesheet"')
+          )
+          .map((l) => /href="([^"]+)"/.exec(l)?.[1])
+          .filter((h) => h?.startsWith(`${build}assets/Counter-`))
+        expect(css, links.join('\n')).toHaveLength(1)
+        const href = css[0]!
+        const asLink = links.filter(
+          (l) => l.includes('rel="stylesheet"') && l.includes(`href="${href}"`)
+        )
+        if (host.pages || asLink.length > 0) {
+          expect(asLink, links.join('\n')).toHaveLength(1)
+          expect(asLink[0]).toContain('data-precedence="next-federation"')
+        } else {
+          expect(body).toContain(`"${href}","next-federation"`)
+        }
+        const preloads = links
+          .filter((l) => l.includes('rel="modulepreload"'))
+          .map((l) => /href="([^"]+)"/.exec(l)?.[1])
+        expect(preloads).toContain(`${build}remoteEntry.js`)
+        expect(
+          preloads.some((h) => h?.startsWith(`${build}assets/Counter-`)),
+          preloads.join('\n')
+        ).toBe(true)
+        // Each modulepreload once.
+        expect(new Set(preloads).size).toBe(preloads.length)
+      }
+      const { bad, all } = watch(page)
+      await page.goto(`${host.url}/mode-a`)
+      await expect(counterText(page)).toHaveText(`host=${host.value} build=c1`)
+      if (host.ssr) {
+        await expect(page.getByTestId('react-probe')).toHaveAttribute(
+          'data-client',
+          'true'
+        )
+      }
+      await expect(page.getByTestId('counter')).toHaveCSS(
+        'color',
+        'rgb(12, 34, 56)'
+      )
+      const hrefs = await page
+        .locator(`link[rel="stylesheet"][href^="${build}"]`)
+        .evaluateAll((ls) => ls.map((l) => l.getAttribute('href')))
+      expect(hrefs).toHaveLength(1)
+      expect(hrefs[0]).toMatch(/\/assets\/Counter-[\w-]+\.css$/)
+      expect(bad, all.join('\n')).toEqual([])
+    })
+
     test('a remote that is down renders the fallback with status 200 (cold)', async ({
       page,
     }) => {
@@ -242,7 +307,14 @@ for (const host of HOSTS) {
       )
       const blocked: string[] = []
       await page.route(`${SIGNED}/**`, (route: Route) => {
-        blocked.push(route.request().url())
+        const url = route.request().url()
+        // The scripts are down; the stylesheet still loads: a streamed App
+        // Router boundary whose stylesheet fails is client-rendered by React
+        // (documented in client-components.md).
+        if (url.endsWith('.css')) return route.continue()
+        // One manifest request per attempt (the modulepreloads of the server
+        // HTML are blocked too, but not counted).
+        if (url.includes('mf-manifest.json')) blocked.push(url)
         return route.abort()
       })
       try {
@@ -260,6 +332,40 @@ for (const host of HOSTS) {
         })
         // Replaced only after every attempt (1 + 3 retries) failed.
         expect(blocked.length).toBeGreaterThanOrEqual(4)
+      } finally {
+        await page.unrouteAll({ behavior: 'ignoreErrors' })
+      }
+    })
+
+    test('a stalled stylesheet never holds a client navigation', async ({
+      page,
+    }) => {
+      const stalled: string[] = []
+      // Never answered: the browser waits on these for as long as it likes.
+      await page.route(`${SIGNED}/b/c1/assets/*.css`, (route: Route) => {
+        stalled.push(route.request().url())
+      })
+      try {
+        await page.goto(`${host.url}/mode-a/down`)
+        const link = page.getByTestId('to-mode-a')
+        await expect(link).toHaveAttribute('data-hydrated', 'true')
+        await page.evaluate(() => {
+          ;(window as unknown as { __nfSamePage: boolean }).__nfSamePage = true
+        })
+        await link.click()
+        // Rendered within the runtime's first attempt, CSS still pending.
+        await expect(counterText(page)).toHaveText(
+          `host=${host.value} build=c1`,
+          { timeout: 8_000 }
+        )
+        expect(
+          await page.evaluate(
+            () => (window as unknown as { __nfSamePage?: boolean }).__nfSamePage
+          )
+        ).toBe(true)
+        expect(stalled.length).toBeGreaterThan(0)
+        await page.getByTestId('counter-btn').click()
+        await expect(page.getByTestId('counter-btn')).toHaveText('count 2')
       } finally {
         await page.unrouteAll({ behavior: 'ignoreErrors' })
       }
@@ -421,11 +527,13 @@ test.describe('Mode A: redeploy and skew (prod)', () => {
       const held = new Promise<void>((r) => (release = r))
       await page.route(`${REDEPLOY}/**`, async (route: Route) => {
         requested.push(new URL(route.request().url()).pathname)
-        await held
+        // Scripts only: a held stylesheet would be render-blocking (in the
+        // Pages Router it holds the parser), and it is build-pinned anyway.
+        if (!route.request().url().endsWith('.css')) await held
         await route.continue()
       })
       const { bad, all } = watch(page)
-      await page.goto(url)
+      await page.goto(url, { waitUntil: 'domcontentloaded' })
       await expect(page.getByTestId('rendered-build')).toHaveText('r1')
       await serve()
       release()

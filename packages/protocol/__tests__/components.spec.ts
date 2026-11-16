@@ -117,3 +117,85 @@ test('the trust registry is one process-wide object under a symbol key', () => {
   expect(a.verified).toBeInstanceOf(Map)
   expect(a.trust).toBeInstanceOf(Map)
 })
+
+describe('browser assets (stylesheets and modulepreload)', () => {
+  const assets = {
+    entry: `${base}remoteEntry.js`,
+    exposes: {
+      './Counter': {
+        css: [`${base}assets/Counter-x.css`],
+        js: [`${base}assets/Counter-x.js`, `${base}assets/dist-y.js`],
+      },
+    },
+  }
+
+  test('parses assets and keeps them in the payload, the digest covers them', async () => {
+    const file = parseComponentDescriptorFile({
+      ...payload,
+      assets,
+      digest: 'd',
+    })
+    expect(file?.assets).toEqual(assets)
+    const a = await componentDescriptorDigest({ ...payload, assets })
+    expect(a).not.toBe(await componentDescriptorDigest(payload))
+    const moved = {
+      ...assets,
+      exposes: {
+        './Counter': { ...assets.exposes['./Counter'], css: [`${base}x.css`] },
+      },
+    }
+    expect(
+      await componentDescriptorDigest({ ...payload, assets: moved })
+    ).not.toBe(a)
+  })
+
+  test('a descriptor without assets still parses (older builds, dev)', () => {
+    expect(
+      parseComponentDescriptorFile({ ...payload, digest: 'd' })?.assets
+    ).toBeUndefined()
+  })
+
+  const expose = (patch: Record<string, unknown>) => ({
+    ...payload,
+    assets: {
+      ...assets,
+      exposes: { './Counter': { ...assets.exposes['./Counter'], ...patch } },
+    },
+    digest: 'd',
+  })
+  test.each([
+    [
+      'a stylesheet on another origin',
+      expose({ css: ['https://evil.example/a.css'] }),
+    ],
+    ['a stylesheet escaping base', expose({ css: [`${base}../c2/a.css`] })],
+    ['a stylesheet with a query', expose({ css: [`${base}a.css?x=1`] })],
+    [
+      'a chunk on another origin',
+      expose({ js: ['https://evil.example/a.js'] }),
+    ],
+    ['a non-string chunk', expose({ js: [1] })],
+    [
+      'an entry outside base',
+      {
+        ...payload,
+        assets: { ...assets, entry: 'https://evil.example/e.js' },
+        digest: 'd',
+      },
+    ],
+    [
+      'an expose key that is not ./name',
+      {
+        ...payload,
+        assets: {
+          ...assets,
+          exposes: { Counter: assets.exposes['./Counter'] },
+        },
+        digest: 'd',
+      },
+    ],
+    ['assets not an object', { ...payload, assets: [], digest: 'd' }],
+  ])('rejects %s', (_name, value) => {
+    expect(parseComponentDescriptorFile(value)).toBeNull()
+  })
+})

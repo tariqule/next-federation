@@ -241,6 +241,42 @@ describe('fix round 1: server-side trust', () => {
     ).toBe(false)
   })
 
+  test('the assets (stylesheets, chunks) are covered: a changed stylesheet URL is not trusted', () => {
+    const assets = {
+      entry: 'http://127.0.0.1:1/b/t1/remoteEntry.js',
+      exposes: {
+        './Counter': {
+          css: ['http://127.0.0.1:1/b/t1/assets/a.css'],
+          js: ['http://127.0.0.1:1/b/t1/assets/a.js'],
+        },
+      },
+    }
+    const signed = { ...d(), assets }
+    const digest = `sha384-${createHash('sha384')
+      .update(canonicalJson({ ...JSON.parse(canonicalOf(d())), assets }))
+      .digest('base64')}`
+    componentTrustRegistry().verified.set(
+      verifiedKey('trusted-remote', digest),
+      'signature'
+    )
+    expect(isTrustedDescriptor(signed)).toBe(true)
+    expect(isTrustedDescriptor(d())).toBe(false)
+    expect(
+      isTrustedDescriptor({
+        ...signed,
+        assets: {
+          ...assets,
+          exposes: {
+            './Counter': {
+              ...assets.exposes['./Counter'],
+              css: ['http://127.0.0.1:1/b/t1/assets/evil.css'],
+            },
+          },
+        },
+      })
+    ).toBe(false)
+  })
+
   test('cache hit after a restart: re-verified from the carried jws against registered keys', () => {
     const { privateKey, pub } = keyPair()
     const signed = d({ iat: 100 })

@@ -120,6 +120,8 @@ export async function fetchDescriptorInBrowser(
       ssr: null,
       // At least one build: 0 or a negative value would never keep any.
       maxBuilds: Math.max(1, Math.floor(options.maxBuilds ?? 5) || 1),
+      // Its stylesheets: the browser inserts them before the module loads.
+      ...(file.assets === undefined ? {} : { assets: file.assets }),
     }
   } catch {
     return null

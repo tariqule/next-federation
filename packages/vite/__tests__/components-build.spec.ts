@@ -52,8 +52,25 @@ test('vite build without NF_BUILD_ID writes one build with its manifest and desc
     buildId: string
     base: string
     ssr: { integrity: Record<string, string> }
+    assets?: {
+      entry: string
+      exposes: Record<string, { css: string[]; js: string[] }>
+    }
   }
   expect(descriptor.buildId).toBe(builds[0])
+  // The browser files, signed with the rest: Counter.css and its chunks.
+  const counter = descriptor.assets?.exposes['./Counter']
+  expect(descriptor.assets?.entry).toBe(`${descriptor.base}remoteEntry.js`)
+  expect(counter?.css).toHaveLength(1)
+  expect(counter?.css[0]).toMatch(
+    new RegExp(`^${descriptor.base}assets/Counter-[\\w-]+\\.css$`)
+  )
+  expect(counter?.js.some((f) => /\/Counter-[\w-]+\.js$/.test(f))).toBe(true)
+  for (const url of [...counter!.css, ...counter!.js]) {
+    expect(
+      existsSync(join(dir, 'client', url.slice(descriptor.base.length)))
+    ).toBe(true)
+  }
   expect(descriptor.base).toMatch(new RegExp(`/b/${builds[0]}/$`))
   expect(Object.keys(descriptor.ssr.integrity)).toContain('remoteEntry.ssr.js')
 }, 120_000)

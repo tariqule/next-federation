@@ -8,7 +8,11 @@ import {
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import type { Plugin, PluginOption, UserConfig } from 'vite'
-import { collectServerIntegrity, createDescriptorFile } from './descriptor.ts'
+import {
+  collectBrowserAssets,
+  collectServerIntegrity,
+  createDescriptorFile,
+} from './descriptor.ts'
 import { resolveComponentsOptions } from './options.ts'
 import type {
   ComponentsRemoteOptions,
@@ -209,6 +213,8 @@ export function nextFederationComponents(
             : null,
           // Signed with the payload: hosts may bound a build's age (ssr.maxAge).
           iat: Math.floor(builtAt / 1000),
+          // Signed too: the only stylesheet and modulepreload URLs hosts render.
+          assets: await collectBrowserAssets(client, resolved.publicBase),
         }
         const file = await createDescriptorFile(payload, process.env)
         const info: ComponentsBuildInfo = {

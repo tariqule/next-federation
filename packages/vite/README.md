@@ -138,7 +138,8 @@ export default defineConfig({
 Wraps `@module-federation/vite` (pinned to exactly 1.24.0: `NF-026` otherwise, `NF_ALLOW_MF_VITE=1`
 for a canary job). `vite build` builds the browser copy and a CommonJS server copy into
 `<outDir>/<buildId>/client/` (served under `<base>b/<buildId>/`), plus `nf-components.json` (the
-build descriptor with the sha384 of every server file, signed with ES256 when
+build descriptor with the sha384 of every server file and each exposed module's stylesheets and
+JS chunks, which hosts link and modulepreload; signed with ES256 when
 `NF_COMPONENTS_SIGNING_KEY` holds a private JWK) and `nf-build.json`; `nf-serve --dir <outDir>`
 serves it. React, `react-dom`, `react-dom/client` and `react/jsx-runtime` are always host-provided.
 An exposed module compiled with Fast Refresh fails the build (`NF-002`). The dev server answers

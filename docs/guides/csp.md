@@ -22,7 +22,8 @@ If a remote serves assets from another origin (a CDN), add that origin too, and 
 the envelope (`NF-005`).
 
 Client components (Mode A) need the remote origin in `script-src` (its `remoteEntry.js` and chunks
-are ES modules) and `connect-src` (the browser fetches `mf-manifest.json`; an SPA also fetches
+are ES modules, also `modulepreload`ed by a server render), `style-src` (the stylesheets of its
+exposed modules) and `connect-src` (the browser fetches `mf-manifest.json`; an SPA also fetches
 `/_nf/components.json`). See [Client components](client-components.md).
 
 ## `'strict-dynamic'`

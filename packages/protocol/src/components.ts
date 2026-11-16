@@ -10,6 +10,25 @@ export const COMPONENTS_DESCRIPTOR_FILE = 'nf-components.json'
 /** The JWS `typ` header of a signed descriptor. */
 export const COMPONENTS_JWS_TYPE = 'nf-components+jws'
 
+/** The browser files of one exposed module: absolute URLs under `base`. */
+export type ComponentExposeAssets = {
+  /** Stylesheets the module needs (Vite's CSS chunks), in load order. */
+  css: string[]
+  /** Its JavaScript chunks, which hosts `modulepreload` when server rendering. */
+  js: string[]
+}
+
+/**
+ * The browser files of a build, signed with the rest of the payload: hosts
+ * render stylesheet and modulepreload links only for URLs listed here.
+ */
+export type ComponentBuildAssets = {
+  /** Absolute URL of the browser remote entry (`remoteEntry.js`). */
+  entry: string
+  /** Keyed by exposed module ('./Counter'). */
+  exposes: Record<string, ComponentExposeAssets>
+}
+
 /** What a build signs (or a host pins): everything a host trusts about it. */
 export type ComponentBuildDescriptor = {
   v: 1
@@ -28,6 +47,8 @@ export type ComponentBuildDescriptor = {
   ssr: null | { integrity: Record<string, string> }
   /** Build time, seconds since the epoch (signed; hosts may bound its age). */
   iat?: number
+  /** The browser files (stylesheets, chunks); absent in dev and older builds. */
+  assets?: ComponentBuildAssets
 }
 
 /** The published file: the payload, its digest and optionally its ES256 JWS. */
@@ -54,6 +75,8 @@ export type RemoteComponentDescriptor = {
   /** Distinct builds of this remote a process keeps loaded. */
   maxBuilds: number
   iat?: number
+  /** The build's browser files, as in its descriptor. */
+  assets?: ComponentBuildAssets
   /**
    * The build's JWS, carried so a server can re-verify the descriptor
    * itself (a cached descriptor after a restart): `ssr` alone is never trusted.
@@ -153,6 +176,55 @@ function parseIntegrity(value: unknown): Record<string, string> | null {
   return out
 }
 
+/** An absolute URL under `base` (no query or fragment); null otherwise. */
+function urlUnder(value: unknown, base: string): string | null {
+  if (typeof value !== 'string' || !value.startsWith(base)) return null
+  if (!insidePath(value.slice(base.length))) return null
+  try {
+    const url = new URL(value)
+    if (url.search || url.hash || url.href !== value) return null
+  } catch {
+    return null
+  }
+  return value
+}
+
+function urlsUnder(value: unknown, base: string): string[] | null {
+  if (!Array.isArray(value)) return null
+  const out: string[] = []
+  for (const item of value) {
+    const url = urlUnder(item, base)
+    if (!url) return null
+    out.push(url)
+  }
+  return out
+}
+
+function parseAssets(
+  value: unknown,
+  base: string
+): ComponentBuildAssets | null {
+  if (!isRecord(value) || !isRecord(value.exposes)) return null
+  const entry = urlUnder(value.entry, base)
+  if (!entry) return null
+  const exposes: Record<string, ComponentExposeAssets> = {}
+  for (const [key, files] of Object.entries(value.exposes)) {
+    // Expose keys as Module Federation writes them: './Name'.
+    if (
+      !key.startsWith('./') ||
+      !insidePath(key.slice(2)) ||
+      !isRecord(files)
+    ) {
+      return null
+    }
+    const css = urlsUnder(files.css, base)
+    const js = urlsUnder(files.js, base)
+    if (!css || !js) return null
+    exposes[key] = { css, js }
+  }
+  return { entry, exposes }
+}
+
 /** The payload fields of a descriptor, validated; null when invalid. */
 export function parseComponentBuildDescriptor(
   value: unknown
@@ -177,9 +249,22 @@ export function parseComponentBuildDescriptor(
   if (iat !== undefined && (!Number.isInteger(iat) || (iat as number) < 0)) {
     return null
   }
-  return iat === undefined
-    ? { v: 1, name, buildId, base, manifest, ssr }
-    : { v: 1, name, buildId, base, manifest, ssr, iat: iat as number }
+  let assets: ComponentBuildAssets | undefined
+  if (value.assets !== undefined) {
+    const parsed = parseAssets(value.assets, base)
+    if (!parsed) return null
+    assets = parsed
+  }
+  return {
+    v: 1,
+    name,
+    buildId,
+    base,
+    manifest,
+    ssr,
+    ...(iat === undefined ? {} : { iat: iat as number }),
+    ...(assets === undefined ? {} : { assets }),
+  }
 }
 
 /** A published descriptor file, validated; null when invalid. */
@@ -222,8 +307,8 @@ export function componentDescriptorBytes(
 export function componentDescriptorCanonical(
   payload: ComponentBuildDescriptor
 ): string {
-  const { v, name, buildId, base, manifest, ssr, iat } = payload
-  return canonicalJson({ v, name, buildId, base, manifest, ssr, iat })
+  const { v, name, buildId, base, manifest, ssr, iat, assets } = payload
+  return canonicalJson({ v, name, buildId, base, manifest, ssr, iat, assets })
 }
 
 /** The descriptor digest a host pins: sha384 of the canonical payload. */

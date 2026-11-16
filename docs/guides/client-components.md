@@ -47,8 +47,9 @@ export default defineConfig({
 - `client/`: the browser build (`remoteEntry.js`, `mf-manifest.json`, chunks) **and** the server
   copy (`remoteEntry.ssr.js` and its `.cjs` chunks), served under the immutable
   `https://shop.example.com/b/<buildId>/`.
-- `nf-components.json`: the build descriptor: `buildId`, the manifest URL and the **sha384 of every
-  server file**, plus its digest and, when signed, an ES256 JWS.
+- `nf-components.json`: the build descriptor: `buildId`, the manifest URL, the **sha384 of every
+  server file** and the **browser files** of each exposed module (its stylesheets and JS chunks, as
+  absolute `/b/<buildId>/…` URLs), plus its digest and, when signed, an ES256 JWS over all of it.
 - `nf-build.json`: what `nf-serve` reads.
 
 `react`, `react-dom`, `react-dom/client` and `react/jsx-runtime` are always host-provided
@@ -236,6 +237,58 @@ render in the browser only. `ssr.maxAge` bounds how long any signed build is acc
 Each build's `nf-components.json` has a `digest` (`sha384-…` of the canonical descriptor). List it:
 `ssr: { pinned: { '<buildId>': '<digest>' } }`.
 
+## Stylesheets
+
+Import CSS in an exposed module as usual (`import './Cart.css'`, CSS Modules). The build lists each
+exposed module's stylesheets in the descriptor, and the host renders them as React 19 stylesheet
+resources (`data-precedence="next-federation"`, the same group as island stylesheets), one link per
+URL however many components use it:
+
+- **Server-rendered component** (a verified build on a Next host): the component renders
+  `<link rel="stylesheet" precedence>` with its markup, so it never paints unstyled: the link
+  comes ahead of the markup, and a streamed boundary is revealed only once its stylesheet has
+  loaded (React inserts the link). The server also emits a `preload` for each stylesheet and
+  `<link rel="modulepreload">` for the remote entry and the module's chunks, so the browser fetches
+  them while it hydrates instead of one after the other (manifest, then entry, then chunks).
+- **A stylesheet that fails to load** in a streamed App Router response (a component inside
+  `<Suspense>` that the shell did not include): React does not reveal that boundary's server HTML
+  and renders it in the browser instead (its fallback, then the component). A stylesheet in the
+  initial HTML (Pages Router, an inline boundary) only leaves the component unstyled.
+- **First mounted in the browser** (a client navigation, a browser-only build, an SPA): the
+  stylesheets are inserted with `preinit` before the module loads. Nothing waits for them: a slow
+  or stalled stylesheet never holds the host's navigation, but the component can show unstyled
+  until its CSS arrives (no FOUC guarantee there).
+
+Only each exposed module's synchronous stylesheets are listed (what it imports statically). CSS of
+chunks it loads lazily (a dynamic `import()` inside the exposed module) is injected by the remote's
+own runtime when that chunk loads, with no FOUC guarantee.
+
+The host renders only URLs listed in the descriptor and under the build's `base` (whose origin must
+be one of the remote's origins). In a signed or pinned descriptor they are covered by the signature
+or digest; a descriptor refused for tampering (`NF-027`) keeps none of them. A remote dev server
+(`vite`) publishes no file list; its modules inject their own CSS in the browser.
+
+## Sharing modules
+
+What a remote can get from the host, exactly:
+
+- **React, always the host's**: `react`, `react-dom`, `react-dom/client` and `react/jsx-runtime`.
+  The remote never bundles them (`import: false`); listing them in `shared` is `NF-002`.
+- **Modules the host provides**: every other entry of the remote's `shared` list must be passed by
+  the host in `createRemoteComponent({ shared: { name: { version, module } } })`. The remote never
+  bundles them either, so **the host must provide every module the remote shares**; a missing one
+  fails the load (`NF-029`) and the fallback renders.
+- **No version negotiation**: the host registers each module as a singleton with
+  `requiredVersion: false`, and the remote has no copy of its own to fall back to, so the remote
+  always gets the host's copy, whatever its version. A remote's
+  `shared: { name: { requiredVersion: '^2.0.0' } }` is passed to Module Federation as a singleton
+  range: a mismatch only produces a Module Federation runtime warning, and the host's copy is still
+  used. Keep shared modules small and backwards-compatible (a context module, a design-system
+  package both sides pin).
+- **No `next/*`**: the library never registers Next.js modules (`next/link`, `next/navigation`,
+  `next/image`). A remote is a Vite build without Next; pass what it needs (callbacks, an `href`
+  builder, a link component) as props instead.
+
 ## Runtime behaviour
 
 - **One React**: the host registers its own `react`, `react/jsx-runtime`, `react-dom` and
@@ -290,8 +343,9 @@ Each build's `nf-components.json` has a `digest` (`sha384-…` of the canonical 
 ## Content Security Policy
 
 Add the remote's origin to `script-src` (the remote entry and its chunks are ES modules loaded from
-it) and `connect-src` (the browser fetches `mf-manifest.json`, and an SPA fetches the descriptor).
+it), `style-src` (its stylesheets) and `connect-src` (the browser fetches `mf-manifest.json`, and an
+SPA fetches the descriptor).
 See [CSP](csp.md).
 
 Related: [Writing an island remote](writing-an-island-remote.md), [Deployment](deployment.md),
-[Limits](limits.md).
+[Limits](limits.md), [Migrating from nextjs-mf](migrating-from-nextjs-mf.md).

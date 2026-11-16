@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { getComponentDescriptor } from '@next-federation/next/server'
 import { componentsFederation } from './components'
 import { HostProviders } from './HostProviders'
+import { ModeALink } from './ModeALink'
 import { ReactProbe } from './ReactProbe'
 import { RemoteCounter } from './RemoteCounter'
 
@@ -42,6 +43,7 @@ export function ModeAPage({
   return (
     <main>
       <h1>Mode A</h1>
+      <ModeALink />
       <Suspense fallback={<span data-testid="shell-fallback">loading</span>}>
         <Section remote={remote} dynamic={dynamic} />
       </Suspense>
