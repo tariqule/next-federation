@@ -14,6 +14,7 @@ import {
   HOST_APP_CC,
   HOST_PAGES,
   HOST_SPA,
+  MODE,
   REMOTE_A,
 } from './servers.ts'
 
@@ -128,12 +129,25 @@ for (const host of HOSTS) {
       await expect(page.getByText('remote too slow')).toHaveCount(1)
       await expect(page.getByText('remote too slow')).toBeVisible()
       await expect(page.getByText('loading…')).toHaveCount(0)
-      const fallbackAt = await page.evaluate(
-        () => (window as unknown as { fallbackAt?: number }).fallbackAt
-      )
+      const { fallbackAt, responseStart } = await page.evaluate(() => ({
+        fallbackAt: (window as unknown as { fallbackAt?: number }).fallbackAt,
+        responseStart: (
+          performance.getEntriesByType(
+            'navigation'
+          )[0] as PerformanceNavigationTiming
+        ).responseStart,
+      }))
       expect(fallbackAt).toBeDefined()
-      // The 3 s island timeout, not the remote's 10 s.
-      expect(fallbackAt!).toBeLessThan(3500)
+      // The 3 s island timeout, not the remote's 10 s. In production the
+      // whole page time is the library's (fetch budget, then the fallback).
+      // `next dev` first compiles the route on demand (up to 0.9 s on a busy
+      // 2-core CI runner), which the library does not control, so in dev the
+      // window starts at the page's first byte: a streamed App Router page
+      // sends it as it starts rendering, i.e. as the island fetch starts. A
+      // Pages Router page sends its first byte only after the fetch, so
+      // there the production run is the check.
+      if (MODE === 'prod') expect(fallbackAt!).toBeLessThan(3500)
+      expect(fallbackAt! - responseStart).toBeLessThan(3500)
     })
 
     test('island content cannot inject script', async ({ page, request }) => {

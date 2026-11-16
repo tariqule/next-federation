@@ -459,10 +459,22 @@ test.describe('sharing measurements', () => {
         writeFileSync(CONTROL, `${JSON.stringify(control, null, 2)}\n`)
         return
       }
-      if (query === 'remotes=a,b' || query === 'remotes=a,b&host=1') {
-        // No React download: a second same-React remote costs little.
-        expect(gzip(B)).toBeGreaterThan(0)
-        expect(gzip(B)).toBeLessThanOrEqual(MAX_SECOND)
+      if (query === 'remotes=a,b') {
+        // Both remotes load at once, so either may provide React: the
+        // provider downloads it once, the other one costs little.
+        const provider = [A, B].filter((o) => perOrigin[o]?.react)
+        expect(provider).toHaveLength(1)
+        const second = provider[0] === A ? B : A
+        expect(gzip(second)).toBeGreaterThan(0)
+        expect(gzip(second)).toBeLessThanOrEqual(MAX_SECOND)
+      }
+      if (query === 'remotes=a,b&host=1') {
+        // On the host's React neither remote downloads one.
+        for (const origin of [A, B]) {
+          expect(gzip(origin)).toBeGreaterThan(0)
+          expect(gzip(origin)).toBeLessThanOrEqual(MAX_SECOND)
+          expect(perOrigin[origin]!.react).toBe(0)
+        }
       }
       if (query === 'remotes=a' || query === 'remotes=a,c') {
         const control = readControl()[query]
