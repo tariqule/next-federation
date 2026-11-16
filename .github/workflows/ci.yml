@@ -34,8 +34,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm lint:docs
       - run: pnpm guardrail
-      - run: pnpm typecheck
+      # Build first: package imports resolve to each package's dist types.
       - run: pnpm build
+      - run: pnpm typecheck
       - name: Error docs
         if: hashFiles('scripts/check-error-docs.mjs') != ''
         run: pnpm check:error-docs
