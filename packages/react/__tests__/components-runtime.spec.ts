@@ -1,0 +1,629 @@
+import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import { createComponentRuntime } from '../src/components/runtime.ts'
+import type {
+  FederationInstance,
+  RuntimeDeps,
+} from '../src/components/runtime.ts'
+
+const fakeReact = { useState: () => null, version: '19.3.1' }
+
+function descriptor(
+  buildId: string,
+  overrides: Partial<RemoteComponentDescriptor> = {}
+): RemoteComponentDescriptor {
+  const base = `http://127.0.0.1:4110/b/${buildId}/`
+  return {
+    remote: 'components',
+    name: 'components',
+    buildId,
+    base,
+    manifest: `${base}mf-manifest.json`,
+    ssr: { integrity: { 'mf-manifest.json': 'sha384-AAAA' } },
+    maxBuilds: 5,
+    ...overrides,
+  }
+}
+
+type Fake = FederationInstance & {
+  registrations: Array<{ entry: string; force: boolean }>
+  loads: string[]
+  fail: Set<string>
+  shared: Array<Record<string, unknown>>
+  plugins: unknown[]
+}
+
+function fakeInstance(): Fake {
+  let current = ''
+  const fake: Fake = {
+    registrations: [],
+    loads: [],
+    fail: new Set(),
+    shared: [],
+    plugins: [],
+    registerRemotes(remotes, options) {
+      current = remotes[0]!.entry
+      fake.registrations.push({
+        entry: current,
+        force: options?.force === true,
+      })
+    },
+    registerShared(shared) {
+      fake.shared.push(shared)
+    },
+    async loadRemote(id) {
+      fake.loads.push(`${current} ${id}`)
+      if (fake.fail.has(current)) throw new Error(`down: ${current}`)
+      return { default: () => null, entry: current } as never
+    },
+  }
+  return fake
+}
+
+function setup(overrides: Partial<RuntimeDeps> = {}) {
+  const instance = fakeInstance()
+  let clock = 0
+  const sleeps: number[] = []
+  const events: unknown[] = []
+  const runtime = createComponentRuntime({
+    isServer: true,
+    react: fakeReact,
+    hostShared: { react: { version: '19.3.1', module: fakeReact } },
+    createInstance: (options) => {
+      instance.plugins.push(...(options.plugins ?? []))
+      instance.shared.push(options.shared)
+      return instance
+    },
+    serverPlugin: () => ({ name: 'test-server-plugin' }),
+    canLoadServerCode: () => true,
+    isTrusted: () => true,
+    now: () => clock,
+    sleep: async (ms) => {
+      sleeps.push(ms)
+    },
+    emit: (event) => events.push(event),
+    ...overrides,
+  })
+  return {
+    runtime,
+    instance,
+    sleeps,
+    events,
+    tick: (ms: number) => (clock += ms),
+  }
+}
+
+const settle = (p: Promise<unknown>) =>
+  p.then(
+    () => 'ok',
+    () => 'failed'
+  )
+
+afterEach(() => {
+  delete (globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__
+  rs.restoreAllMocks()
+})
+
+test('the host React and its own modules are registered as shared, plus extras', async () => {
+  const { runtime, instance } = setup()
+  runtime.registerShared({
+    'components-context': { version: '1.0.0', module: {} },
+  })
+  await runtime.load(descriptor('c1'), './Counter')
+  const first = instance.shared[0] as Record<
+    string,
+    { lib: () => unknown; shareConfig: unknown }
+  >
+  expect(first.react!.lib()).toBe(fakeReact)
+  expect(first.react!.shareConfig).toEqual({
+    singleton: true,
+    requiredVersion: false,
+  })
+  expect(Object.keys(instance.shared[1]!)).toEqual(['components-context'])
+  expect(instance.plugins).toEqual([{ name: 'test-server-plugin' }])
+})
+
+test('one load per build and expose; a fulfilled thenable is readable synchronously', async () => {
+  const { runtime, instance } = setup()
+  const a = runtime.load(descriptor('c1'), './Counter')
+  expect(runtime.load(descriptor('c1'), './Counter')).toBe(a)
+  expect(a.status).toBe('pending')
+  await a
+  expect(a.status).toBe('fulfilled')
+  expect(a.value).toMatchObject({ entry: descriptor('c1').manifest })
+  expect(instance.loads).toEqual([
+    `${descriptor('c1').manifest} components/Counter`,
+  ])
+})
+
+test('a build change re-registers the remote with force; the old build stays cached', async () => {
+  const { runtime, instance } = setup()
+  await runtime.load(descriptor('c1'), './Counter')
+  await runtime.load(descriptor('c2'), './Counter')
+  expect(instance.registrations).toEqual([
+    { entry: descriptor('c1').manifest, force: true },
+    { entry: descriptor('c2').manifest, force: true },
+  ])
+  // c1 is still loaded: no new registration or load.
+  const again = runtime.load(descriptor('c1'), './Counter')
+  expect(again.status).toBe('fulfilled')
+  expect(instance.loads).toHaveLength(2)
+})
+
+test('loads of different builds never interleave (skew safety)', async () => {
+  const { runtime, instance } = setup()
+  const order: string[] = []
+  const original = instance.loadRemote.bind(instance)
+  instance.loadRemote = async (id) => {
+    const entry = instance.registrations.at(-1)!.entry
+    order.push(`start ${entry}`)
+    await new Promise((r) => setTimeout(r, 5))
+    const mod = (await original(id)) as { entry: string }
+    order.push(`end ${entry}`)
+    expect(mod.entry).toBe(entry)
+    return mod as never
+  }
+  await Promise.all([
+    runtime.load(descriptor('c1'), './Counter'),
+    runtime.load(descriptor('c2'), './Counter'),
+  ])
+  expect(order).toEqual([
+    `start ${descriptor('c1').manifest}`,
+    `end ${descriptor('c1').manifest}`,
+    `start ${descriptor('c2').manifest}`,
+    `end ${descriptor('c2').manifest}`,
+  ])
+})
+
+test('build cap: at most maxBuilds builds per remote stay loaded, oldest evicted', async () => {
+  const { runtime } = setup()
+  for (const id of ['c1', 'c2', 'c3']) {
+    await runtime.load(descriptor(id, { maxBuilds: 2 }), './Counter')
+  }
+  expect(runtime.loadedBuilds('components')).toEqual(['c2', 'c3'])
+  // Using c2 makes it the most recent: c3 is evicted next.
+  await runtime.load(descriptor('c2', { maxBuilds: 2 }), './Counter')
+  await runtime.load(descriptor('c4', { maxBuilds: 2 }), './Counter')
+  expect(runtime.loadedBuilds('components')).toEqual(['c2', 'c4'])
+})
+
+test('default cap is 5 builds', async () => {
+  const { runtime } = setup()
+  for (let i = 1; i <= 7; i++)
+    await runtime.load(descriptor(`c${i}`), './Counter')
+  expect(runtime.loadedBuilds('components')).toEqual([
+    'c3',
+    'c4',
+    'c5',
+    'c6',
+    'c7',
+  ])
+})
+
+test('server: a rejected thenable is kept (no retry loop) until the cooldown passes', async () => {
+  const { runtime, instance, tick } = setup()
+  instance.fail.add(descriptor('c1').manifest)
+  const first = runtime.load(descriptor('c1'), './Counter')
+  expect(await settle(first)).toBe('failed')
+  expect(first.status).toBe('rejected')
+  // React re-renders after a rejection: the same thenable comes back.
+  for (let i = 0; i < 50; i++) {
+    expect(runtime.load(descriptor('c1'), './Counter')).toBe(first)
+  }
+  expect(instance.loads).toHaveLength(1)
+  tick(999)
+  expect(runtime.load(descriptor('c1'), './Counter')).toBe(first)
+  tick(1)
+  instance.fail.clear()
+  const retry = runtime.load(descriptor('c1'), './Counter')
+  expect(retry).not.toBe(first)
+  expect(await settle(retry)).toBe('ok')
+  // The retry re-registers the remote with force (a clean MF cache).
+  expect(instance.registrations.at(-1)).toEqual({
+    entry: descriptor('c1').manifest,
+    force: true,
+  })
+})
+
+test('client: retries with a bounded backoff inside one pending thenable, then rejects for good', async () => {
+  const { runtime, instance, sleeps, events } = setup({ isServer: false })
+  instance.fail.add(descriptor('c1').manifest)
+  const p = runtime.load(descriptor('c1'), './Counter')
+  expect(p.status).toBe('pending')
+  expect(await settle(p)).toBe('failed')
+  expect(sleeps).toEqual([500, 1000, 2000])
+  expect(instance.loads).toHaveLength(4)
+  expect(p.status).toBe('rejected')
+  // Never retried within the page.
+  expect(runtime.load(descriptor('c1'), './Counter')).toBe(p)
+  expect(instance.loads).toHaveLength(4)
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'component:error',
+      remote: 'components',
+      buildId: 'c1',
+      expose: './Counter',
+      code: 'NF-029',
+    }),
+  ])
+})
+
+test('client: a retry that succeeds resolves the same thenable', async () => {
+  const { runtime, instance, events } = setup({ isServer: false })
+  instance.fail.add(descriptor('c1').manifest)
+  const p = runtime.load(descriptor('c1'), './Counter')
+  await Promise.resolve()
+  instance.fail.clear()
+  expect(await settle(p)).toBe('ok')
+  expect(events).toEqual([
+    expect.objectContaining({ type: 'component:load', buildId: 'c1' }),
+  ])
+})
+
+test('a module without a default export is a load failure (NF-029)', async () => {
+  const { runtime, instance } = setup()
+  instance.loadRemote = async () => ({ notDefault: 1 }) as never
+  const p = runtime.load(descriptor('c1'), './Counter')
+  await expect(p).rejects.toMatchObject({ code: 'NF-029' })
+})
+
+test('server: the verified integrity of each loaded build is what the loader checks', async () => {
+  let lookup: ((url: string) => unknown) | undefined
+  const { runtime } = setup({
+    serverPlugin: (integrityFor) => {
+      lookup = integrityFor
+      return { name: 'p' }
+    },
+  })
+  await runtime.load(descriptor('c1'), './Counter')
+  expect(lookup!(`${descriptor('c1').base}remoteEntry.ssr.js`)).toEqual({
+    base: descriptor('c1').base,
+    integrity: descriptor('c1').ssr!.integrity,
+  })
+  expect(
+    lookup!('http://127.0.0.1:4110/b/other/remoteEntry.ssr.js')
+  ).toBeUndefined()
+})
+
+test('serverBlock: unverified builds, Node without getBuiltinModule, and a second React', () => {
+  const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+  const { runtime } = setup()
+  expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
+  expect(runtime.serverBlock(descriptor('c1', { ssr: null }))).toBe(
+    'unverified'
+  )
+
+  const old = setup({ canLoadServerCode: () => false }).runtime
+  expect(old.serverBlock(descriptor('c1'))).toBe('node')
+  expect(old.serverBlock(descriptor('c2'))).toBe('node')
+
+  // MF's process-wide share cache is first-writer-wins: another layer's React got there first.
+  ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+    share: { react: { useState: () => 'other' } },
+  }
+  expect(runtime.serverBlock(descriptor('c1'))).toBe('react')
+  expect(runtime.serverBlock(descriptor('c2'))).toBe('react')
+  ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+    share: { react: fakeReact },
+  }
+  expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
+  // Warned once per reason, not per render.
+  const lines = warn.mock.calls.map((c) => c.join(' '))
+  expect(
+    lines.filter((l) => /NF-028/.test(l) && /20\.16/.test(l))
+  ).toHaveLength(1)
+  expect(lines.filter((l) => /NF-028/.test(l) && /React/.test(l))).toHaveLength(
+    1
+  )
+})
+
+test('serverBlock: a host module that is stale in the share cache (dev server reload) blocks SSR', () => {
+  const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+  const context = { HostContext: {} }
+  const { runtime } = setup()
+  runtime.registerShared({
+    'components-context': { version: '1.0.0', module: context },
+  })
+  ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+    share: { 'default:components-context': context, react: fakeReact },
+  }
+  expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
+  // The cache kept an older instance of the same module (first writer wins).
+  ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+    share: { 'components-context': { HostContext: {} } },
+  }
+  expect(runtime.serverBlock(descriptor('c1'))).toBe('stale')
+  expect(runtime.serverBlock(descriptor('c2'))).toBe('stale')
+  const lines = warn.mock.calls.map((c) => c.join(' '))
+  expect(
+    lines.filter((l) => /NF-028.*components-context/.test(l))
+  ).toHaveLength(1)
+})
+
+test('every registration forces: MF may hold another build of the container from an earlier runtime copy', async () => {
+  const { runtime, instance } = setup()
+  await runtime.load(descriptor('c1'), './Counter')
+  expect(instance.registrations[0]).toEqual({
+    entry: descriptor('c1').manifest,
+    force: true,
+  })
+})
+
+describe('fix round 1', () => {
+  // An MF-like instance: loadRemote reads the registered entry, waits for a
+  // gate, then fills its module cache by container name (as MF does).
+  function gatedInstances() {
+    const instances: Array<{ gates: Map<string, () => void> }> = []
+    const gates = new Map<string, () => void>()
+    const create = () => {
+      let entry = ''
+      const moduleCache = new Map<
+        string,
+        { default: () => null; entry: string }
+      >()
+      const inst: FederationInstance & { gates: Map<string, () => void> } = {
+        gates,
+        registerRemotes(remotes) {
+          entry = remotes[0]!.entry
+          moduleCache.delete(remotes[0]!.name)
+        },
+        registerShared() {},
+        async loadRemote(id) {
+          const name = id.split('/')[0]!
+          const mine = entry
+          await new Promise<void>((resolve) => gates.set(mine, resolve))
+          if (!moduleCache.has(name)) {
+            moduleCache.set(name, { default: () => null, entry: mine })
+          }
+          return moduleCache.get(name) as never
+        },
+      }
+      instances.push(inst)
+      return inst
+    }
+    return { instances, gates, create }
+  }
+
+  test('R1: a timed-out load cannot leak its module into the next build (fresh MF instance)', async () => {
+    const { instances, gates, create } = gatedInstances()
+    const runtime = createComponentRuntime({
+      isServer: true,
+      react: fakeReact,
+      hostShared: {},
+      createInstance: create,
+      canLoadServerCode: () => true,
+      isTrusted: () => true,
+      loadTimeoutMs: 30,
+    })
+    const r1 = runtime.load(descriptor('r1'), './Counter')
+    await expect(r1).rejects.toMatchObject({ code: 'NF-029' })
+    const r2 = runtime.load(descriptor('r2'), './Counter')
+    await new Promise((r) => setTimeout(r, 5))
+    // The abandoned r1 load finishes first, then r2.
+    gates.get(descriptor('r1').manifest)!()
+    await new Promise((r) => setTimeout(r, 5))
+    gates.get(descriptor('r2').manifest)!()
+    expect(((await r2) as unknown as { entry: string }).entry).toBe(
+      descriptor('r2').manifest
+    )
+    expect(instances).toHaveLength(2)
+  })
+
+  test('R2: the share cache is checked again after the load (overlapping first loads of two layers)', async () => {
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    const { runtime } = setup()
+    const load = runtime.serverLoad(descriptor('c1'), './Counter')
+    // Another layer's React won the first-writer-wins cache meanwhile.
+    ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+      share: { react: otherReact },
+    }
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await load).toBeNull()
+  })
+
+  test('S1: a descriptor the server cannot trust never reaches the MF runtime', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const { runtime, instance } = setup({ isTrusted: () => false })
+    let evaluated = false
+    instance.loadRemote = async () => {
+      evaluated = true
+      return { default: () => null } as never
+    }
+    expect(runtime.serverBlock(descriptor('c1'))).toBe('untrusted')
+    expect(await runtime.serverLoad(descriptor('c1'), './Counter')).toBeNull()
+    await new Promise((r) => setTimeout(r, 5))
+    expect(evaluated).toBe(false)
+    expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(/NF-028/)
+  })
+
+  test('S1: a second descriptor for a loading base cannot replace its integrity map', async () => {
+    let lookup: ((url: string) => unknown) | undefined
+    const { runtime } = setup({
+      serverPlugin: (integrityFor) => {
+        lookup = integrityFor
+        return { name: 'p' }
+      },
+    })
+    const good = descriptor('c1')
+    const p = runtime.load(good, './Counter')
+    const forged = descriptor('c1', {
+      ssr: { integrity: { 'mf-manifest.json': 'sha384-EVIL' } },
+    })
+    await expect(runtime.load(forged, './Other')).rejects.toMatchObject({
+      code: 'NF-027',
+    })
+    await p
+    expect(lookup!(`${good.base}mf-manifest.json`)).toEqual({
+      base: good.base,
+      integrity: good.ssr!.integrity,
+    })
+  })
+
+  test('integrityFor picks the longest matching base', async () => {
+    let lookup: ((url: string) => unknown) | undefined
+    const { runtime } = setup({
+      serverPlugin: (integrityFor) => {
+        lookup = integrityFor
+        return { name: 'p' }
+      },
+    })
+    const outer = descriptor('x', {
+      base: 'http://h/b/',
+      manifest: 'http://h/b/m.json',
+    })
+    const inner = descriptor('y', {
+      base: 'http://h/b/y/',
+      manifest: 'http://h/b/y/m.json',
+      ssr: { integrity: { 'm.json': 'sha384-YYYY' } },
+    })
+    await runtime.load(outer, './Counter')
+    await runtime.load(inner, './Counter')
+    expect((lookup!('http://h/b/y/m.json') as { base: string }).base).toBe(
+      'http://h/b/y/'
+    )
+  })
+
+  test('server cooldown: a re-render with the same descriptor object reuses its result', async () => {
+    const { runtime, instance, tick } = setup()
+    instance.fail.add(descriptor('c1').manifest)
+    const d = descriptor('c1')
+    const first = runtime.serverLoad(d, './Counter')
+    expect(await first).toBeNull()
+    // Same render (no time passed): the same result.
+    expect(runtime.serverLoad(d, './Counter')).toBe(first)
+    tick(5000)
+    // A new render (a new descriptor object) retries after the cooldown.
+    expect(runtime.serverLoad(descriptor('c1'), './Counter')).not.toBe(first)
+  })
+
+  test('evict never drops the integrity map of a build that is still loading', async () => {
+    let lookup: ((url: string) => unknown) | undefined
+    const { runtime, instance } = setup({
+      serverPlugin: (integrityFor) => {
+        lookup = integrityFor
+        return { name: 'p' }
+      },
+    })
+    let release!: () => void
+    const original = instance.loadRemote.bind(instance)
+    instance.loadRemote = async (id) => {
+      if (instance.registrations.at(-1)!.entry === descriptor('c1').manifest) {
+        await new Promise<void>((r) => (release = r))
+      }
+      return original(id)
+    }
+    const slow = runtime.load(descriptor('c1', { maxBuilds: 1 }), './Counter')
+    void runtime.load(descriptor('c2', { maxBuilds: 1 }), './Counter')
+    await new Promise((r) => setTimeout(r, 5))
+    expect(lookup).toBeDefined()
+    expect(lookup!(`${descriptor('c1').base}mf-manifest.json`)).toBeDefined()
+    release()
+    await slow
+  })
+
+  test('maxBuilds below 1 is treated as 1 (no endless eviction)', async () => {
+    const { runtime } = setup()
+    await runtime.load(descriptor('c1', { maxBuilds: -3 }), './Counter')
+    await runtime.load(descriptor('c2', { maxBuilds: 0 }), './Counter')
+    expect(runtime.loadedBuilds('components')).toEqual(['c2'])
+  })
+
+  test('R3: browser retries import the remote entry under a new URL', async () => {
+    const imported: string[] = []
+    let plugin:
+      | { loadEntry: (a: { remoteInfo: { entry: string } }) => unknown }
+      | undefined
+    const instance = fakeInstance()
+    const runtime = createComponentRuntime({
+      isServer: false,
+      react: fakeReact,
+      hostShared: {},
+      createInstance: (options) => {
+        plugin = options.plugins[0] as typeof plugin
+        return instance
+      },
+      canLoadServerCode: () => false,
+      sleep: async () => {},
+      importEntry: async (url) => {
+        imported.push(url)
+        throw new Error('still down')
+      },
+    })
+    const entry = `${descriptor('c1').base}remoteEntry.js`
+    instance.loadRemote = async () => {
+      const result = await plugin!.loadEntry({ remoteInfo: { entry } })
+      if (result === undefined)
+        throw new Error('first attempt: MF default import failed')
+      return result as never
+    }
+    await expect(
+      runtime.load(descriptor('c1'), './Counter')
+    ).rejects.toBeDefined()
+    expect(imported).toEqual([
+      `${entry}?nf_retry=1`,
+      `${entry}?nf_retry=2`,
+      `${entry}?nf_retry=3`,
+    ])
+  })
+})
+
+describe('fix round 2', () => {
+  test('1: without getBuiltinModule the Node check runs first (isTrusted is never called)', () => {
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const { runtime } = setup({
+      canLoadServerCode: () => false,
+      isTrusted: () => {
+        throw new TypeError('process.getBuiltinModule is not a function')
+      },
+    })
+    expect(runtime.serverBlock(descriptor('c1'))).toBe('node')
+  })
+
+  test('2: extra shared modules are registered again on the instance created after a timeout', async () => {
+    const created: Fake[] = []
+    let n = 0
+    const runtime = createComponentRuntime({
+      isServer: true,
+      react: fakeReact,
+      hostShared: { react: { version: '19.3.1', module: fakeReact } },
+      createInstance: (options) => {
+        const inst = fakeInstance()
+        inst.shared.push(options.shared)
+        const first = n++ === 0
+        if (first) inst.loadRemote = () => new Promise(() => {})
+        created.push(inst)
+        return inst
+      },
+      canLoadServerCode: () => true,
+      isTrusted: () => true,
+      loadTimeoutMs: 20,
+    })
+    runtime.registerShared({
+      'components-context': { version: '1.0.0', module: {} },
+    })
+    await expect(
+      runtime.load(descriptor('c1'), './Counter')
+    ).rejects.toBeDefined()
+    await runtime.load(descriptor('c2'), './Counter')
+    expect(created).toHaveLength(2)
+    for (const inst of created) {
+      expect(inst.shared.flatMap((s) => Object.keys(s))).toContain(
+        'components-context'
+      )
+    }
+  })
+
+  test('8: a reused descriptor object retries a failed load after the cooldown (next request)', async () => {
+    const { runtime, instance, tick } = setup()
+    instance.fail.add(descriptor('c1').manifest)
+    const d = descriptor('c1')
+    const first = runtime.serverLoad(d, './Counter')
+    expect(await first).toBeNull()
+    // Same render (no time passed): same result.
+    expect(runtime.serverLoad(d, './Counter')).toBe(first)
+    instance.fail.clear()
+    tick(1000)
+    const again = runtime.serverLoad(d, './Counter')
+    expect(again).not.toBe(first)
+    expect(await again).toMatchObject({ entry: d.manifest })
+  })
+})

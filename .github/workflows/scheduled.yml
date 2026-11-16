@@ -1,0 +1,62 @@
+name: Scheduled compatibility
+
+# Non-blocking early warnings: newer Next.js and a newer @vitejs/plugin-rsc.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  next-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Fixtures on next@canary
+        run: |
+          for f in host-app host-pages; do
+            pnpm --filter "./test/fixtures/$f" add next@canary
+          done
+      - run: pnpm install --ignore-workspace --frozen-lockfile
+        working-directory: test/fixtures/island-remote-old-react
+      - run: pnpm build
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e:prod
+
+  plugin-rsc-next:
+    # Installs the newest @vitejs/plugin-rsc. Without NF_ALLOW_PLUGIN_RSC the
+    # build must fail with NF-025 (the pin guard works); with it, the suite
+    # tells maintainers whether the new release can be adopted.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @next-federation/vite add @vitejs/plugin-rsc@latest
+      - run: pnpm build
+      - name: Pin guard reports NF-025
+        run: |
+          if pnpm --filter island-remote build 2>&1 | tee build.log; then
+            grep -q "NF-025" build.log || { echo "expected NF-025 or the pin is already latest"; }
+          else
+            grep -q "NF-025" build.log
+          fi
+      - run: pnpm install --ignore-workspace --frozen-lockfile
+        working-directory: test/fixtures/island-remote-old-react
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e:prod
+        env:
+          NF_ALLOW_PLUGIN_RSC: '1'

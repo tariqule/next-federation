@@ -1,0 +1,30 @@
+import type { AppProps } from 'next/app'
+import Link from 'next/link'
+import { useRouter } from 'next/router'
+import { CartProvider, useCart } from 'example-cart-context'
+import '../styles.css'
+
+function CartCount() {
+  const { items } = useCart()
+  return <span className="cart-count">Cart: {items.length}</span>
+}
+
+export default function App({ Component, pageProps }: AppProps) {
+  const { locale, asPath } = useRouter()
+  const other = locale === 'fr' ? 'en' : 'fr'
+  return (
+    // Host state the remote CartButton reads (Mode A shares context).
+    <CartProvider>
+      <header>
+        <strong>Pages Router host</strong>
+        <Link href="/">Home</Link>
+        <Link href="/orders">My orders</Link>
+        <Link href={asPath} locale={other}>
+          {other === 'fr' ? 'Français' : 'English'}
+        </Link>
+        <CartCount />
+      </header>
+      <Component {...pageProps} />
+    </CartProvider>
+  )
+}

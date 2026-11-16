@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "isolatedDeclarations": false,
+    "emitDeclarationOnly": true,
+    "outDir": "./node_modules/.cache/tsc-tools",
+    "types": ["node", "@rstest/core/globals"]
+  },
+  "include": ["rstest.config.ts", "scripts/**/*.ts", "scripts/**/*.mjs"]
+}

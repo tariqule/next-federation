@@ -1,0 +1,127 @@
+'use client'
+// Mode A: Module Federation client components rendered inside the host's
+// React tree. One module for both environments: Next compiles it in the SSR
+// layer on the server and in the browser layer on the client, so the React it
+// imports is the React that renders it in each environment, and that React is
+// what remotes get (they are built with React as host-provided).
+import * as MFRuntime from '@module-federation/runtime'
+import { createInstance } from '@module-federation/runtime'
+import { parseComponentDescriptorFile } from '@next-federation/protocol'
+import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import { serverLoader } from '@next-federation/react/components/server-loader'
+import * as React from 'react'
+import * as ReactDOM from 'react-dom'
+import * as ReactDOMClient from 'react-dom/client'
+import * as JsxRuntime from 'react/jsx-runtime'
+import { createBindings } from './render.tsx'
+import type { Bindings } from './render.tsx'
+import { createComponentRuntime } from './runtime.ts'
+import type {
+  ComponentEvent,
+  FederationInstance,
+  RemoteModule,
+  SharedModules,
+} from './runtime.ts'
+
+export type { RemoteComponentDescriptor }
+export type { ComponentEvent, RemoteModule, SharedModules }
+export type {
+  RemoteComponentOptions,
+  RemoteComponentProps,
+  RemoteComponentType,
+} from './render.tsx'
+
+/** Name of the DOM event (on `document`) for every remote component load and failure. */
+export const COMPONENT_EVENT = 'nf:component'
+
+const isServer = typeof window === 'undefined'
+
+function emit(event: ComponentEvent): void {
+  if (typeof document === 'undefined') return
+  document.dispatchEvent(new CustomEvent(COMPONENT_EVENT, { detail: event }))
+}
+
+const runtime = createComponentRuntime({
+  isServer,
+  react: React,
+  hostShared: {
+    react: { version: React.version, module: React },
+    'react/jsx-runtime': { version: React.version, module: JsxRuntime },
+    'react-dom': { version: ReactDOM.version, module: ReactDOM },
+    'react-dom/client': { version: ReactDOM.version, module: ReactDOMClient },
+  },
+  createInstance: (options) =>
+    createInstance(
+      options as unknown as Parameters<typeof createInstance>[0]
+    ) as unknown as FederationInstance,
+  serverPlugin: serverLoader
+    ? (integrityFor) =>
+        serverLoader!.createServerEntryPlugin({
+          integrityFor,
+          hostModules: { '@module-federation/runtime': MFRuntime },
+        })
+    : undefined,
+  canLoadServerCode: () => serverLoader?.canLoadServerCode() ?? false,
+  isTrusted: (descriptor) =>
+    serverLoader?.isTrustedDescriptor(descriptor) ?? false,
+  // The comments keep host bundlers from resolving or bundling the remote URL.
+  importEntry: (url) =>
+    import(
+      /* webpackIgnore: true */ /* turbopackIgnore: true */ /* @vite-ignore */ url
+    ),
+  emit,
+})
+
+const bindings = createBindings({ runtime, isServer })
+
+/**
+ * Loads an exposed module of one remote build (cached per build). On the
+ * server it is evaluated only for a descriptor verified in this process.
+ */
+export const loadRemoteModule: Bindings['loadRemoteModule'] =
+  bindings.loadRemoteModule
+
+/**
+ * Starts loading a remote component's module ahead of rendering, for example
+ * in `getServerSideProps`, so the first render after a deploy is inline HTML.
+ * Never rejects.
+ */
+export const preloadRemoteComponent: Bindings['preloadRemoteComponent'] =
+  bindings.preloadRemoteComponent
+
+/**
+ * Binds an exposed client component of a components remote. Call it in a
+ * `'use client'` module of the host. Pass it the descriptor from
+ * `getComponentDescriptor` (or `fetchDescriptorInBrowser` in an SPA) only.
+ */
+export const createRemoteComponent: Bindings['createRemoteComponent'] =
+  bindings.createRemoteComponent
+
+/**
+ * Fetches a remote's current build descriptor in the browser (SPA hosts):
+ * no server rendering, so it is never trusted to run server code. null when
+ * the remote cannot be reached.
+ */
+export async function fetchDescriptorInBrowser(
+  url: string,
+  options: { remote?: string; maxBuilds?: number } = {}
+): Promise<RemoteComponentDescriptor | null> {
+  try {
+    const res = await fetch(url, { credentials: 'omit', cache: 'no-store' })
+    if (!res.ok) return null
+    const file = parseComponentDescriptorFile(await res.json())
+    if (!file) return null
+    return {
+      remote: options.remote ?? file.name,
+      name: file.name,
+      buildId: file.buildId,
+      base: file.base,
+      manifest: file.manifest,
+      ssr: null,
+      // At least one build: 0 or a negative value would never keep any.
+      maxBuilds: Math.max(1, Math.floor(options.maxBuilds ?? 5) || 1),
+    }
+  } catch {
+    return null
+  }
+}

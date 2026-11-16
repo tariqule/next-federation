@@ -1,0 +1,16 @@
+# Add files here to ignore them from prettier formatting
+
+/dist
+/coverage
+*.md
+!README.md
+pnpm-lock.yaml
+**/dist/**
+**/.next/**
+**/.next-cc/**
+**/test-results/**
+**/playwright-report/**
+.superpowers
+**/next-env.d.ts
+# Spike-era code keeps its own formatting until it is removed (Task 25).
+.changeset/*.md

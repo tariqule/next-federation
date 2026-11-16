@@ -1,0 +1,60 @@
+{
+  "name": "@next-federation/island",
+  "version": "0.0.0",
+  "description": "Remote-side runtime for next-federation islands: Link, navigation bridge, getIdentity and the browser bootstrap.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tariqule/next-federation.git",
+    "directory": "packages/island"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.client.js",
+  "types": "./dist/index.client.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.client.d.ts",
+      "react-server": "./dist/index.server.js",
+      "default": "./dist/index.client.js"
+    },
+    "./bootstrap": {
+      "types": "./dist/bootstrap/index.d.ts",
+      "default": "./dist/bootstrap/index.js"
+    },
+    "./share-scope": {
+      "types": "./dist/bootstrap/share-scope.d.ts",
+      "default": "./dist/bootstrap/share-scope.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@next-federation/protocol": "workspace:*",
+    "@next-federation/sdk": "workspace:*",
+    "@next-federation/server": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "scripts": {
+    "build": "tsdown"
+  }
+}

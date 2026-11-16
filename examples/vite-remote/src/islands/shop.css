@@ -1,0 +1,25 @@
+/* Island CSS ships in the envelope. There is no CSS isolation: prefix your
+   class names so they cannot clash with the host's. */
+.shop-panel {
+  border: 1px solid #c8c8d0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  max-width: 360px;
+}
+.shop-panel h2 {
+  margin: 0 0 4px;
+}
+.shop-quantity {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.shop-build {
+  display: block;
+  margin-top: 8px;
+  color: #777;
+}
+.shop-links a {
+  margin-right: 12px;
+}

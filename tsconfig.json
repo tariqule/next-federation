@@ -1,0 +1,32 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.tools.json"
+    },
+    {
+      "path": "./packages/sdk"
+    },
+    {
+      "path": "./packages/protocol"
+    },
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/react"
+    },
+    {
+      "path": "./packages/server"
+    },
+    {
+      "path": "./packages/island"
+    },
+    {
+      "path": "./packages/vite"
+    },
+    {
+      "path": "./packages/next"
+    }
+  ]
+}

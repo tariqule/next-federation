@@ -1,0 +1,366 @@
+import { isNFError } from '@next-federation/sdk'
+import { eventFor, fetchIsland, islandTags } from '../src/index.ts'
+import type { IslandResult, IslandTarget } from '../src/index.ts'
+
+const target: IslandTarget = {
+  remote: 'shop',
+  origin: 'https://shop.example.com',
+  allowedOrigins: ['https://shop.example.com', 'https://cdn.example.com'],
+  timeoutMs: 3000,
+  retries: 1,
+}
+
+const envelope = (over: Record<string, unknown> = {}) => ({
+  protocolVersion: 1,
+  remote: 'shop',
+  buildId: 'b1',
+  mode: 'production',
+  html: '<p>hi</p>',
+  rscPayload: '0:"x"',
+  css: ['https://shop.example.com/a.css'],
+  bootstrap: 'https://shop.example.com/boot.js',
+  reactVersion: '19.2.0',
+  idPlaceholder: 'nfph0',
+  ...over,
+})
+
+const json = (body: unknown, status = 200) =>
+  new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+    status,
+  })
+
+type Fetch = typeof fetch
+const asFetch = (fn: unknown): Fetch => fn as Fetch
+
+/** First recorded call of a mock: [url, init]. */
+const firstCall = (f: unknown): [string, RequestInit] => {
+  const call = (f as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]
+  if (!call) throw new Error('fetch was not called')
+  return call
+}
+
+/** A fetch that never answers on its own; rejects with AbortError when the signal aborts. */
+function hanging(): Fetch {
+  return asFetch(
+    (_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError'))
+        )
+      })
+  )
+}
+
+beforeEach(() => {
+  rs.useFakeTimers()
+})
+afterEach(() => {
+  rs.useRealTimers()
+})
+
+test('returns the envelope on 200', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r.ok).toBe(true)
+  if (r.ok) {
+    expect(r.envelope.remote).toBe('shop')
+    expect(r.meta.attempts).toBe(1)
+    expect(r.meta.bytes).toBe(JSON.stringify(envelope()).length)
+  }
+  expect(firstCall(f)[0]).toMatch(
+    /^https:\/\/shop\.example\.com\/_nf\/island\/Cart\?p=/
+  )
+})
+
+test('sends no cookies and omits credentials', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  await fetchIsland(target, { island: 'Cart', token: 't', fetch: asFetch(f) })
+  const init = firstCall(f)[1]
+  expect(init.credentials).toBe('omit')
+  const headers = Object.keys(init.headers as Record<string, string>).map((h) =>
+    h.toLowerCase()
+  )
+  expect(headers).not.toContain('cookie')
+  expect(headers).toContain('authorization')
+})
+
+test('init cannot override credentials', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  await fetchIsland(target, {
+    island: 'Cart',
+    fetch: asFetch(f),
+    init: { credentials: 'include' },
+  })
+  expect(firstCall(f)[1].credentials).toBe('omit')
+})
+
+test('POSTs large props with a body', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  await fetchIsland(target, {
+    island: 'Cart',
+    props: { big: 'x'.repeat(5000) },
+    fetch: asFetch(f),
+  })
+  const init = firstCall(f)[1]
+  expect(init.method).toBe('POST')
+  expect(typeof init.body).toBe('string')
+})
+
+test('retries once on 503 then succeeds', async () => {
+  const f = rs
+    .fn()
+    .mockResolvedValueOnce(json('', 503))
+    .mockResolvedValueOnce(json(envelope()))
+  const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  await rs.advanceTimersByTimeAsync(100)
+  const r = await p
+  expect(r.ok).toBe(true)
+  expect(r.meta.attempts).toBe(2)
+  expect(f).toHaveBeenCalledTimes(2)
+})
+
+test('retries once on a network TypeError', async () => {
+  const f = rs
+    .fn()
+    .mockRejectedValueOnce(new TypeError('fetch failed'))
+    .mockResolvedValueOnce(json(envelope()))
+  const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  await rs.advanceTimersByTimeAsync(100)
+  const r = await p
+  expect(r.ok).toBe(true)
+  expect(r.meta.attempts).toBe(2)
+})
+
+test('gives up after retries are exhausted with NF-007', async () => {
+  const f = rs.fn(async () => json('', 503))
+  const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  await rs.advanceTimersByTimeAsync(100)
+  const r = await p
+  expect(r).toMatchObject({ ok: false, code: 'NF-007', status: 503 })
+  expect(r.meta.attempts).toBe(2)
+})
+
+test('does not retry 404; returns NF-007 with status 404', async () => {
+  const f = rs.fn(async () => json('', 404))
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-007', status: 404 })
+  expect(f).toHaveBeenCalledTimes(1)
+})
+
+test('a remote slower than the budget returns NF-008 at ~3000 ms and is not retried', async () => {
+  const f = rs.fn(hanging())
+  const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  await rs.advanceTimersByTimeAsync(2999)
+  let settled = false
+  void p.then(() => (settled = true))
+  await rs.advanceTimersByTimeAsync(0)
+  expect(settled).toBe(false)
+  await rs.advanceTimersByTimeAsync(1)
+  const r = await p
+  expect(r).toMatchObject({ ok: false, code: 'NF-008' })
+  expect(r.meta.ms).toBeGreaterThanOrEqual(3000)
+  expect(f).toHaveBeenCalledTimes(1)
+})
+
+test('budget is shared across attempts', async () => {
+  const f = rs.fn(async () => {
+    await new Promise((res) => setTimeout(res, 2900))
+    return json('', 503)
+  })
+  const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  await rs.advanceTimersByTimeAsync(3500)
+  const r = await p
+  expect(f).toHaveBeenCalledTimes(1)
+  expect(r).toMatchObject({ ok: false, code: 'NF-007', status: 503 })
+  expect(r.meta.attempts).toBe(1)
+})
+
+test('the second attempt only gets the remaining budget', async () => {
+  const f = rs
+    .fn()
+    .mockImplementationOnce(async () => {
+      await new Promise((res) => setTimeout(res, 1000))
+      return json('', 503)
+    })
+    .mockImplementationOnce(hanging())
+  const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  await rs.advanceTimersByTimeAsync(1000 + 100 + 1899)
+  let settled = false
+  void p.then(() => (settled = true))
+  await rs.advanceTimersByTimeAsync(0)
+  expect(settled).toBe(false)
+  await rs.advanceTimersByTimeAsync(1)
+  expect(await p).toMatchObject({ ok: false, code: 'NF-008' })
+})
+
+test('invalid JSON body is NF-004', async () => {
+  const f = rs.fn(async () => json('not json'))
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-004' })
+})
+
+test('protocolVersion 2 is NF-003', async () => {
+  const f = rs.fn(async () => json(envelope({ protocolVersion: 2 })))
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-003' })
+})
+
+test('bootstrap on a foreign origin is NF-005', async () => {
+  const f = rs.fn(async () =>
+    json(envelope({ bootstrap: 'https://evil.example.net/boot.js' }))
+  )
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-005' })
+})
+
+test('css on a foreign origin is NF-005', async () => {
+  const f = rs.fn(async () =>
+    json(envelope({ css: ['https://evil.example.net/a.css'] }))
+  )
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-005' })
+})
+
+test('css on a configured assetOrigin is accepted', async () => {
+  const f = rs.fn(async () =>
+    json(envelope({ css: ['https://cdn.example.com/a.css'] }))
+  )
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r.ok).toBe(true)
+})
+
+test('envelope.remote that differs from the target is NF-004', async () => {
+  const f = rs.fn(async () => json(envelope({ remote: 'other' })))
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-004' })
+})
+
+test('passes init.next through to fetch untouched', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  const next = { revalidate: 60, tags: ['nf:shop'] }
+  await fetchIsland(target, {
+    island: 'Cart',
+    fetch: asFetch(f),
+    init: { next },
+  })
+  expect((firstCall(f)[1] as { next?: unknown }).next).toBe(next)
+})
+
+test('a non-network error thrown by fetch is rethrown', async () => {
+  const control = Object.assign(new Error('NEXT_PRERENDER_INTERRUPTED'), {
+    digest: 'NEXT_PRERENDER_INTERRUPTED',
+  })
+  const f = rs.fn(async () => {
+    throw control
+  })
+  await expect(
+    fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  ).rejects.toBe(control)
+})
+
+test('caller mistakes throw: bad island name NF-002, bad props NF-009', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  const a = await fetchIsland(target, {
+    island: 'bad name',
+    fetch: asFetch(f),
+  }).catch((e: unknown) => e)
+  expect(isNFError(a, 'NF-002')).toBe(true)
+  const b = await fetchIsland(target, {
+    island: 'Cart',
+    props: { fn: () => 1 },
+    fetch: asFetch(f),
+  }).catch((e: unknown) => e)
+  expect(isNFError(b, 'NF-009')).toBe(true)
+  expect(f).not.toHaveBeenCalled()
+})
+
+test('eventFor maps ok to island:fetch and failure to island:error', () => {
+  const okResult = {
+    ok: true,
+    envelope: envelope(),
+    meta: { ms: 12, bytes: 99, attempts: 1 },
+  } as unknown as IslandResult
+  expect(eventFor(target, 'Cart', okResult)).toEqual({
+    type: 'island:fetch',
+    remote: 'shop',
+    island: 'Cart',
+    ms: 12,
+    bytes: 99,
+    attempts: 1,
+  })
+  const bad: IslandResult = {
+    ok: false,
+    code: 'NF-007',
+    status: 404,
+    meta: { ms: 5, bytes: 0, attempts: 1 },
+  }
+  expect(eventFor(target, 'Cart', bad)).toEqual({
+    type: 'island:error',
+    remote: 'shop',
+    island: 'Cart',
+    ms: 5,
+    attempts: 1,
+    code: 'NF-007',
+    status: 404,
+  })
+})
+
+test('islandTags returns remote and island tags', () => {
+  expect(islandTags('shop')).toEqual(['nf:shop'])
+  expect(islandTags('shop', 'Cart')).toEqual(['nf:shop', 'nf:shop:Cart'])
+})
+
+test('forces redirect: error', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(firstCall(f)[1].redirect).toBe('error')
+})
+
+test('init cannot override redirect', async () => {
+  const f = rs.fn(async () => json(envelope()))
+  await fetchIsland(target, {
+    island: 'Cart',
+    fetch: asFetch(f),
+    init: { redirect: 'follow' },
+  })
+  expect(firstCall(f)[1].redirect).toBe('error')
+})
+
+test('a redirect failure is NF-007 and is not retried', async () => {
+  const f = rs.fn(async () => {
+    throw new TypeError('fetch failed', {
+      cause: new Error('unexpected redirect'),
+    })
+  })
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-007' })
+  expect(r.meta.attempts).toBe(1)
+  expect(f).toHaveBeenCalledTimes(1)
+})
+
+test('a browser-style redirect TypeError is also not retried', async () => {
+  const f = rs.fn(async () => {
+    throw new TypeError('Failed to fetch: redirect mode is set to error')
+  })
+  const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+  expect(r).toMatchObject({ ok: false, code: 'NF-007' })
+  expect(f).toHaveBeenCalledTimes(1)
+})
+
+test('the token never leaks into results or events; cookie headers are dropped', async () => {
+  const f = rs.fn(async () => json('boom', 404))
+  const r = await fetchIsland(target, {
+    island: 'Cart',
+    token: 'SECRET',
+    fetch: asFetch(f),
+    init: { headers: { cookie: 'sid=abc' } },
+  })
+  expect(r.ok).toBe(false)
+  expect(JSON.stringify(r)).not.toContain('SECRET')
+  expect(JSON.stringify(eventFor(target, 'Cart', r))).not.toContain('SECRET')
+  const headers = firstCall(f)[1].headers as Record<string, string>
+  expect(Object.keys(headers).map((h) => h.toLowerCase())).not.toContain(
+    'cookie'
+  )
+  expect(JSON.stringify(headers)).not.toContain('sid=abc')
+})

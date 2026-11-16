@@ -1,0 +1,30 @@
+{
+  "allow": [
+    "host-hostess",
+    "hostesses-hosts",
+    "spa",
+    "spas",
+    "failure",
+    "failures",
+    "failed",
+    "invalid",
+    "hook",
+    "rejects",
+    "hole",
+    "just",
+    "fires",
+    "execution",
+    "executes",
+    "destroy",
+    "destroys",
+    "swallows",
+    "remains",
+    "easy",
+    "died",
+    "crash",
+    "hooks",
+    "reject",
+    "slope",
+    "dies"
+  ]
+}

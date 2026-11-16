@@ -1,0 +1,14 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0 24px 24px;
+}
+header {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid #ddd;
+}
+.cart-count {
+  margin-left: auto;
+}
