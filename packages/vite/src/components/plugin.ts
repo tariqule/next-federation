@@ -8,6 +8,7 @@ import {
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import type { Plugin, PluginOption, UserConfig } from 'vite'
+import type { ComponentsBuildInfo } from '@next-federation/server/node'
 import {
   collectBrowserAssets,
   collectServerIntegrity,
@@ -24,13 +25,7 @@ import {
 } from './version.ts'
 
 /** Written next to `client/` in every components build (nf-serve reads it). */
-export type ComponentsBuildInfo = {
-  kind: 'components'
-  name: string
-  buildId: string
-  builtAt: number
-  base: string
-}
+export type { ComponentsBuildInfo }
 
 const VIRTUAL_ENTRY = 'virtual:next-federation/components-entry'
 const RESOLVED_ENTRY = `\0${VIRTUAL_ENTRY}`
