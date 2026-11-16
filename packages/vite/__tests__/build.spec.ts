@@ -141,6 +141,13 @@ test('writes nf-build.json with the pinned base', () => {
   expect(typeof info.builtAt).toBe('number')
 })
 
+test('marks the build as ES modules so nf-serve loads it on Node 20', async () => {
+  // Node < 22 treats a .js file as CommonJS unless the nearest package.json
+  // says "type": "module", e.g. when only the build folder is deployed.
+  const pkg = JSON.parse(await readFile(join(out, 'package.json'), 'utf8'))
+  expect(pkg).toEqual({ type: 'module' })
+})
+
 test('the client entry keeps its mountIsland export', () => {
   expect(entryChunk).toMatch(/export\s*\{[^}]*mountIsland/)
 })

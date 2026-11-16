@@ -121,8 +121,16 @@ export function createIslandBootstrap(
       const { onError } = options
       // Without onError, React's default reporting stays in place so render
       // errors are never silent.
+      // A root destroyed before it hydrated (the host unmounted it while it
+      // was loading) gets a recoverable "early update" error from its own
+      // unmount: not an island failure, so it is not reported.
       const report = (kind: IslandErrorKind) =>
-        onError ? (error: unknown) => onError(error, kind) : undefined
+        onError
+          ? (error: unknown) => {
+              if (destroyed && kind === 'recoverable') return
+              onError(error, kind)
+            }
+          : undefined
       let destroyed = false
       let isHydrated = false
       // Newest payload sent before hydration finished. Rendering it earlier
