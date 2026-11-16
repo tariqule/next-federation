@@ -20,5 +20,7 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # Major action updates arrive as separate PRs, to review one at a time.
       actions:
         patterns: ['*']
+        update-types: [minor, patch]
