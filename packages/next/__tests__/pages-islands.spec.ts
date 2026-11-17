@@ -5,6 +5,7 @@ import { logger } from '@next-federation/sdk'
 import type { GetServerSidePropsContext, GetStaticPropsContext } from 'next'
 import { createPagesIslands } from '../src/pages/create-pages-islands.ts'
 import type { PagesIdentity } from '../src/pages/api-handler.ts'
+import { clearLastGood } from '../src/server/last-good.ts'
 
 const envelope = {
   protocolVersion: 1,
@@ -88,6 +89,7 @@ beforeEach(() => {
     seen.push({ url, headers: init.headers as Record<string, string>, init })
     return Promise.resolve(respond())
   }) as typeof fetch
+  clearLastGood()
 })
 afterEach(() => {
   globalThis.fetch = realFetch
@@ -247,6 +249,77 @@ test('anonymous private island and failed fetch both give envelope null', async 
   expect(String(error.mock.calls[0]![1])).toContain('Banner')
 })
 
+describe('stale-if-error (ISR): a failed regeneration keeps the last good envelope', () => {
+  const T0 = 1_800_000_000_000
+  let now = T0
+  beforeEach(() => {
+    now = T0
+    rs.spyOn(Date, 'now').mockImplementation(() => now)
+  })
+
+  test('the last good envelope is returned with `stale: true`, and the failure is logged with its code', async () => {
+    const error = rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const { getIslandProps } = createPagesIslands(federation(false))
+    const spec = { remote: 'a', island: 'Banner', props: { text: 'hi' } }
+    const good = await getIslandProps(ssg(), spec)
+    expect(good.envelope).toEqual(envelope)
+    expect('stale' in good).toBe(false)
+    respond = () => new Response('down', { status: 503 })
+    now = T0 + 90_000
+    const kept = await getIslandProps(ssg(), spec)
+    expect(kept).toEqual({ ...good, stale: true })
+    expect(JSON.parse(JSON.stringify(kept))).toEqual(kept)
+    expect(events.map((e) => e.type)).toEqual(['island:fetch', 'island:error'])
+    expect(error).toHaveBeenCalledWith(
+      'NF-007',
+      expect.stringMatching(
+        /failed at https:\/\/a\.example\.com\/_nf\/island\/Banner \(HTTP 503\); rendering its last good envelope \(90 s old\)/
+      )
+    )
+    // Back up: fresh again, no flag.
+    respond = () => new Response(JSON.stringify(envelope))
+    expect(await getIslandProps(ssg(), spec)).toEqual(good)
+  })
+
+  test('kept at most an hour (or twice islands.revalidate); then envelope null', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const { getIslandProps } = createPagesIslands(federation(false))
+    const spec = { remote: 'a', island: 'Banner' }
+    await getIslandProps(ssg(), spec)
+    respond = () => new Response('down', { status: 503 })
+    now = T0 + 3600_000
+    expect((await getIslandProps(ssg(), spec)).envelope).toEqual(envelope)
+    now = T0 + 3601_000
+    expect(await getIslandProps(ssg(), spec)).toMatchObject({
+      envelope: null,
+    })
+  })
+
+  test('another locale (host context) or props is a separate entry', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const { getIslandProps } = createPagesIslands(federation(false))
+    await getIslandProps(ssg(), { remote: 'a', island: 'Banner' })
+    respond = () => new Response('down', { status: 503 })
+    expect(
+      (
+        await getIslandProps(ssg({ locale: 'fr' }), {
+          remote: 'a',
+          island: 'Banner',
+        })
+      ).envelope
+    ).toBeNull()
+    expect(
+      (
+        await getIslandProps(ssg(), {
+          remote: 'a',
+          island: 'Banner',
+          props: { text: 'x' },
+        })
+      ).envelope
+    ).toBeNull()
+  })
+})
+
 test('the result survives JSON.stringify → parse unchanged', async () => {
   const { getIslandProps } = createPagesIslands(federation(), {
     getIdentity: () => ({ sub: 'user-1' }),
@@ -291,10 +364,11 @@ test('D2: a public island on a host with getIdentity carries a null-key token, r
   }
   expect(getIdentity).not.toHaveBeenCalled()
   expect(seen.every((s) => s.headers.authorization === undefined)).toBe(true)
-  // A failed public island has nothing to act on: no token.
+  // A failed public island (never fetched in this process, so no last good
+  // envelope) has nothing to act on: no token.
   respond = () => new Response('nope', { status: 500 })
   expect(
-    (await getIslandProps(ssr(), { remote: 'a', island: 'Banner' })).token
+    (await getIslandProps(ssr(), { remote: 'a', island: 'Other' })).token
   ).toBeNull()
 })
 

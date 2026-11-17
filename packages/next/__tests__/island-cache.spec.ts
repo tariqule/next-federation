@@ -42,8 +42,17 @@ type Call = [string, RequestInit & { next?: unknown }]
 let calls: Call[] = []
 let respond: () => Response | Promise<Response>
 const realFetch = globalThis.fetch
-// Next 16's built-in 'seconds' values, inlined so a host cannot redefine them.
-const FAILURE_LIFE = { stale: 30, revalidate: 1, expire: 60 }
+// A failed island: retried within 5 s, yet still part of the static shell.
+// Next 16 leaves an entry out of a static prerender (a dynamic hole) when its
+// `revalidate` is 0 or its `expire` is under 300 s; a static shell whose only
+// changing content is such a hole gets `revalidate: false` and is never
+// regenerated again (B1). Inline, so a host cannot redefine it in next.config.
+const FAILURE_LIFE = { stale: 30, revalidate: 5, expire: 600 }
+// Next's prerender thresholds (next/dist/server/use-cache/constants.js).
+const MIN_PRERENDERABLE_EXPIRE = 300
+// NF-039 only: a render deliberately left out of the static shell (Next's
+// 'seconds' values, inlined).
+const DEFER_LIFE = { stale: 30, revalidate: 1, expire: 60 }
 
 beforeEach(() => {
   calls = []
@@ -111,6 +120,13 @@ describe('cache-components', () => {
     })
   })
 
+  test('cc: the failure profile keeps the page static: a non-zero revalidate and an expire Next prerenders', () => {
+    expect(FAILURE_LIFE.revalidate).toBeGreaterThan(0)
+    expect(FAILURE_LIFE.expire).toBeGreaterThanOrEqual(
+      2 * MIN_PRERENDERABLE_EXPIRE
+    )
+  })
+
   test('cc: a failed result is returned, not thrown, under the inline short failure profile', async () => {
     respond = () => new Response('nope', { status: 503 })
     const r = await ccGet(target, 'Banner', '{}', '{}', 60)
@@ -154,11 +170,16 @@ describe('cache-components', () => {
   })
 })
 
-test('both implementations mark the result of the run that fetched, once', async () => {
+test('both implementations mark the result of the run that fetched, once, with the time it ran', async () => {
   const { takeFresh } = await import('../src/server/fresh-mark.ts')
   for (const get of [legacyGet, ccGet]) {
+    const before = Date.now()
     const r = await get(target, 'Banner', '{}', '{}', 60)
     expect(typeof r.fresh).toBe('string')
+    // Read inside the cached function (the caller never reads the clock):
+    // bounds how long a last good envelope may stand in for a failure.
+    expect(r.at).toBeGreaterThanOrEqual(before)
+    expect(r.at).toBeLessThanOrEqual(Date.now())
     expect(takeFresh(r)).toBe(true)
     // A cache hit hands back the same stored mark: no longer fresh.
     expect(takeFresh(r)).toBe(false)
@@ -230,7 +251,10 @@ describe('skipStaticShellUntilReady (remote components on a static cacheComponen
   test('cc, next start: a build the server has not loaded yet keeps this render out of the static shell, and says so', async () => {
     const warn = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
     await ccSkip(d())
-    expect(cacheLife).toHaveBeenCalledWith(FAILURE_LIFE)
+    // A deliberate dynamic hole (the page's descriptor entries stay in the
+    // shell, so the page still regenerates), not the failure profile.
+    expect(cacheLife).toHaveBeenCalledWith(DEFER_LIFE)
+    expect(cacheLife).not.toHaveBeenCalledWith(FAILURE_LIFE)
     expect(warn).toHaveBeenCalledWith(
       'NF-039',
       `not-loaded:${base}`,

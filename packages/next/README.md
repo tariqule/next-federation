@@ -35,13 +35,17 @@ chosen at build time because `'use cache'` only compiles with `cacheComponents`:
 - **cache-components**: a `'use cache'` function with
   `cacheLife({ stale: 300, revalidate, expire: max(3600, 2 × revalidate) })` and the same tags.
   A failure is returned, never thrown (Next fails a build-time prerender on any error raised
-  inside `'use cache'`), and switches the entry to a short inline profile
-  (`{ stale: 30, revalidate: 1, expire: 60 }`, Next 16's built-in `'seconds'` values, inlined so a
-  host's `cacheLife.seconds` cannot change it). Next keeps short-lived entries out of the static
-  shell, so a failed island becomes a dynamic hole inside its Suspense boundary (the route shows
-  as `◐`) and is retried within about a second (a failure may be served stale once while the
-  background refresh runs); a working island stays cached. An island must therefore sit inside
-  `<Suspense>` (`RemoteIsland` renders one, except a private island with `blocking`).
+  inside `'use cache'`), and switches the entry to an inline failure profile
+  (`{ stale: 30, revalidate: 5, expire: 600 }`, inlined so a host's `cacheLife` config cannot change
+  it). Its `expire` keeps it in the static shell: the page stays static and is regenerated within
+  about 5 seconds. (An entry with `expire` under 5 minutes would be a dynamic hole, and a static
+  shell left with no changing content gets `revalidate: false` from Next and is never regenerated.)
+  `RemoteIsland` renders its own `<Suspense>`, except a private island with `blocking`.
+- **Stale-if-error** (both models, and `getIslandProps`): a failed public fetch renders the last good
+  envelope this server process fetched for the same remote, island, props and host context, kept
+  for at least an hour or twice `revalidate` (at most 500 envelopes, 50 MiB). The failure is still
+  logged with its code and emitted as `island:error`. Without one, the fallback renders. Private
+  islands (`blocking` or not) and `dynamic` islands are never served stale.
 
 ## `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router)
 
@@ -79,12 +83,11 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(f
   envelope, for an anonymous visitor on a private island, and after an uncaught island error. When the
   island's code cannot load in the browser (`NF-011`: remote down, build retired), an `errorFallback`
   you passed replaces the island; without one, the server HTML stays, not interactive.
-- A `RemoteIsland` inside your own `'use cache'` scope (with `cacheComponents`): a failed island also
-  applies the short failure profile to that enclosing scope (`cacheLife()` keeps the shortest call in a
-  scope, even against an explicit long `cacheLife` there), so the failure is not cached for the scope's
-  lifetime; the entry becomes a dynamic hole and is retried. Put such a cached component inside
-  `<Suspense>`, or a build whose remote is down fails with Next's "uncached data outside `<Suspense>`"
-  error.
+- A `RemoteIsland` inside your own `'use cache'` scope (with `cacheComponents`): a failed island (or one
+  showing its last good envelope) also applies the failure profile to that enclosing scope (`cacheLife()`
+  keeps the shortest call in a scope, even against an explicit long `cacheLife` there), so the failure is
+  retried within seconds instead of being cached for the scope's lifetime. Put such a cached component
+  inside `<Suspense>`.
 - `preloadIsland(spec)` starts the load early (e.g. in a layout); a `RemoteIsland` with an equal spec in the
   same request reuses it. It never throws or rejects: it swallows errors, and the matching `RemoteIsland`
   render rethrows them. A Next control-flow error (e.g. a `redirect()` inside `getIdentity`) is therefore
@@ -120,16 +123,17 @@ export default function Product({ cart }: { cart: IslandProps }) {
 }
 ```
 
-- `getIslandProps(ctx, spec)` returns `{ remote, envelope, host, token }`, JSON-serialisable (no `undefined`), to
-  spread into `RemoteIsland`. `host` is `{ basePath, locale }`; `locale` is `''` for the default locale or no i18n.
+- `getIslandProps(ctx, spec)` returns `{ remote, envelope, host, token }` (plus `stale: true` for a last good
+  envelope), JSON-serialisable (no `undefined`), to spread into `RemoteIsland`. `host` is `{ basePath, locale }`; `locale` is `''` for the default locale or no i18n.
 - Public islands are fetched on every call. In `getStaticProps`, the page's own `revalidate` is the cache, so the
-  page stays static (ISR). That also means a remote failure is cached: the page keeps its fallback for the whole
-  `revalidate` window. Retry soon after a failure by shortening `revalidate` when the envelope is missing:
+  page stays static (ISR). When the remote fails, `getIslandProps` returns the island's last good envelope with
+  `stale: true` (stale-if-error, above), or `envelope: null` without one; either is kept for the whole
+  `revalidate` window, so regenerate soon:
 
   ```ts
   export const getStaticProps = async (ctx) => {
     const banner = await getIslandProps(ctx, { remote: 'shop', island: 'Banner' })
-    return { props: { banner }, revalidate: banner.envelope ? 60 : 1 }
+    return { props: { banner }, revalidate: banner.envelope && !banner.stale ? 60 : 5 }
   }
   ```
 
@@ -217,7 +221,7 @@ pinned build keeps `ssr` (server rendering); every other build renders in the br
 (`NF-028` once per build, `NF-027` for a bad signature or digest). The descriptor fetch is cached
 through the island-cache alias: `next: { revalidate, tags: ['nf:<remote>'] }` without
 `cacheComponents`, `'use cache'` + `cacheLife({ stale: 300, revalidate, expire: max(3600, 2 ×
-revalidate) })` with it (a failure gets the short failure profile). `{ dynamic: true }` fetches with
+revalidate) })` with it (a failure gets the failure profile above: retried within seconds, the page stays static). `{ dynamic: true }` fetches with
 `cache: 'no-store'` (inside `<Suspense>` with `cacheComponents`: a PPR hole). There is no
 in-process cache and no wall-clock read; when the remote is down the last known descriptor is
 returned, and `null` (render the fallback) when none was ever fetched. Events:

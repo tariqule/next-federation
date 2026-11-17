@@ -12,7 +12,10 @@ import type { MarkedIslandResult } from './fresh-mark.ts'
 
 /**
  * Public island envelope for hosts without `cacheComponents`: a fetch with
- * `next: { revalidate, tags }`, so a static or ISR page stays static.
+ * `next: { revalidate, tags }`, so a static or ISR page stays static. A
+ * regeneration whose fetch fails renders the island's last good envelope
+ * when `loadIsland` has one (stale-if-error), else the fallback, for
+ * `revalidate` seconds.
  *
  * Next's fetch cache stores any 200 response, so a 200 whose body is not a
  * valid envelope (NF-004) is cached for `revalidate` seconds too; non-2xx
@@ -33,8 +36,9 @@ export async function getPublicEnvelope(
   })
   // This function runs on every render (only the fetch is cached), so every
   // result is marked fresh: a data-cache hit is reported with its own
-  // measured duration.
-  return markFresh(result)
+  // measured duration. `at` bounds how long `loadIsland` may render this
+  // envelope in place of a later failure (stale-if-error).
+  return markFresh(result, Date.now())
 }
 
 /** Legacy model: no `'use cache'` scopes exist, so there is nothing to shorten. */

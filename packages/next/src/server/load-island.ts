@@ -9,6 +9,13 @@ import { getPrivateEnvelope } from './private-envelope.ts'
 import type { AppIdentity } from './private-envelope.ts'
 import { reportIsland } from './report-island.ts'
 import { takeFresh } from './fresh-mark.ts'
+import {
+  keepSeconds,
+  lastGood,
+  lastGoodKey,
+  rememberGood,
+} from './last-good.ts'
+import type { KeptIsland } from './last-good.ts'
 
 export type { AppIdentity } from './private-envelope.ts'
 
@@ -38,6 +45,8 @@ export type LoadedIsland =
       kind: 'ok'
       envelope: IslandEnvelope
       token: IslandToken | null
+      /** The remote failed; this is the island's last good envelope. */
+      stale?: true
     }
   | { kind: 'failed' }
   | { kind: 'anonymous' }
@@ -53,6 +62,9 @@ const FAILED: LoadedIsland = { kind: 'failed' }
  * Every load is reported (`reportIsland`) after it returns, outside the
  * cached function. A public result is reported only when its fetch ran for
  * this call (`takeFresh`); with cacheComponents a cache hit is not reported.
+ * A cached public island whose fetch fails renders its last good envelope
+ * from this process instead of the fallback (stale-if-error), for at most
+ * the island cache entry's lifetime (`keepSeconds`).
  * No wall-clock reads here: Next aborts cacheComponents prerenders on them.
  * There is no `catch`: Next's control-flow errors (from `cookies()`, for
  * example) always propagate, and caller mistakes (NF-001, NF-009, NF-013,
@@ -87,6 +99,7 @@ export async function loadIsland(
   }
 
   let result: IslandResult
+  let stale = false
   if (spec.dynamic) {
     result = await fetchIsland(target, {
       island,
@@ -96,17 +109,32 @@ export async function loadIsland(
     })
     reportIsland(federation, target, island, result)
   } else {
+    const propsJson = canonicalJson(props)
+    const hostJson = canonicalJson(host)
+    const revalidate = spec.revalidate ?? federation.islands.revalidate
     const cached = await getPublicEnvelope(
       target,
       island,
-      canonicalJson(props),
-      canonicalJson(host),
-      spec.revalidate ?? federation.islands.revalidate
+      propsJson,
+      hostJson,
+      revalidate
     )
+    // Times come from the cached result (read in the cache scope): no clock
+    // read here.
+    const key = lastGoodKey(target, island, propsJson, hostJson)
+    let kept: KeptIsland | null = null
+    if (cached.ok && cached.at !== undefined) {
+      rememberGood(key, cached, cached.at)
+    } else if (!cached.ok && cached.at !== undefined) {
+      kept = lastGood(key, cached.at, keepSeconds(revalidate))
+    }
     // Reported only when the fetch ran for this call, not for a cache hit
     // (whose meta belongs to the fetch that filled the entry).
-    if (takeFresh(cached)) reportIsland(federation, target, island, cached)
-    result = cached
+    if (takeFresh(cached)) {
+      reportIsland(federation, target, island, cached, kept?.ageSeconds)
+    }
+    result = kept ? kept.result : cached
+    stale = kept !== null
   }
   if (!result.ok) return FAILED
   // D2: no identity is read here (the island stays cacheable and the route static).
@@ -116,6 +144,7 @@ export async function loadIsland(
     kind: 'ok',
     envelope: result.envelope,
     token: actsAsUser ? { endpoint, identityKey: null } : null,
+    ...(stale ? { stale: true as const } : {}),
   }
 }
 

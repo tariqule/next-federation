@@ -6,6 +6,7 @@ import { logger } from '@next-federation/sdk'
 import { cookies, headers } from 'next/headers'
 import { unstable_rethrow } from 'next/navigation'
 import { markFresh } from '../src/server/fresh-mark.ts'
+import { clearLastGood } from '../src/server/last-good.ts'
 import { createIslandLoader, loadIsland } from '../src/server/load-island.ts'
 import type { AppIdentity } from '../src/server/load-island.ts'
 
@@ -109,6 +110,7 @@ beforeEach(() => {
     new Headers({ cookie: 'session=secret' }) as never
   )
   rs.mocked(unstable_rethrow).mockClear()
+  clearLastGood()
 })
 afterEach(() => {
   globalThis.fetch = realFetch
@@ -517,6 +519,165 @@ test('an unknown remote is NF-001', async () => {
   await expect(
     loadIsland(federation(), {}, { remote: 'nope', island: 'Banner' })
   ).rejects.toMatchObject({ code: 'NF-001' })
+})
+
+describe('stale-if-error: a public island whose remote fails keeps its last good envelope', () => {
+  const T0 = 1_800_000_000_000
+  const failed = (at: number, status = 503) =>
+    markFresh(
+      {
+        ok: false,
+        code: 'NF-007',
+        status,
+        meta: { ms: 4, bytes: 0, attempts: 2 },
+      },
+      at
+    )
+  const good = (at: number) => markFresh(okResult(3), at)
+  const serve = (...results: ReturnType<typeof markFresh>[]) => {
+    for (const r of results) {
+      rs.mocked(getPublicEnvelope).mockImplementationOnce(async () => r)
+    }
+  }
+
+  test('after a good fetch, a failed revalidation renders the last good envelope and logs the failure with its code', async () => {
+    const error = rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    serve(good(T0), failed(T0 + 120_000))
+    const spec = { remote: 'a', island: 'Banner', props: { x: 1 } }
+    expect(await loadIsland(fed, {}, spec)).toMatchObject({ kind: 'ok' })
+    const r = await loadIsland(fed, {}, spec)
+    // `stale`: RemoteIsland still shortens an enclosing host 'use cache'.
+    expect(r).toEqual({ kind: 'ok', envelope, token: null, stale: true })
+    expect(events.map((e) => e.type)).toEqual(['island:fetch', 'island:error'])
+    expect(events[1]).toMatchObject({ code: 'NF-007', status: 503 })
+    expect(error).toHaveBeenCalledWith(
+      'NF-007',
+      expect.stringMatching(
+        /Island "Banner" from remote "a" failed \(HTTP 503\); rendering its last good envelope \(120 s old\)/
+      )
+    )
+  })
+
+  test('the last good envelope is kept for the island cache entry lifetime: an hour, or twice revalidate', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    const spec = { remote: 'a', island: 'Banner' }
+    serve(good(T0), failed(T0 + 3600_000))
+    await loadIsland(fed, {}, spec)
+    expect(await loadIsland(fed, {}, spec)).toMatchObject({ kind: 'ok' })
+    serve(failed(T0 + 3601_000))
+    expect(await loadIsland(fed, {}, spec)).toEqual({ kind: 'failed' })
+    const long = { ...spec, revalidate: 3000 }
+    serve(good(T0), failed(T0 + 5999_000))
+    await loadIsland(fed, {}, long)
+    expect(await loadIsland(fed, {}, long)).toMatchObject({ kind: 'ok' })
+  })
+
+  test('only the same island, props, host and remote origin: other requests still show the fallback', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    serve(good(T0), failed(T0 + 1000), failed(T0 + 1000), failed(T0 + 1000))
+    await loadIsland(
+      fed,
+      {},
+      { remote: 'a', island: 'Banner', props: { x: 1 } }
+    )
+    const other = [
+      { remote: 'a', island: 'Banner', props: { x: 2 } },
+      { remote: 'a', island: 'Other', props: { x: 1 } },
+      { remote: 'a', island: 'Banner', props: { x: 1 }, locale: 'fr' },
+    ]
+    for (const spec of other) {
+      expect(await loadIsland(fed, {}, spec)).toEqual({ kind: 'failed' })
+    }
+  })
+
+  test('without a good envelope seen in this process, or without the failure time, the fallback renders', async () => {
+    const error = rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    const spec = { remote: 'a', island: 'Banner' }
+    serve(failed(T0))
+    expect(await loadIsland(fed, {}, spec)).toEqual({ kind: 'failed' })
+    expect(error).toHaveBeenCalledWith(
+      'NF-007',
+      expect.stringMatching(/rendering its fallback/)
+    )
+    serve(good(T0), {
+      ok: false,
+      code: 'NF-008',
+      meta: { ms: 3000, bytes: 0, attempts: 1 },
+    })
+    await loadIsland(fed, {}, spec)
+    expect(await loadIsland(fed, {}, spec)).toEqual({ kind: 'failed' })
+  })
+
+  test('a newer good result replaces the kept one; a cache hit of a failure is not reported again', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    const spec = { remote: 'a', island: 'Banner' }
+    const newer = { ...envelope, buildId: 'b2' }
+    const fail = failed(T0 + 2000)
+    serve(
+      good(T0),
+      markFresh(
+        {
+          ok: true,
+          envelope: newer as never,
+          meta: { ms: 3, bytes: 321, attempts: 1 },
+        },
+        T0 + 1000
+      ),
+      fail,
+      fail
+    )
+    await loadIsland(fed, {}, spec)
+    await loadIsland(fed, {}, spec)
+    expect(await loadIsland(fed, {}, spec)).toMatchObject({
+      kind: 'ok',
+      envelope: { buildId: 'b2' },
+    })
+    expect(await loadIsland(fed, {}, spec)).toMatchObject({ kind: 'ok' })
+    expect(events.filter((e) => e.type === 'island:error')).toHaveLength(1)
+  })
+
+  test('private and dynamic islands are never served stale', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    serve(good(T0))
+    await loadIsland(fed, {}, { remote: 'a', island: 'Banner' })
+    respond = () => new Response('down', { status: 503 })
+    expect(
+      await loadIsland(
+        fed,
+        {},
+        { remote: 'a', island: 'Banner', dynamic: true }
+      )
+    ).toEqual({ kind: 'failed' })
+  })
+
+  test('a private island (blocking or not) never gets a last good envelope, nor feeds one to the public island', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation()
+    const options = { getIdentity: () => ({ sub: 'user-1' }) }
+    const spec = { remote: 'a', island: 'Banner' }
+    // A good public envelope for the same island and props...
+    serve(good(T0))
+    await loadIsland(fed, options, spec)
+    // ...is never handed to a private render of it when the remote fails.
+    respond = () => new Response('down', { status: 503 })
+    expect(await loadIsland(fed, options, { ...spec, private: true })).toEqual({
+      kind: 'failed',
+    })
+    // And a good private (per-user) envelope is never kept for the public one.
+    clearLastGood()
+    respond = () => new Response(JSON.stringify(envelope))
+    expect(
+      await loadIsland(fed, options, { ...spec, private: true })
+    ).toMatchObject({ kind: 'ok' })
+    serve(failed(T0 + 1000))
+    expect(await loadIsland(fed, options, spec)).toEqual({ kind: 'failed' })
+  })
 })
 
 describe('public islands on a host with getIdentity (Server Actions, D2)', () => {

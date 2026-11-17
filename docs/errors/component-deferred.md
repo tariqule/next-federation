@@ -8,9 +8,14 @@ so rendering the components then would keep their fallback in the static page fo
 revalidate window. Instead, that one render leaves the remote components out of the static shell:
 they render per request, on the server, and each request waits for the build.
 
-The visitor still gets server-rendered markup for the components, and the page stays static. The
-next regeneration, once the build has loaded (or was refused), puts the components back in the
-static page.
+The visitor still gets server-rendered markup for the components. Until the next regeneration the
+page is a partial prerender: its static shell is served with `x-nextjs-postponed: 1` and
+`Cache-Control: private, no-cache, no-store`, and the components stream in per request. The shell
+keeps the page's other cached data (the components descriptor at least), so Next regenerates it on
+the descriptor's revalidate time (`components.revalidate`, 60 s by default). That regeneration,
+once the build has loaded (or was refused), puts the components back in the static page, which is
+served from the cache again (`x-nextjs-cache`). Next may also log `Unexpected cache miss after cache
+warming phase` for that one regeneration; it does not change the outcome.
 
 It is logged once per build, as a warning.
 
