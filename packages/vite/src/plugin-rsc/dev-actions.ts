@@ -7,6 +7,8 @@
 // remote's scope key. Production builds resolve ids only from plugin-rsc's
 // build manifest and never consult this.
 
+import { trimTrailingSlashes } from '../trim-slashes.ts'
+
 const SLOT = Symbol.for('next-federation.dev-server-actions')
 
 type Entry = { root: string; files: Set<string> }
@@ -23,7 +25,7 @@ export function registerDevActions(
   root: string,
   files: Set<string>
 ): void {
-  registry()[scopeKey] = { root: root.replace(/\/+$/, ''), files }
+  registry()[scopeKey] = { root: trimTrailingSlashes(root), files }
 }
 
 /**

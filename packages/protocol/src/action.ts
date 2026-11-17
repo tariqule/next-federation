@@ -5,6 +5,7 @@ import {
   ACTION_PATH,
   NAME_PATTERN,
 } from './constants.ts'
+import { trimTrailingSlashes } from './request.ts'
 
 export type ActionRequest = {
   /** Server reference id from `X-NF-Action` (`<file>#<export>`). */
@@ -70,7 +71,7 @@ export function parseActionRequest(req: Request): ActionRequest {
 
 /** `<publicBase>_nf/action[?island=<name>]`; `publicBase` may end with `/` or not. */
 export function actionEndpoint(publicBase: string, island?: string): string {
-  const url = `${publicBase.replace(/\/+$/, '')}${ACTION_PATH}`
+  const url = `${trimTrailingSlashes(publicBase)}${ACTION_PATH}`
   return island === undefined
     ? url
     : `${url}?island=${encodeURIComponent(island)}`
