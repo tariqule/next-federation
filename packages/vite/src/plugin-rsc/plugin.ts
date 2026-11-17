@@ -1,17 +1,23 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { NFError } from '@next-federation/sdk'
+import { NFError, logger } from '@next-federation/sdk'
 import rsc from '@vitejs/plugin-rsc'
 import { normalizePath } from 'vite'
 import type { Plugin, ResolvedConfig } from 'vite'
-import { assertNoFastRefresh, findServerActions } from '../checks.ts'
+import {
+  assertNoFastRefresh,
+  findRawFormActions,
+  findServerActions,
+  hasFileLevelUseServer,
+} from '../checks.ts'
 import { codeLiteral } from '../code-literal.ts'
 import { devCorsMiddleware } from '../dev-cors.ts'
 import { resolveOptions } from '../options.ts'
 import type { IslandRemoteOptions, ResolvedOptions } from '../options.ts'
 import { islandSharePlugin, packageVersionReader } from '../share.ts'
 import { remoteViteConfig, rscPluginOptions } from './config.ts'
+import { registerDevActions } from './dev-actions.ts'
 import { islandCssPlugin } from './island-css.ts'
 import { flightScopePlugin } from './scope.ts'
 import { assertInstalledPluginRsc } from './version.ts'
@@ -46,8 +52,54 @@ export const CLIENT_BOOTSTRAP: string = normalizePath(
 )
 
 const JS_MODULE = /\.[cm]?[jt]sx?$/
+// Third-party code (next-federation's own included) is not warned about.
+const NO_FORM_WARNING = /\/node_modules\/|@next-federation/
 
-function checksPlugin(): Plugin {
+const importedByClient = (file: string, env: string, importer?: string) =>
+  new NFError(
+    'NF-034',
+    `${file} starts with 'use server' and is imported by ${importer ?? 'a client module'} (${env} environment). Import it in a Server Component and pass the action to the client component as a prop.`
+  )
+
+type GraphNode = { importers: Set<{ file: string | null }> }
+
+type ImporterLookup = {
+  getModuleInfo?: (id: string) => { importers?: readonly string[] } | null
+  environment: {
+    name: string
+    mode?: string
+    moduleGraph?: {
+      getModuleById(id: string): GraphNode | undefined
+      getModulesByFile?(file: string): Set<GraphNode> | undefined
+    }
+  }
+}
+
+function firstImporter(ctx: ImporterLookup, id: string): string | undefined {
+  // Dev: the module graph (Vite's dev ModuleInfo throws on `.importers`). The
+  // id may carry a query, so every module of the file is looked at.
+  const graph = ctx.environment.moduleGraph
+  const nodes = [
+    graph?.getModuleById(id),
+    ...(graph?.getModulesByFile?.(id.split('?')[0]!) ?? []),
+  ]
+  for (const node of nodes) {
+    for (const importer of node?.importers ?? []) {
+      if (importer.file) return importer.file
+    }
+  }
+  try {
+    return ctx.getModuleInfo?.(id)?.importers?.[0]
+  } catch {
+    return undefined
+  }
+}
+
+function checksPlugin(serverActionFiles: Set<string>): Plugin {
+  // Build: 'use server' files reached from client/ssr, per environment. The
+  // importer is often unknown while the file is transformed, so the error is
+  // raised at buildEnd, when the module graph is complete.
+  const pending = new Map<string, Map<string, string>>()
   return {
     name: 'nf:checks',
     // Before plugin-rsc's 'use server' transform removes the directive.
@@ -60,14 +112,47 @@ function checksPlugin(): Plugin {
       handler(code, id) {
         const file = id.split('?')[0]!
         if (!JS_MODULE.test(file)) return undefined
-        if (findServerActions(code, file)) {
-          throw new NFError(
-            'NF-019',
-            `${id} uses 'use server'. Server Actions are not supported by next-federation islands in this release.`
-          )
+        if (this.environment.name === 'rsc') {
+          // The dev allowlist of files whose ids the action route may load.
+          if (findServerActions(code, file)) serverActionFiles.add(file)
+          else serverActionFiles.delete(file)
+        } else if (hasFileLevelUseServer(code, file)) {
+          // plugin-rsc would turn it into references on the page-global
+          // callServer, which crosses islands and builds (finding F2).
+          const env = this.environment.name
+          const importer = firstImporter(this as unknown as ImporterLookup, id)
+          // Dev has no buildEnd per request: fail now, importer or not.
+          if (importer || this.environment.mode === 'dev') {
+            throw importedByClient(file, env, importer)
+          }
+          let files = pending.get(env)
+          if (!files) pending.set(env, (files = new Map()))
+          files.set(id, file)
+        }
+        if (!NO_FORM_WARNING.test(file)) {
+          const lines = findRawFormActions(code, file)
+          if (lines.length > 0) {
+            logger.warnOnce(
+              'NF-035',
+              file,
+              `${file}:${lines.join(',')} passes an action to a plain <form action> or formAction. Use <Form> from @next-federation/island, which stays disabled until the island has hydrated.`
+            )
+          }
         }
         return undefined
       },
+    },
+    buildEnd() {
+      const env = this.environment.name
+      const files = pending.get(env)
+      pending.delete(env)
+      for (const [id, file] of files ?? []) {
+        throw importedByClient(
+          file,
+          env,
+          firstImporter(this as unknown as ImporterLookup, id)
+        )
+      }
     },
   }
 }
@@ -112,6 +197,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
   })
   let resolved: ResolvedOptions | undefined
   let viteConfig: ResolvedConfig | undefined
+  const serverActionFiles = new Set<string>()
   let builtAt = 0
   const current = (): ResolvedOptions => {
     if (!resolved) {
@@ -149,7 +235,12 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
     },
     configureServer(server) {
       // Registered before Vite's internal middlewares (and plugin-rsc's handler).
-      const { hosts, publicBase } = current()
+      const { hosts, publicBase, scopeKey } = current()
+      registerDevActions(
+        scopeKey,
+        normalizePath(viteConfig?.root ?? process.cwd()),
+        serverActionFiles
+      )
       server.middlewares.use(
         devCorsMiddleware(hosts, new URL(publicBase).pathname)
       )
@@ -210,7 +301,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
   return [
     ...rsc(rscPluginOptions(ENTRIES)),
     flightScopePlugin(() => current().scopeKey),
-    checksPlugin(),
+    checksPlugin(serverActionFiles),
     islandCssPlugin(islands),
     islandSharePlugin({
       options: current,

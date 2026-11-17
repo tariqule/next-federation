@@ -11,7 +11,11 @@
 
 export type TokenClient = {
   getToken(): Promise<string | null>
-  invalidate(): void
+  /**
+   * Drops this endpoint's token. With `rejected`, only when the cached token is
+   * that one (a remote answered 401 NF-014 for it).
+   */
+  invalidate(rejected?: string): void
 }
 
 type Entry = { token: string; expiresAt: number; identityKey: string }
@@ -111,7 +115,9 @@ export function createTokenClient(opts: {
           cached.expiresAt - SKEW_SECONDS > now()
         )
           return Promise.resolve(cached.token)
-        cache.delete(endpoint)
+        // A null-key client (public island) never reuses a token, and leaves
+        // the entry of the identity a private island renders for alone.
+        if (identityKey !== null) cache.delete(endpoint)
       }
       const pending = inflight.get(endpoint)
       if (pending && pending.identityKey === identityKey) return pending.promise
@@ -122,8 +128,12 @@ export function createTokenClient(opts: {
       inflight.set(endpoint, { identityKey, promise })
       return promise
     },
-    invalidate() {
-      drop(endpoint)
+    invalidate(rejected) {
+      if (rejected === undefined) return drop(endpoint)
+      // A rejected token only drops the cache entry that still holds it: a newer
+      // token or a refresh already in flight (another action's 401) is kept, so
+      // concurrent 401s share one refetch.
+      if (cache.get(endpoint)?.token === rejected) drop(endpoint)
     },
   }
 }

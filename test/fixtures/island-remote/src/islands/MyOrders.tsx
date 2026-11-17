@@ -1,5 +1,7 @@
 import { getIdentity } from '@next-federation/island'
+import { placeOrder, whoami } from '../actions'
 import { getOrders } from '../data'
+import { ActionButton } from './ActionButton'
 
 // Private island: rendered per user from verified token claims (design §9a).
 export default async function MyOrders() {
@@ -15,6 +17,8 @@ export default async function MyOrders() {
           <li key={o.id}>{o.title}</li>
         ))}
       </ul>
+      <ActionButton name="whoami" action={whoami} />
+      <ActionButton name="order" action={placeOrder} args={['A1']} />
     </section>
   )
 }

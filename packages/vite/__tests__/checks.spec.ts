@@ -2,7 +2,9 @@ import { isNFError } from '@next-federation/sdk'
 import {
   assertNoFastRefresh,
   assertPluginRscVersion,
+  findRawFormActions,
   findServerActions,
+  hasFileLevelUseServer,
   hasUseClientDirective,
 } from '../src/checks.ts'
 
@@ -119,4 +121,49 @@ test('hasUseClientDirective: only the module prologue counts', () => {
     hasUseClientDirective(`export function f() { 'use client'; return 1 }`)
   ).toBe(false)
   expect(hasUseClientDirective(`// 'use client'\nexport {}`)).toBe(false)
+})
+
+test.each([
+  ["'use server'\nexport async function a() {}", true],
+  ['"use server";\nexport const a = async () => 1', true],
+  ["'use strict'\n'use server'\nexport async function a() {}", true],
+  ["export async function a() {\n  'use server'\n}", false],
+  ["const x = 1\n'use server'", false],
+  ["// 'use server'\nexport {}", false],
+  ["'use client'\nexport {}", false],
+  ["'use server'\nexport const = ", false],
+])('hasFileLevelUseServer(%p) is %p', (code, expected) => {
+  expect(hasFileLevelUseServer(code, 'a.ts')).toBe(expected)
+})
+
+test('findRawFormActions finds <form action={...}> and formAction={...}, with line numbers', () => {
+  const code = [
+    'export function A({ save }) {',
+    '  return (',
+    '    <form action={save}>',
+    '      <button formAction={save}>x</button>',
+    '      <input formAction={save} />',
+    '    </form>',
+    '  )',
+    '}',
+  ].join('\n')
+  expect(findRawFormActions(code, 'A.tsx')).toEqual([3, 4, 5])
+})
+
+test('findRawFormActions ignores string actions, other elements, <Form> and spreads', () => {
+  const code = [
+    'import { Form } from "@next-federation/island"',
+    'export function A({ save, rest }) {',
+    '  return (<>',
+    '    <form action="/search" />',
+    '    <Form action={save} />',
+    '    <div action={save} />',
+    '    <form {...rest} />',
+    '    <x.form action={save} />',
+    '  </>)',
+    '}',
+  ].join('\n')
+  expect(findRawFormActions(code, 'A.tsx')).toEqual([])
+  expect(findRawFormActions('export const a = 1', 'a.ts')).toEqual([])
+  expect(findRawFormActions('<form action={', 'bad.tsx')).toEqual([])
 })

@@ -227,6 +227,8 @@ test('a build that crashes after startup is reported through onExit', async () =
     expect(crashed).toMatchObject({ buildId: 'v1', code: 3 })
     const after = await fetch(`http://127.0.0.1:${handle!.port}/_nf/x`)
     expect(after.status).toBe(502)
+    // nf-serve's own errors are readable cross-origin, like its 410.
+    expect(after.headers.get('access-control-allow-origin')).toBe('*')
   } finally {
     await handle?.close()
     rmSync(dir, { recursive: true, force: true })
@@ -268,4 +270,74 @@ test('each build runs in its own process', async () => {
   const b = await (await fetch(`${base()}/b/v2/_nf/x`)).json()
   expect(a.pid).not.toBe(b.pid)
   expect(a.pid).not.toBe(process.pid)
+})
+
+function postTo(
+  path: string,
+  headers: Record<string, string>,
+  chunks: string[]
+): Promise<{ status: number; cors: string | null; body: string }> {
+  return new Promise((resolve, reject) => {
+    let responded = false
+    const req = request(
+      { host: '127.0.0.1', port: served!.port, path, method: 'POST', headers },
+      (res) => {
+        responded = true
+        let body = ''
+        const done = () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            cors:
+              (res.headers['access-control-allow-origin'] as string) ?? null,
+            body,
+          })
+        res.on('data', (c) => (body += c))
+        res.on('end', done)
+        res.on('error', done)
+      }
+    )
+    // The server may answer early and reset the upload: only a reset before any answer fails.
+    req.on('error', (e) => (responded ? undefined : reject(e)))
+    for (const c of chunks) req.write(c)
+    req.end()
+  })
+}
+
+test("nf-serve's own 413 and 504 carry CORS, so browsers can read them", async () => {
+  const declared = await fetch(`${base()}/_nf/x`, {
+    method: 'POST',
+    body: 'x'.repeat(70000),
+  })
+  expect(declared.status).toBe(413)
+  expect(declared.headers.get('access-control-allow-origin')).toBe('*')
+  const big = Array.from({ length: 10 }, () => 'x'.repeat(8000))
+  const streamed = await postTo(
+    '/_nf/x',
+    { 'transfer-encoding': 'chunked' },
+    big
+  )
+  expect(streamed.status).toBe(413)
+  expect(streamed.cors).toBe('*')
+  const hang = await fetch(`${base()}/_nf/hang`)
+  expect(hang.status).toBe(504)
+  expect(hang.headers.get('access-control-allow-origin')).toBe('*')
+})
+
+test('/_nf/action has its own higher ceiling, so the build answers its own limit', async () => {
+  // 200 KB, above the island ceiling (65536), sent in chunks.
+  const body = Array.from({ length: 25 }, () => 'x'.repeat(8000))
+  for (const path of ['/_nf/action', '/b/v1/_nf/action']) {
+    const res = await postTo(path, { 'content-type': 'text/plain' }, body)
+    expect(res.status).toBe(200)
+    expect(JSON.parse(res.body).body.length).toBe(200_000)
+  }
+  // An island path keeps the island ceiling.
+  expect((await postTo('/b/v1/_nf/island/x', {}, body)).status).toBe(413)
+  // Above the action ceiling (default 8 MiB) nf-serve answers 413 itself, with CORS.
+  const over = await fetch(`${base()}/_nf/action`, {
+    method: 'POST',
+    body: 'x'.repeat(8 * 1024 * 1024 + 1),
+  })
+  expect(over.status).toBe(413)
+  expect(over.headers.get('access-control-allow-origin')).toBe('*')
 })

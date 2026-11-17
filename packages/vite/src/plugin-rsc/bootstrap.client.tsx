@@ -5,7 +5,10 @@
 import { createIslandBootstrap } from '@next-federation/island/bootstrap'
 import { NFError } from '@next-federation/sdk'
 import type { IslandBootstrapModule } from '@next-federation/protocol'
-import { createFromReadableStream } from 'react-server-dom-webpack/client.browser'
+import {
+  createFromReadableStream,
+  encodeReply,
+} from 'react-server-dom-webpack/client.browser'
 import config from 'virtual:next-federation/config'
 import clientReferences from 'virtual:vite-rsc/client-references'
 
@@ -29,6 +32,7 @@ const bootstrap: IslandBootstrapModule = createIslandBootstrap({
   mode: import.meta.env.DEV ? 'development' : 'production',
   loadClientReference,
   createFromReadableStream,
+  encodeReply,
 })
 
 export const mountIsland: IslandBootstrapModule['mountIsland'] =

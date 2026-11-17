@@ -32,7 +32,11 @@ export type NFErrorCode =
   | 'NF-028'
   | 'NF-029'
   | 'NF-030'
-  // NF-031..NF-035 are reserved (island Server Actions).
+  | 'NF-031'
+  | 'NF-032'
+  | 'NF-033'
+  | 'NF-034'
+  | 'NF-035'
   | 'NF-036'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
@@ -99,7 +103,7 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
     },
     'NF-019': {
       slug: 'server-actions-unsupported',
-      title: 'Island Server Actions are not available in this release',
+      title: 'This remote build does not support island Server Actions',
     },
     'NF-020': {
       slug: 'relative-base',
@@ -142,6 +146,20 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
       slug: 'component-require-refused',
       title:
         'Remote component server code required a module the host does not provide',
+    },
+    'NF-031': { slug: 'action-not-found', title: 'Server Action not found' },
+    'NF-032': {
+      slug: 'action-request-invalid',
+      title: 'Server Action request is invalid',
+    },
+    'NF-033': { slug: 'action-failed', title: 'Server Action threw an error' },
+    'NF-034': {
+      slug: 'server-action-imported-by-client',
+      title: "A client module imports a 'use server' file",
+    },
+    'NF-035': {
+      slug: 'raw-form-action',
+      title: 'Island form uses a raw `action` instead of `<Form>`',
     },
     'NF-036': {
       slug: 'component-shared-unavailable',

@@ -46,6 +46,7 @@ add(
 )
 add('docs/guides/caching.md', 'guides/caching')
 add('docs/guides/identity.md', 'guides/identity')
+add('docs/guides/server-actions.md', 'guides/server-actions')
 add('docs/guides/csp.md', 'guides/csp')
 add('docs/guides/limits.md', 'guides/limits')
 add(

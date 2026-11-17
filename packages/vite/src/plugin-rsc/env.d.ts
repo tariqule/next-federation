@@ -24,6 +24,7 @@ declare module 'react-server-dom-webpack/client.browser' {
     stream: ReadableStream<Uint8Array>,
     options?: { callServer?: (id: string, args: unknown[]) => Promise<unknown> }
   ): Promise<T>
+  export function encodeReply(value: unknown): Promise<string | FormData>
 }
 
 interface ImportMeta {

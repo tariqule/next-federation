@@ -97,3 +97,79 @@ export function hasUseClientDirective(
   }
   return false
 }
+
+/**
+ * True when the module's own directive prologue holds `'use server'`: a file of
+ * Server Actions. Code that does not parse returns false; the compiler reports it.
+ */
+export function hasFileLevelUseServer(
+  code: string,
+  filename = 'module.tsx'
+): boolean {
+  if (!code.includes('use server')) return false
+  const { program, errors } = parseSync(filename, code)
+  if (errors.length > 0) return false
+  for (const statement of program.body as Node[]) {
+    if (statement.type !== 'ExpressionStatement') break
+    if (typeof statement.directive !== 'string') break
+    if (statement.directive === 'use server') return true
+  }
+  return false
+}
+
+type JsxNode = {
+  type?: unknown
+  name?: { type?: unknown; name?: unknown }
+  value?: { type?: unknown } | null
+  attributes?: JsxNode[]
+  start?: number
+}
+
+const isExpressionValue = (attr: JsxNode): boolean =>
+  attr.value?.type === 'JSXExpressionContainer'
+
+/**
+ * 1-based lines of `<form action={...}>` and of any `formAction={...}` (a Server
+ * Action on a plain form: NF-035). String values, `<Form>`, member names
+ * (`<x.form>`) and spreads are not reported. Code that does not parse returns [].
+ */
+export function findRawFormActions(
+  code: string,
+  filename = 'module.tsx'
+): number[] {
+  if (!code.includes('action')) return []
+  const { program, errors } = parseSync(filename, code)
+  if (errors.length > 0) return []
+  const offsets: number[] = []
+  const stack: unknown[] = [program]
+  while (stack.length > 0) {
+    const value = stack.pop()
+    if (Array.isArray(value)) {
+      for (const item of value) stack.push(item)
+      continue
+    }
+    if (value === null || typeof value !== 'object') continue
+    const node = value as JsxNode
+    if (node.type === 'JSXOpeningElement') {
+      const tag = node.name?.type === 'JSXIdentifier' ? node.name.name : null
+      for (const attr of node.attributes ?? []) {
+        if (attr.type !== 'JSXAttribute' || !isExpressionValue(attr)) continue
+        const prop = attr.name?.type === 'JSXIdentifier' ? attr.name.name : null
+        if (
+          (tag === 'form' && prop === 'action') ||
+          (typeof tag === 'string' &&
+            /^[a-z]/.test(tag) &&
+            prop === 'formAction')
+        ) {
+          offsets.push(attr.start ?? 0)
+        }
+      }
+    }
+    for (const child of Object.values(value)) {
+      if (child !== null && typeof child === 'object') stack.push(child)
+    }
+  }
+  const lineOf = (offset: number): number =>
+    code.slice(0, offset).split('\n').length
+  return [...new Set(offsets.map(lineOf))].sort((a, b) => a - b)
+}

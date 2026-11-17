@@ -1,4 +1,4 @@
-import type { IslandErrorKind } from '@next-federation/protocol'
+import type { ActionReport, IslandErrorKind } from '@next-federation/protocol'
 import { logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
 
@@ -7,6 +7,7 @@ export const ISLAND_EVENT = 'nf:island'
 
 export type IslandClientEvent =
   | { type: 'island:hydrate'; remote: string; buildId: string; ms: number }
+  | ({ type: 'island:action'; remote: string; buildId: string } & ActionReport)
   | {
       type: 'island:error'
       remote: string

@@ -1,5 +1,7 @@
 export { createIslandBootstrap } from './create-bootstrap.tsx'
 export type { IslandBootstrapDeps } from './create-bootstrap.tsx'
+export { createCallServer } from './call-server.ts'
+export type { CallServer, CallServerOptions } from './call-server.ts'
 export { registerFlightScope } from './flight-scope.ts'
 export type { FlightScope } from './flight-scope.ts'
 export { initIslandShareScope } from './share-scope.ts'

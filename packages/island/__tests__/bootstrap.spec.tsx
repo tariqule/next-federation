@@ -189,21 +189,97 @@ test('onError receives uncaught errors with kind "uncaught"', async () => {
   expect(onError).toHaveBeenCalledWith(expect.any(Error), 'uncaught')
 })
 
-test('calling a server action rejects with NF-019', async () => {
-  const handle = await mount()
-  const options2 = createFromReadableStream as unknown as {
-    mock: {
-      calls: [
-        unknown,
-        { callServer: (id: string, a: unknown[]) => Promise<unknown> },
-      ][]
-    }
+type FlightCalls = {
+  mock: {
+    calls: [
+      unknown,
+      { callServer: (id: string, a: unknown[]) => Promise<unknown> },
+    ][]
   }
-  const callServer = options2.mock.calls.at(-1)![1].callServer
-  await expect(callServer('action#id', [])).rejects.toMatchObject({
+}
+const lastCallServer = () =>
+  (createFromReadableStream as unknown as FlightCalls).mock.calls.at(-1)![1]
+    .callServer
+
+test('without encodeReply (an older plugin), a server action rejects with NF-019', async () => {
+  const handle = await mount()
+  await expect(lastCallServer()('action#id', [])).rejects.toMatchObject({
     code: 'NF-019',
   })
   await act(async () => handle.destroy())
+})
+
+test("each mount's callServer posts to this build with that mount's island, token and reports", async () => {
+  const realFetch = globalThis.fetch
+  const sent: { url: string; init: RequestInit }[] = []
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    sent.push({ url, init })
+    return new Response(JSON.stringify({ error: 'NF-031' }), {
+      status: 404,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof fetch
+  try {
+    const mod = createIslandBootstrap({
+      scopeKey: KEY,
+      remote: 'a',
+      buildId: 'b1',
+      mode: 'production',
+      loadClientReference,
+      createFromReadableStream,
+      encodeReply: async (args) => JSON.stringify(args),
+    })
+    const onActionA = rs.fn()
+    const a = await mount(
+      options({
+        envelope: {
+          remote: 'a',
+          buildId: 'b1',
+          mode: 'production',
+          island: 'Cart',
+        },
+        getToken: async () => 'token-a',
+        onAction: onActionA,
+      }),
+      mod
+    )
+    const callA = lastCallServer()
+    const other = document.createElement('div')
+    other.innerHTML = renderToString(<Counter />)
+    document.body.appendChild(other)
+    let b!: ReturnType<typeof mod.mountIsland>
+    await act(async () => {
+      b = mod.mountIsland(other, options({ getToken: async () => 'token-b' }))
+    })
+    const callB = lastCallServer()
+    expect(callA).not.toBe(callB)
+    await expect(callA('src/a.ts#f', [1])).rejects.toMatchObject({
+      code: 'NF-031',
+    })
+    await expect(callB('src/a.ts#f', [2])).rejects.toMatchObject({
+      code: 'NF-031',
+    })
+    expect(sent.map((s) => s.url)).toEqual([
+      'https://remote.test/base/_nf/action?island=Cart',
+      'https://remote.test/base/_nf/action',
+    ])
+    expect(
+      sent.map((s) => new Headers(s.init.headers).get('authorization'))
+    ).toEqual(['Bearer token-a', 'Bearer token-b'])
+    expect(onActionA).toHaveBeenCalledTimes(1)
+    expect(onActionA.mock.calls[0]![0]).toMatchObject({
+      ok: false,
+      status: 404,
+      code: 'NF-031',
+    })
+    await act(async () => {
+      a.destroy()
+      b.destroy()
+    })
+    other.remove()
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })
 
 test('registers a flight scope once, memoising and stripping $$cache', async () => {

@@ -32,7 +32,8 @@ fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
 - **Island metadata never reaches the host `<head>`.** `<title>`, `<meta>`, `<link>` and scripts are
   stripped from island HTML.
 - **No Fast Refresh for islands inside a host.** Edits reload the page.
-- **No Server Actions yet.** A `'use server'` module fails with `NF-019`.
+- **Server Actions have no progressive enhancement.** `<Form>` stays disabled until the island has
+  hydrated, and actions reach client components only as props (`NF-034` otherwise).
 
 ## What a remote component cannot do
 

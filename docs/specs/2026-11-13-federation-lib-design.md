@@ -343,7 +343,7 @@ Island remotes ship their own React unless they can share an identical version (
 - Actions reach client components **as props** from a server component. A client module that imports a `'use server'` module would get plugin-rsc's page-global `callServer`; a dev check flags it.
 - CORS allows `Authorization`, `Content-Type` and `X-NF-Action`, and CORS headers are sent on error responses too.
 - The action endpoint has a per-island 'requires identity' gate, a body size limit, and answers malformed input with 400, not 500.
-- Until Phase 3 ships, an island build that contains `'use server'` fails with `NF-019`.
+- **Status (Phase 3):** implemented. Wire contract in `docs/protocol/v1.md` ("Server Actions"), usage in `docs/guides/server-actions.md`. `NF-019` now only comes from remotes built before Phase 3. A remote can refuse every unauthenticated action with `actions: { requireIdentity: true }`.
 
 #### Navigation bridge
 - The mount gives each island root a bridge: `navigate(href)` and `prefetch(href)`, implemented with

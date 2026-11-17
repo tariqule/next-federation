@@ -10,9 +10,9 @@ import type {
 } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import { BridgeProvider } from '../bridge-context.tsx'
+import { createCallServer } from './call-server.ts'
+import type { CallServer } from './call-server.ts'
 import { registerFlightScope } from './flight-scope.ts'
-
-type CallServer = (id: string, args: unknown[]) => Promise<unknown>
 
 export type IslandBootstrapDeps = {
   /** The build's absolute base URL; the flight-client registry slot. */
@@ -25,6 +25,11 @@ export type IslandBootstrapDeps = {
     stream: ReadableStream<Uint8Array>,
     options: { callServer: CallServer }
   ): PromiseLike<T>
+  /**
+   * React's `encodeReply` from the same flight client. Enables Server Actions; without
+   * it (bootstraps built by an older plugin) every action rejects with NF-019.
+   */
+  encodeReply?(args: unknown[]): Promise<string | FormData>
 }
 
 const toStream = (text: string): ReadableStream<Uint8Array> =>
@@ -65,7 +70,8 @@ type MarkedContainer = HTMLElement & { [ROOT_MARK]?: true }
  *
  * Server Actions: they must reach client components as props from server
  * components. A client module that imports a 'use server' function would get
- * a page-global callServer, which would cross islands.
+ * a page-global callServer, which would cross islands. Each mount builds its
+ * own callServer bound to this build's URL and that mount's token.
  */
 export function createIslandBootstrap(
   deps: IslandBootstrapDeps
@@ -110,14 +116,25 @@ export function createIslandBootstrap(
           'This container already holds a live island root; destroy it before mounting again.'
         )
       }
-      // Per island root; Server Actions are not wired in this release.
-      const callServer: CallServer = () =>
-        Promise.reject(
-          new NFError(
-            'NF-019',
-            'Server Actions are not available in this release.'
-          )
-        )
+      // One per island root, so an action never uses another mount's URL or token.
+      const { encodeReply } = deps
+      const callServer: CallServer = encodeReply
+        ? createCallServer({
+            url: deps.scopeKey,
+            island: envelope.island,
+            getToken: options.getToken,
+            invalidateToken: options.invalidateToken,
+            onAction: options.onAction,
+            encodeReply,
+            createFromReadableStream: deps.createFromReadableStream,
+          })
+        : () =>
+            Promise.reject(
+              new NFError(
+                'NF-019',
+                'This bootstrap was built without Server Action support.'
+              )
+            )
       const { onError } = options
       // Without onError, React's default reporting stays in place so render
       // errors are never silent.

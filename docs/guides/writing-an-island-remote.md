@@ -130,7 +130,9 @@ build retention.
   it from the island HTML. In development, `NF-018` names anything it stripped.
 - No Fast Refresh. `@vitejs/plugin-react` and `@vitejs/plugin-react-swc` are rejected (`NF-002`), and
   islands inside a host reload instead of hot-refreshing.
-- No Server Actions yet: a `'use server'` module fails with `NF-019`.
+- Server Actions reach client components only as props from a Server Component (`NF-034` for a
+  client import), and forms use `<Form>` from `@next-federation/island` (`NF-035` for a plain
+  `<form action>`).
 - Keep islands small. Island HTML appears about three times in a host page, and the host warns above
   100 KB per envelope (`NF-024`).
 - Run your server and client bundle in the same React mode (production with production).

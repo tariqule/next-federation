@@ -312,4 +312,71 @@ describe('createTokenClient', () => {
     if (typeof localStorage !== 'undefined')
       expect(JSON.stringify({ ...localStorage })).not.toContain('SECRET-TOKEN')
   })
+
+  test('invalidate(rejected) is a no-op when a newer token is cached', async () => {
+    const { fn, calls } = fakeFetch([ok('t1', 2000), ok('t2', 2000)])
+    const client = createTokenClient({
+      endpoint: EP,
+      identityKey: 'u1',
+      fetch: fn,
+      now,
+    })
+    expect(await client.getToken()).toBe('t1')
+    client.invalidate('t1')
+    expect(await client.getToken()).toBe('t2')
+    // A late 401 for the old token must not throw away the fresh one.
+    client.invalidate('t1')
+    expect(await client.getToken()).toBe('t2')
+    expect(calls).toHaveLength(2)
+  })
+
+  test('concurrent invalidate(rejected) calls share one refetch', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let n = 0
+    const fn = (async () => {
+      n++
+      if (n === 2) await gate
+      return new Response(
+        JSON.stringify({ token: `t${n}`, expiresAt: 2000, identityKey: 'u1' }),
+        { status: 200 }
+      )
+    }) as typeof fetch
+    const client = createTokenClient({
+      endpoint: EP,
+      identityKey: 'u1',
+      fetch: fn,
+      now,
+    })
+    expect(await client.getToken()).toBe('t1')
+    // Two actions sent with t1 both come back 401.
+    client.invalidate('t1')
+    const first = client.getToken()
+    client.invalidate('t1')
+    const second = client.getToken()
+    release()
+    expect(await first).toBe('t2')
+    expect(await second).toBe('t2')
+    expect(n).toBe(2)
+  })
+
+  test("a null-key client (public island) never drops a keyed client's cached token", async () => {
+    const { fn, calls } = fakeFetch([ok('t1', 2000), ok('t2', 2000)])
+    const keyed = createTokenClient({
+      endpoint: EP,
+      identityKey: 'u1',
+      fetch: fn,
+      now,
+    })
+    const anyone = createTokenClient({
+      endpoint: EP,
+      identityKey: null,
+      fetch: fn,
+      now,
+    })
+    expect(await keyed.getToken()).toBe('t1')
+    expect(await anyone.getToken()).toBe('t2')
+    expect(await keyed.getToken()).toBe('t1')
+    expect(calls).toHaveLength(2)
+  })
 })

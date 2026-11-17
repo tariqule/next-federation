@@ -4,6 +4,9 @@
 //   GET /mint?aud=&sub=&ttl=&iss=               an ES256 token (ttl in s; a negative
 //                                               ttl gives a token expired by more than
 //                                               the verifier's clock skew)
+//   POST /token?aud=&sub=                       the same token as a host token
+//                                               endpoint answers ({ token, expiresAt,
+//                                               identityKey }), for the SPA host
 import { createServer } from 'node:http'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 
@@ -25,6 +28,22 @@ createServer(async (req, res) => {
   if (url.pathname === '/jwks') {
     res.setHeader('content-type', 'application/json')
     return res.end(JSON.stringify(jwks))
+  }
+  if (url.pathname === '/token' && req.method === 'POST') {
+    const now = Math.floor(Date.now() / 1000)
+    const sub = url.searchParams.get('sub') ?? 'user-1'
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: 'ES256', kid: KID })
+      .setIssuer(ISS)
+      .setAudience(url.searchParams.get('aud') ?? 'a')
+      .setSubject(sub)
+      .setIssuedAt(now)
+      .setExpirationTime(now + 300)
+      .sign(privateKey)
+    res.setHeader('content-type', 'application/json')
+    return res.end(
+      JSON.stringify({ token, expiresAt: now + 300, identityKey: sub })
+    )
   }
   if (url.pathname === '/mint') {
     const now = Math.floor(Date.now() / 1000)

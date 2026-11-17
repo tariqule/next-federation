@@ -23,8 +23,12 @@ import { Link, getIdentity } from '@next-federation/island'
 
 `callServer` is per island root. Pass a Server Action from a Server Component to a client
 component as a prop. A client module that imports a `'use server'` function directly would get a
-page-global `callServer`, which can cross islands. Server Actions are not callable in this
-release: calling one rejects with `NF-019`.
+page-global `callServer`, which can cross islands (the Vite plugin rejects that with `NF-034`).
+Each call posts to the remote build that rendered the island, with that island's token.
+
+Use `<Form action={action}>` instead of `<form action>`: its fields stay disabled until the island
+has hydrated (islands have no progressive enhancement). Wrap an action in
+`requireIdentity(fn)` to refuse calls without a verified token (`401 NF-014`).
 
 ## Install
 

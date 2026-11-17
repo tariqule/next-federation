@@ -71,6 +71,17 @@ Options:
   (`413`).
 - `dev`: logs `NF-018` for each tag `stripIslandHtml` removed from your HTML (except
   `link[rel=modulepreload]`). The HTML is always stripped, in every mode.
+- `actions`: an `ActionRuntime` (`loadAction`, `decodeReply`, `encodeResult`) that serves Server
+  Actions on `<base>/_nf/action`, following the protocol's Server Actions table. The Vite plugin
+  supplies it; without it that path is a bare `404`. An export runs only if it is a server reference
+  whose `$$id` equals the `X-NF-Action` id (else `404 NF-031`). Actions run inside
+  `runWithIdentity`; `Cookie` is never read. A throwing action answers `200` with a rejected
+  `returnValue` (message redacted when `mode` is production) and logs `NF-033`.
+- `maxActionBodyBytes` (default 1048576): Server Action body limit (`413`).
+- `actionsRequireIdentity` (default false): every action needs a verified token (`401 NF-014`).
+  For one action, wrap it: `export const placeOrder = requireIdentity(async () => ...)`
+  (`requireIdentity` is exported here and from `@next-federation/island`). Both are checked before
+  the arguments are decoded.
 
 Order of evaluation: health, `OPTIONS` (always `204`), `Origin` check, then path, method, size,
 decoding (`400 NF-004` for malformed `p`/`h`/body), island lookup, identity (`401`/`503`), render.
@@ -152,11 +163,16 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
 - Routes: `/b/<build>/assets/*` (immutable, CORS `*`, traversal-safe), `/b/<build>/_nf/*` (that build's
   handler), `/_nf/*` (the current build).
 - One child process per live build, each with `NODE_ENV=production`; the router streams request
-  bodies (capped at the protocol body limit) and never forwards hop-by-hop headers. A build that does
-  not send response headers within `upstreamTimeoutMs` (default 30000) answers `504`.
+  bodies (capped at the protocol body limit; `/_nf/action` bodies at `maxActionBodyBytes`, default
+  8 MiB, above the build's own 1 MiB action limit so the build's `413` is what callers normally see)
+  and never forwards hop-by-hop headers. A build that does not send response headers within
+  `upstreamTimeoutMs` (default 30000) answers `504`. The router's own `413`, `502` and `504` carry
+  `Access-Control-Allow-Origin: *` and empty bodies. Above the router's ceiling the upload is cut
+  off, and a browser may report a network error instead of the `413`; keep the build limit below
+  the ceiling.
 - Retention: the current build (`--current`, or the newest) is always live; so are the newest
   `--max-builds` (3) and any build younger than `--min-age-hours` (24). Others are retired and answer
-  `410 {"error":"NF-023"}` (the one response with `Access-Control-Allow-Origin: *`).
+  `410 {"error":"NF-023"}` (with `Access-Control-Allow-Origin: *`).
 - Fail fast: if a build process dies after startup, the failure is logged (NF-012) and `serveBuilds`
   calls its `onExit({ buildId, code, signal })` option. The `nf-serve` CLI then exits non-zero, so run
   it under a supervisor (Docker, systemd, Kubernetes) that restarts it.

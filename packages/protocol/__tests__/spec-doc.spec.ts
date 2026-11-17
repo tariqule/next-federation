@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { ERROR_CODES } from '@next-federation/sdk'
 import {
+  ACTION_ID_PATTERN,
   ACTION_PATH,
+  DEFAULT_MAX_ACTION_BODY_BYTES,
   DEFAULT_MAX_BODY_BYTES,
   GET_PROPS_LIMIT,
   HEALTH_PATH,
@@ -70,4 +72,27 @@ test('the example envelope uses a placeholder the pattern accepts', () => {
   const match = /```json\n([\s\S]*?)\n```/.exec(spec)
   const { idPlaceholder } = JSON.parse(match?.[1] ?? '')
   expect(ID_PLACEHOLDER_PATTERN.test(idPlaceholder)).toBe(true)
+})
+
+test('the spec documents Server Actions and no longer reserves them', () => {
+  expect(spec).not.toContain('## Reserved')
+  const section = spec.slice(spec.indexOf('## Server Actions'))
+  expect(spec).toContain('## Server Actions')
+  for (const value of [
+    ACTION_ID_PATTERN.source,
+    String(DEFAULT_MAX_ACTION_BODY_BYTES),
+    'X-NF-Action',
+    'text/x-component',
+    'NF-031',
+    'NF-032',
+    'NF-033',
+    'NF-014',
+    'NF-015',
+    'NF-021',
+    'NF-023',
+    'invalidateToken',
+    'onAction',
+  ]) {
+    expect(section).toContain(value)
+  }
 })

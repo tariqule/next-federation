@@ -277,3 +277,32 @@ test('caller mistakes throw: unknown remote is NF-001, missing wrapper is NF-017
     getIslandProps(ssr(), { remote: 'a', island: 'Banner' })
   ).rejects.toMatchObject({ code: 'NF-017' })
 })
+
+test('D2: a public island on a host with getIdentity carries a null-key token, read without identity', async () => {
+  const getIdentity = rs.fn<PagesIdentity>(async () => ({ sub: 'user-1' }))
+  const { getIslandProps } = createPagesIslands(federation(), { getIdentity })
+  for (const ctx of [ssr(), ssg()]) {
+    const props = await getIslandProps(ctx, { remote: 'a', island: 'Banner' })
+    expect(props.token).toEqual({
+      endpoint: '/base/api/next-federation/token?aud=a',
+      identityKey: null,
+    })
+    expect(props.envelope).toEqual(envelope)
+  }
+  expect(getIdentity).not.toHaveBeenCalled()
+  expect(seen.every((s) => s.headers.authorization === undefined)).toBe(true)
+  // A failed public island has nothing to act on: no token.
+  respond = () => new Response('nope', { status: 500 })
+  expect(
+    (await getIslandProps(ssr(), { remote: 'a', island: 'Banner' })).token
+  ).toBeNull()
+})
+
+test('D2: without identity config a public island keeps token null', async () => {
+  const { getIslandProps } = createPagesIslands(federation(false), {
+    getIdentity: async () => ({ sub: 'u' }),
+  })
+  expect(
+    (await getIslandProps(ssr(), { remote: 'a', island: 'Banner' })).token
+  ).toBeNull()
+})
