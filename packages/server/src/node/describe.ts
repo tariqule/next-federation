@@ -68,6 +68,12 @@ export type DescribeOptions = {
   buildId?: string
   /** Accept a plain-http `base` for a non-loopback host (warned once). */
   allowInsecureHttp?: boolean
+  /**
+   * Index and sign the declarations in `client/@mf-types/` (hosts'
+   * `nf-types`). Default false: a build's `@mf-types/` folder is left
+   * unsigned, and hosts download no types. NF-002 when the folder is missing.
+   */
+  types?: boolean
   /** Reads NF_COMPONENTS_SIGNING_KEY (sign) and NODE_ENV. */
   env: Record<string, string | undefined>
   /** Build time (ms) of a build described the first time. Default: now. */
@@ -380,9 +386,17 @@ export async function describeComponentsBuild(
   // per expose only with the Vite plugin's usage file.
   const shared = sharedFromManifest(manifest, await readSharedUsage(dir))
   if (shared) payload.shared = shared
-  // The exposed modules' declarations index, when the build has `@mf-types/`.
-  const types = await writeTypesIndex(client, base)
-  if (types) payload.types = types
+  // The exposed modules' declarations index: opt-in, as the Vite plugin's
+  // `types` (an `@mf-types/` folder alone publishes nothing).
+  if (opts.types === true) {
+    const types = await writeTypesIndex(client, base)
+    if (!types) {
+      throw invalid(
+        `--types: the build has no client/${TYPES_FOLDER}/ folder of declarations to sign.`
+      )
+    }
+    payload.types = types
+  }
   const file = await createDescriptorFile(payload, opts.env)
   const info: ComponentsBuildInfo = {
     kind: 'components',
@@ -449,8 +463,9 @@ async function signatureVerifies(jws: string, keys: JWK[]): Promise<boolean> {
  *   `publicKeys`, its ES256 signature verifies (without them the signature
  *   is not checked, and the result says so);
  * - the assets and the shared modules are the ones `mf-manifest.json` lists;
- * - the signed types index is `client/@mf-types/index.json` and lists exactly
- *   the declaration files there;
+ * - a signed types index is `client/@mf-types/index.json` and lists exactly
+ *   the declaration files there (a folder the descriptor does not sign, as
+ *   in a build described without `--types`, is not checked);
  * - every server file still has its recorded sha384, and the server graph has
  *   no file the descriptor does not list.
  */
@@ -555,21 +570,18 @@ export async function verifyComponentsBuild(
   return { signature }
 }
 
-/** The signed index is the one on disk, and lists exactly the files there. */
+/**
+ * The signed index is the one on disk, and lists exactly the files there.
+ * Nothing to check when the descriptor signs no types: hosts download only
+ * signed declarations, so an unsigned `@mf-types/` folder is never published.
+ */
 async function verifyTypes(
   client: string,
   realClient: string,
   file: ComponentDescriptorFile
 ): Promise<void> {
+  if (!file.types) return
   const index = await collectTypesIndex(client)
-  if (!file.types) {
-    if (index) {
-      throw mismatch(
-        `client/${TYPES_FOLDER}/ exists, but ${COMPONENTS_DESCRIPTOR_FILE} lists no types.`
-      )
-    }
-    return
-  }
   const path = `${TYPES_FOLDER}/${TYPES_INDEX_FILE}`
   if (!index || file.types.index !== `${file.base}${path}`) {
     throw mismatch(
@@ -591,7 +603,7 @@ async function verifyTypes(
 }
 
 const USAGE =
-  'usage: nf-describe --dir <build folder> (--ssr-entry <path in client/> | --no-ssr) [--base <url>] [--build-id <id>] [--allow-insecure-http]\n       nf-describe --dir <build folder> --verify [--public-key <JWK JSON | JWK file>]...\n(NF_COMPONENTS_SIGNING_KEY: a private EC P-256 JWK signs the descriptor)'
+  'usage: nf-describe --dir <build folder> (--ssr-entry <path in client/> | --no-ssr) [--base <url>] [--build-id <id>] [--types] [--allow-insecure-http]\n       nf-describe --dir <build folder> --verify [--public-key <JWK JSON | JWK file>]...\n(NF_COMPONENTS_SIGNING_KEY: a private EC P-256 JWK signs the descriptor)'
 
 async function readPublicKey(value: string): Promise<JWK> {
   const text = value.trim().startsWith('{')
@@ -637,6 +649,7 @@ export async function runDescribeCli(
         base: { type: 'string' },
         'build-id': { type: 'string' },
         'allow-insecure-http': { type: 'boolean' },
+        types: { type: 'boolean' },
         verify: { type: 'boolean' },
         'public-key': { type: 'string', multiple: true },
       },
@@ -667,6 +680,7 @@ export async function runDescribeCli(
       base: values.base,
       buildId: values['build-id'],
       allowInsecureHttp: values['allow-insecure-http'],
+      types: values.types,
       env,
     })
     const files = file.ssr ? Object.keys(file.ssr.integrity).length : 0

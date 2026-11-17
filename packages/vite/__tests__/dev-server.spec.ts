@@ -12,7 +12,13 @@ const root = resolve(import.meta.dirname, '../.nf-dev-server-spec')
 let server: ViteDevServer
 
 beforeAll(async () => {
-  await rm(root, { recursive: true, force: true })
+  // Vite's dependency optimizer may still be writing deps_temp here.
+  await rm(root, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  })
   await mkdir(join(root, 'src'), { recursive: true })
   await writeFile(
     join(root, 'src/actions.ts'),
@@ -44,7 +50,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await server?.close()
-  await rm(root, { recursive: true, force: true })
+  // Vite's dependency optimizer may still be writing deps_temp here.
+  await rm(root, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  })
 })
 
 async function errorOf(url: string, env: 'client' | 'ssr'): Promise<unknown> {

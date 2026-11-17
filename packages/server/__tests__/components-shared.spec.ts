@@ -44,6 +44,35 @@ test('every shared module but React; a non-singleton is a bundled fallback copy'
   })
 })
 
+test('never a fallback for a React, React DOM or Next.js subpath (hosts refuse one)', () => {
+  const shared = sharedFromManifest(
+    {
+      shared: [
+        entry('react-dom/server', false, '^19.0.0', '19.3.1'),
+        entry('react/jsx-dev-runtime', false, '^19.0.0', '19.3.1'),
+        entry('next/head', false, '^16.0.0', '16.4.6'),
+        entry('next', false, '^16.0.0', '16.4.6'),
+        // Only the exact roots and their subpaths: a look-alike may fall back.
+        entry('react-dom-extra', false, '^1.0.0', '1.2.0'),
+        entry('nextra', false, '^3.0.0', '3.1.0'),
+      ],
+    },
+    null
+  )
+  expect(shared).toEqual({
+    'react-dom/server': { requiredVersion: '^19.0.0', fallback: false },
+    'react/jsx-dev-runtime': { requiredVersion: '^19.0.0', fallback: false },
+    'next/head': { requiredVersion: '^16.0.0', fallback: false },
+    next: { requiredVersion: '^16.0.0', fallback: false },
+    'react-dom-extra': {
+      requiredVersion: '^1.0.0',
+      fallback: true,
+      version: '1.2.0',
+    },
+    nextra: { requiredVersion: '^3.0.0', fallback: true, version: '3.1.0' },
+  })
+})
+
 test('the per-expose usage lists the exposes that import each module', () => {
   const usage = new Map([
     ['./Versioned', new Set(['date-lib'])],

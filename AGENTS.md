@@ -22,7 +22,8 @@ packages/
   sdk/        logger.ts, error-codes.ts, nf-error.ts, index.ts
   protocol/   constants.ts, envelope.ts, request.ts, props.ts, id-prefix.ts, bootstrap.ts (types),
               share-scope.ts (island React share scope), secure-url.ts (https rule),
-              components.ts (Mode A descriptor, trust registry), index.ts
+              components.ts (Mode A descriptor, trust registry), semver.ts (shared-module ranges),
+              action.ts (Server Action request), index.ts
   core/       config.ts (defineFederation), fetch-island.ts, events.ts, index.ts,
               identity/ (keys.ts, mint.ts, identity-key.ts, index.ts)   → export "./identity",
               components.ts (Mode A descriptor fetch + verify)         → export "./components"
@@ -30,15 +31,20 @@ packages/
               host-react.ts, index.ts; provide-host-react.ts → export "./share";
               components/ (index.tsx, render.tsx, runtime.ts) → export "./components",
               components/server-loader.ts (+ .browser.ts) → export "./components/server-loader"
-  server/     strip-html.ts, identity-verify.ts, identity-context.ts, cors.ts, handler.ts, index.ts,
-              node/ (listener.ts, serve-builds.ts, retention.ts, cli.ts) → export "./node", bin "nf-serve"
+  server/     strip-html.ts, identity-verify.ts, identity-context.ts, cors.ts, handler.ts,
+              action.ts (Server Actions, requireIdentity marker), index.ts,
+              node/ (listener.ts, serve-builds.ts, retention.ts, cli.ts) → export "./node", bin "nf-serve",
+              node/components-descriptor.ts (Mode A descriptor, shared with the Vite plugin),
+              node/describe.ts, node/describe-cli.ts → bin "nf-describe" (any MF 2.0 remote)
   island/     bridge-context.tsx, link.tsx, index.client.ts, index.server.ts,
               bootstrap/ (create-bootstrap.tsx, flight-scope.ts, share-scope.ts, index.ts) → export
               "./bootstrap"; bootstrap/share-scope.ts → export "./share-scope"
   vite/       index.ts, options.ts, scope-flight-client.ts, checks.ts, share.ts (React sharing),
+              code-literal.ts, trim-slashes.ts,
               plugin-rsc/ (plugin.ts, entry.rsc.tsx, entry.ssr.tsx, entry.client.tsx,
-              bootstrap.client.tsx, css.ts), components/ (plugin.ts, options.ts, descriptor.ts,
-              version.ts, types.ts: the Mode A components remote, nextFederationComponents)
+              bootstrap.client.tsx, css.ts, dev-actions.ts: dev Server Action allowlist),
+              components/ (plugin.ts, options.ts, descriptor.ts, shared.ts, version.ts, types.ts:
+              the Mode A components remote, nextFederationComponents)
   next/       config.ts → "./config"; server/ (create-islands.tsx, island-cache.legacy.ts,
               island-cache.cc.ts, private-envelope.ts, component-descriptor.ts,
               get-component-descriptor.ts) → "./server"; client/next-island-mount.tsx;

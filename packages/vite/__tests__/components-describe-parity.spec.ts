@@ -49,8 +49,10 @@ test('nf-describe on a Vite-built remote writes the plugin descriptor', async ()
   const manifest = await readFile(join(dir, 'client', 'mf-manifest.json'))
   await rm(join(dir, 'nf-components.json'))
 
+  // The fixture publishes types (`types: true`): nf-describe signs them with --types.
   const { file } = await describeComponentsBuild({
     dir,
+    types: true,
     env: { NF_COMPONENTS_SIGNING_KEY: key },
   })
   // Payload and digest identical (ES256 signatures are randomized: both verify).

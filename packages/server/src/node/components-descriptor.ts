@@ -9,6 +9,7 @@ import {
   canonicalJson,
   componentDescriptorBytes,
   componentDescriptorDigest,
+  isNeverFallback,
   isSemverRange,
   isSemverVersion,
   sha384Integrity,
@@ -335,8 +336,6 @@ const HOST_REACT = new Set([
   'react-dom/client',
   'react/jsx-runtime',
 ])
-/** The host's router modules: shared, never a fallback copy. */
-const NEXT_SHARED = new Set(['next/link', 'next/navigation', 'next/router'])
 const BARE_SPECIFIER =
   /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
 
@@ -394,8 +393,10 @@ type ManifestShared = {
  * satisfy (false: any; a range hosts cannot evaluate counts as any), and
  * `fallback` for a bundled copy (a non-singleton share: Module Federation
  * picks a satisfying copy or the build's own), with that copy's version.
- * `next/*` never falls back. `usage` (per expose) adds `exposes`; without
- * it every expose is checked. undefined when there is nothing to list, so
+ * React, React DOM and Next.js (every subpath: `react-dom/server`,
+ * `next/head`) never fall back (`isNeverFallback`: hosts refuse such a
+ * descriptor). `usage` (per expose) adds `exposes`; without it every expose
+ * is checked. undefined when there is nothing to list, so
  * the digest of such a build is what older hosts compute.
  */
 export function sharedFromManifest(
@@ -409,7 +410,8 @@ export function sharedFromManifest(
     if (typeof name !== 'string' || !BARE_SPECIFIER.test(name)) continue
     if (HOST_REACT.has(name)) continue
     const range = item.requiredVersion
-    const fallback = item.singleton === false && !NEXT_SHARED.has(name)
+    // Hosts refuse a fallback copy of React, React DOM or Next.js (any subpath).
+    const fallback = item.singleton === false && !isNeverFallback(name)
     const entry: ComponentSharedModule = {
       requiredVersion:
         typeof range === 'string' && isSemverRange(range) ? range : false,

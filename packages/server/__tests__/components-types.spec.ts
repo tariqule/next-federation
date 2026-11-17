@@ -20,6 +20,7 @@ import {
 } from '../src/node/components-descriptor.ts'
 import {
   describeComponentsBuild,
+  runDescribeCli,
   verifyComponentsBuild,
 } from '../src/node/describe.ts'
 
@@ -142,6 +143,7 @@ test('nf-describe signs the index with the descriptor; verify catches an edited,
   const { file } = await describeComponentsBuild({
     dir,
     ssrEntry: 'server/remoteEntry.js',
+    types: true,
     env: {},
   })
   expect(file.types?.index).toBe(`${BASE}@mf-types/index.json`)
@@ -161,4 +163,75 @@ test('nf-describe signs the index with the descriptor; verify catches an edited,
   await writeTypesIndex(client, BASE)
   error = await verifyComponentsBuild(dir).catch((e: unknown) => e)
   expect(codeOf(error)).toBe('NF-027')
+})
+
+test('nf-describe signs types only when asked: without `types` the folder is left unsigned and unindexed', async () => {
+  await writeTypes()
+  const { file } = await describeComponentsBuild({
+    dir,
+    ssrEntry: 'server/remoteEntry.js',
+    env: {},
+  })
+  expect(file.types).toBeUndefined()
+  await expect(
+    readFile(join(client, '@mf-types', 'index.json'))
+  ).rejects.toMatchObject({ code: 'ENOENT' })
+  // An older build: the folder is there, the descriptor lists no types.
+  await expect(verifyComponentsBuild(dir)).resolves.toBeDefined()
+})
+
+test('nf-describe --types signs the declarations; without the flag it does not', async () => {
+  await writeTypes()
+  const lines: string[] = []
+  const log = (line: string) => void lines.push(line)
+  const read = async () =>
+    JSON.parse(await readFile(join(dir, 'nf-components.json'), 'utf8')) as {
+      types?: unknown
+    }
+  expect(
+    await runDescribeCli(
+      ['--dir', dir, '--ssr-entry', 'server/remoteEntry.js'],
+      {},
+      log
+    )
+  ).toBe(0)
+  expect((await read()).types).toBeUndefined()
+  expect(
+    await runDescribeCli(
+      ['--dir', dir, '--ssr-entry', 'server/remoteEntry.js', '--types'],
+      {},
+      log
+    )
+  ).toBe(0)
+  expect((await read()).types).toEqual({
+    index: `${BASE}@mf-types/index.json`,
+    integrity: sri(
+      await readFile(join(client, '@mf-types', 'index.json'), 'utf8')
+    ),
+  })
+  expect(await runDescribeCli(['--dir', dir, '--verify'], {}, log)).toBe(0)
+})
+
+test('nf-describe --types on a build without @mf-types/ is NF-002 (nothing to sign)', async () => {
+  const error = await describeComponentsBuild({
+    dir,
+    ssrEntry: 'server/remoteEntry.js',
+    types: true,
+    env: {},
+  }).catch((e: unknown) => e)
+  expect(codeOf(error)).toBe('NF-002')
+  expect(String((error as Error).message)).toMatch(/@mf-types/)
+})
+
+test('verify accepts an older build whose descriptor lists no types next to an @mf-types/ folder', async () => {
+  await describeComponentsBuild({
+    dir,
+    ssrEntry: 'server/remoteEntry.js',
+    env: {},
+  })
+  // Declarations the descriptor does not sign: hosts never download them.
+  await writeTypes()
+  await expect(verifyComponentsBuild(dir)).resolves.toEqual({
+    signature: 'unsigned',
+  })
 })
