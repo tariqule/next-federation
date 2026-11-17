@@ -7,6 +7,10 @@ import type { Plugin, UserConfig } from 'vite'
 import { nextFederationIslands } from '../src/index.ts'
 import type { IslandRemoteOptions } from '../src/options.ts'
 import { devCorsMiddleware } from '../src/dev-cors.ts'
+import {
+  isDevActionAllowed,
+  registerDevActions,
+} from '../src/plugin-rsc/dev-actions.ts'
 import { ENTRIES } from '../src/plugin-rsc/plugin.ts'
 import { FLIGHT_CLIENT_ID } from '../src/scope-flight-client.ts'
 
@@ -148,29 +152,110 @@ test('virtual:next-federation/bootstrap re-exports mountIsland from the client e
   expect(ENTRIES.client).toMatch(/\/src\/plugin-rsc\/entry\.client\.tsx$/)
 })
 
-test('the checks plugin rejects "use server" with NF-019, using the real module id', () => {
+function checksIn(environment: string, importers: string[] = []) {
   const checks = byName(nextFederationIslands(options), 'nf:checks')
   const transform = handlerOf(checks.transform)
-  expect(
-    transform("export const a = 'use server'", '/app/src/a.ts?v=1')
-  ).toBeUndefined()
-  // .css is not parsed even if the text appears in it.
-  expect(transform("/* 'use server' */", '/app/src/a.css')).toBeUndefined()
-  for (const id of ['/app/src/actions.ts', '/app/src/Form.tsx?v=1']) {
-    try {
-      transform(
-        "export async function f() {\n  'use server'\n  return 1\n}",
-        id
-      )
-    } catch (error) {
-      expect(isNFError(error, 'NF-019')).toBe(true)
-      continue
-    }
-    throw new Error(`expected NF-019 for ${id}`)
+  const ctx = {
+    environment: { name: environment },
+    getModuleInfo: () => ({ importers }),
   }
+  return {
+    checks,
+    run: (code: string, id: string) => transform.call(ctx, code, id),
+  }
+}
+
+const USE_SERVER = "'use server'\nexport async function save() {}\n"
+
+test('the checks plugin lets Server Actions through in the rsc environment', () => {
+  const { checks, run } = checksIn('rsc')
+  expect(run(USE_SERVER, '/app/src/actions.ts')).toBeUndefined()
+  expect(
+    run(
+      "export async function f() {\n  'use server'\n  return 1\n}",
+      '/app/src/Panel.tsx?v=1'
+    )
+  ).toBeUndefined()
   const filter = (checks.transform as { filter: { id: { exclude: RegExp } } })
     .filter.id.exclude
   expect(filter.test('\0virtual:x')).toBe(true)
+})
+
+test.each(['client', 'ssr'])(
+  "a 'use server' file reached from the %s environment is NF-034 naming the importer",
+  (environment) => {
+    const { run } = checksIn(environment, ['/app/src/AddToCart.tsx'])
+    let error: unknown
+    try {
+      run(USE_SERVER, '/app/src/actions.ts?v=2')
+    } catch (e) {
+      error = e
+    }
+    expect(isNFError(error, 'NF-034')).toBe(true)
+    expect(String((error as Error).message)).toContain('/app/src/actions.ts')
+    expect(String((error as Error).message)).toContain('/app/src/AddToCart.tsx')
+    // A non-module file or a 'use server' string that is not a directive is fine.
+    expect(run("/* 'use server' */", '/app/src/a.css')).toBeUndefined()
+    expect(
+      run("export const a = 'use server'", '/app/src/a.ts')
+    ).toBeUndefined()
+  }
+)
+
+test('a raw <form action={...}> warns NF-035 once per file, except in node_modules and next-federation', () => {
+  const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    const { run } = checksIn('client')
+    const code =
+      'export function A({ save }) {\n  return <form action={save} />\n}\n'
+    run(code, '/app/src/A.tsx')
+    run(code, '/app/src/A.tsx?v=2')
+    run(code, '/app/node_modules/lib/A.js')
+    run(code, '/repo/node_modules/@next-federation/island/dist/form.js')
+    run('export const B = () => <form action="/x" />', '/app/src/B.tsx')
+    const lines = warn.mock.calls.map((c) => c.join(' '))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('NF-035')
+    expect(lines[0]).toContain('/app/src/A.tsx:2')
+  } finally {
+    warn.mockRestore()
+  }
+})
+
+test('the rsc environment records Server Action files for the dev allowlist', () => {
+  const plugins = nextFederationIslands(options)
+  const config = byName(plugins, 'nf:config')
+  handlerOf(config.config)({}, { command: 'serve', mode: 'development' })
+  handlerOf(config.configResolved)({ root: '/app', isProduction: false })
+  handlerOf(config.configureServer)({ middlewares: { use() {} } })
+  const transform = handlerOf(byName(plugins, 'nf:checks').transform)
+  const rsc = { environment: { name: 'rsc' }, getModuleInfo: () => null }
+  transform.call(rsc, USE_SERVER, '/app/src/actions.ts?t=1')
+  transform.call(rsc, USE_SERVER, '/elsewhere/shared/actions.ts')
+  const scopeKey = (
+    JSON.parse(
+      load(config, 'virtual:next-federation/config', 'client').replace(
+        /^export default /,
+        ''
+      )
+    ) as { scopeKey: string }
+  ).scopeKey
+  expect(isDevActionAllowed(scopeKey, '/src/actions.ts#save')).toBe(true)
+  expect(
+    isDevActionAllowed(scopeKey, '/@fs/elsewhere/shared/actions.ts#save')
+  ).toBe(true)
+  expect(isDevActionAllowed(scopeKey, '/src/other.ts#save')).toBe(false)
+  expect(isDevActionAllowed(scopeKey, '/src/actions.ts')).toBe(false)
+  expect(
+    isDevActionAllowed('https://unknown.example/', '/src/actions.ts#save')
+  ).toBe(false)
+  // A file that no longer has 'use server' leaves the allowlist.
+  transform.call(
+    rsc,
+    'export async function save() {}\n',
+    '/app/src/actions.ts'
+  )
+  expect(isDevActionAllowed(scopeKey, '/src/actions.ts#save')).toBe(false)
 })
 
 test('scope rewrite on the plugin-rsc-patched, vendored browser flight client', () => {
@@ -308,4 +393,11 @@ test('a non-production build (React development copies) neither provides nor con
   const prod = run(true)
   expect(prod.share).toMatchObject({ scope: 'nf-islands' })
   expect(String(prod.boundary)).toContain('await ready')
+})
+
+test('the dev allowlist only accepts ids that start with "/"', () => {
+  const files = new Set(['/app/src/x.ts'])
+  registerDevActions('https://m2.example/', '/app', files)
+  expect(isDevActionAllowed('https://m2.example/', '/src/x.ts#a')).toBe(true)
+  expect(isDevActionAllowed('https://m2.example/', 'src/x.ts#a')).toBe(false)
 })

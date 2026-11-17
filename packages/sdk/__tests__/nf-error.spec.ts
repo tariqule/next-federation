@@ -35,16 +35,21 @@ test('cause is preserved', () => {
   expect(new NFError('NF-007', 'x').cause).toBeUndefined()
 })
 
-test('codes are NF-001..NF-030 then NF-036 (NF-031..035 reserved), unique slugs', () => {
-  const expected = [
-    ...Array.from(
-      { length: 30 },
-      (_, i) => `NF-${String(i + 1).padStart(3, '0')}`
-    ),
-    'NF-036',
-  ]
+test('codes are contiguous NF-001..NF-036 with unique slugs', () => {
+  const expected = Array.from(
+    { length: 36 },
+    (_, i) => `NF-${String(i + 1).padStart(3, '0')}`
+  )
   expect(Object.keys(ERROR_CODES)).toEqual(expected)
   const slugs = Object.values(ERROR_CODES).map((c) => c.slug)
-  expect(new Set(slugs).size).toBe(expected.length)
+  expect(new Set(slugs).size).toBe(36)
   for (const slug of slugs) expect(slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+})
+
+test('server action codes have their slugs', () => {
+  expect(ERROR_CODES['NF-031'].slug).toBe('action-not-found')
+  expect(ERROR_CODES['NF-032'].slug).toBe('action-request-invalid')
+  expect(ERROR_CODES['NF-033'].slug).toBe('action-failed')
+  expect(ERROR_CODES['NF-034'].slug).toBe('server-action-imported-by-client')
+  expect(ERROR_CODES['NF-035'].slug).toBe('raw-form-action')
 })

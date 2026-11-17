@@ -1,5 +1,8 @@
 export {
+  ACTION_HEADER,
+  ACTION_ID_PATTERN,
   ACTION_PATH,
+  DEFAULT_MAX_ACTION_BODY_BYTES,
   BUILD_ID_PATTERN,
   FLIGHT_REGISTRY_GLOBAL,
   DEFAULT_MAX_BODY_BYTES,
@@ -11,6 +14,8 @@ export {
   PROTOCOL_VERSION,
   SHA384_PATTERN,
 } from './constants.ts'
+export { actionEndpoint, isActionId, parseActionRequest } from './action.ts'
+export type { ActionRequest } from './action.ts'
 export { assertEnvelopeUrls, parseEnvelope } from './envelope.ts'
 export type { HostContext, IslandEnvelope, ReactMode } from './envelope.ts'
 export { canonicalJson } from './props.ts'
@@ -18,6 +23,7 @@ export { decodeIslandRequest, encodeIslandRequest } from './request.ts'
 export type { EncodedIslandRequest } from './request.ts'
 export { applyIdPrefix } from './id-prefix.ts'
 export type {
+  ActionReport,
   IslandBootstrapModule,
   IslandBridge,
   IslandErrorKind,

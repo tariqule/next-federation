@@ -15,6 +15,7 @@ import {
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  ACTION_PATH,
   BUILD_ID_PATTERN,
   COMPONENTS_DESCRIPTOR_FILE,
   COMPONENTS_DESCRIPTOR_PATH,
@@ -33,6 +34,11 @@ export type ServeBuildsOptions = {
   retention?: Partial<Retention>
   /** Request body cap enforced while proxying. Default: the protocol's body limit. */
   maxBodyBytes?: number
+  /**
+   * Body cap for `/_nf/action` requests. Default 8 MiB: above the build's own action
+   * limit (1 MiB by default), so the build's 413 is what callers normally see.
+   */
+  maxActionBodyBytes?: number
   /** Max wait for a build's response headers, in ms. Default 30000. Exceeded: 504. */
   upstreamTimeoutMs?: number
   /**
@@ -56,6 +62,9 @@ export type ServedBuilds = {
   /** The port actually bound (differs from `port` when `port` is 0). */
   port: number
 }
+
+/** Default nf-serve ceiling for `/_nf/action` bodies (the build enforces its own, lower limit). */
+export const DEFAULT_MAX_ACTION_CEILING: number = 8 * 1024 * 1024
 
 const HOP_BY_HOP = new Set([
   'connection',
@@ -173,6 +182,7 @@ export async function serveBuilds(
   }
   const root = resolve(opts.dir)
   const maxBody = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
+  const maxActionBody = opts.maxActionBodyBytes ?? DEFAULT_MAX_ACTION_CEILING
   const builds = await readBuilds(root)
   const plan = planRetention(builds, Date.now(), retention, opts.current)
   const liveSet = new Set(plan.live)
@@ -229,6 +239,16 @@ export async function serveBuilds(
   }
   const plain = (res: ServerResponse, status: number) => {
     if (!res.headersSent) res.writeHead(status)
+    res.end()
+  }
+  // nf-serve's own proxy errors: bodyless, so readable from any origin (as the 410 is).
+  const proxyError = (res: ServerResponse, status: number) => {
+    if (!res.headersSent) {
+      res.writeHead(status, {
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store',
+      })
+    }
     res.end()
   }
 
@@ -298,9 +318,11 @@ export async function serveBuilds(
     id: string,
     path: string
   ) {
+    const pathname = path.split('?')[0]!
+    const limit = pathname.endsWith(ACTION_PATH) ? maxActionBody : maxBody
     const declared = req.headers['content-length']
-    if (declared !== undefined && Number(declared) > maxBody) {
-      return plain(res, 413)
+    if (declared !== undefined && Number(declared) > limit) {
+      return proxyError(res, 413)
     }
     const upstream = httpRequest(
       {
@@ -320,12 +342,12 @@ export async function serveBuilds(
     const timer = setTimeout(() => {
       timedOut = true
       upstream.destroy()
-      plain(res, 504)
+      proxyError(res, 504)
     }, timeoutMs)
     upstream.on('response', () => clearTimeout(timer))
     upstream.on('error', () => {
       clearTimeout(timer)
-      if (!timedOut) plain(res, 502)
+      if (!timedOut) proxyError(res, 502)
     })
     res.on('close', () => {
       clearTimeout(timer)
@@ -334,10 +356,10 @@ export async function serveBuilds(
     let seen = 0
     req.on('data', (chunk: Buffer) => {
       seen += chunk.length
-      if (seen > maxBody) {
+      if (seen > limit) {
         req.unpipe(upstream)
         upstream.destroy()
-        plain(res, 413)
+        proxyError(res, 413)
       }
     })
     req.pipe(upstream)

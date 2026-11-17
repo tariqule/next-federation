@@ -250,3 +250,32 @@ describe('plain http for a non-loopback host', () => {
     expect(resolveOptions(opts, prodBuild).allowInsecureHttp).toBe(false)
   })
 })
+
+test('actions: requireIdentity defaults to false, maxBodyBytes to 1 MiB, both validated', () => {
+  const r = resolveOptions(opts, serve)
+  expect(r.actionsRequireIdentity).toBe(false)
+  expect(r.maxActionBodyBytes).toBe(1_048_576)
+  const set = resolveOptions(
+    { ...opts, actions: { requireIdentity: true, maxBodyBytes: 4096 } },
+    build
+  )
+  expect(set.actionsRequireIdentity).toBe(true)
+  expect(set.maxActionBodyBytes).toBe(4096)
+  for (const actions of [
+    { requireIdentity: 'yes' },
+    { maxBodyBytes: 0 },
+    { maxBodyBytes: 1.5 },
+    { maxBodyBytes: -1 },
+    'on',
+    null,
+  ]) {
+    expect(
+      codeOf(() =>
+        resolveOptions(
+          { ...opts, actions: actions as IslandRemoteOptions['actions'] },
+          serve
+        )
+      )
+    ).toBe('NF-002')
+  }
+})

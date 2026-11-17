@@ -2,6 +2,7 @@
 // output. Needs the workspace packages built (`pnpm build`): the fixture's
 // vite.config.ts and the remote's runtime resolve `@next-federation/*` from
 // their `dist`, exactly as a remote app does.
+import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -224,10 +225,45 @@ test('one identity store: a private island sees the verified token subject', asy
   }
 })
 
+test('the fixture Cart island: forms disabled until hydration, actions run on this build', async () => {
+  const { res, env } = await island('Cart', { sku: 'A1' })
+  expect(res.status).toBe(200)
+  expect(env!.island).toBe('Cart')
+  expect(env!.html.match(/<fieldset[^>]*disabled/g)).toHaveLength(5)
+  // The actions reach the client component as props: their ids are in the payload.
+  const ids = [
+    ...env!.rscPayload.matchAll(/"id":"([^"]+#[A-Za-z_$][\w$]*)"/g),
+  ].map((m) => m[1]!)
+  const whoami = ids.find((id) => id.endsWith('#whoami'))!
+  const order = ids.find((id) => id.endsWith('#placeOrder'))!
+  const post = (id: string) =>
+    handler(
+      new Request('http://127.0.0.1:4100/_nf/action?island=Cart', {
+        method: 'POST',
+        headers: {
+          'x-nf-action': id,
+          'content-type': 'text/plain;charset=UTF-8',
+        },
+        body: '[]',
+      })
+    )
+  const who = await post(whoami)
+  expect(who.status).toBe(200)
+  const text = await who.text()
+  expect(text).toContain('"buildId":"t1"')
+  expect(text).toContain('"sub":null')
+  // placeOrder is wrapped in requireIdentity: no token, no decode.
+  const refused = await post(order)
+  expect(refused.status).toBe(401)
+  expect(await refused.json()).toEqual({ error: 'NF-014' })
+})
+
 /** Builds the fixture with one extra island and extra plugins, from src. */
 async function buildVariant(
   islandSource: Record<string, string>,
-  extraPlugins: Plugin[] = []
+  extraPlugins: Plugin[] = [],
+  check?: (outDir: string) => Promise<void>,
+  extraOptions: Partial<Parameters<typeof nextFederationIslands>[0]> = {}
 ): Promise<unknown> {
   await rm(tmp, { recursive: true, force: true })
   await mkdir(tmp, { recursive: true })
@@ -247,11 +283,14 @@ async function buildVariant(
           outDir: 'dist/build-spec-variant',
           buildId: 'v',
           islands: { Bad: './src/.nf-build-spec/Bad.tsx' },
+          ...extraOptions,
         }),
         ...extraPlugins,
       ],
     })
     await builder.buildApp()
+    // The output folder is `<outDir>/<buildId>`.
+    if (check) await check(join(fixture, 'dist/build-spec-variant/v'))
     return null
   } catch (error) {
     return error
@@ -263,13 +302,168 @@ async function buildVariant(
   }
 }
 
-test('a module with "use server" fails the build with NF-019', async () => {
+test("a 'use client' module importing a 'use server' file fails the build with NF-034", async () => {
   const error = await buildVariant({
     'actions.ts': "'use server'\nexport async function save() {}\n",
+    'Button.tsx':
+      "'use client'\nimport { save } from './actions'\nexport function Button() { return <button onClick={() => save()}>x</button> }\n",
     'Bad.tsx':
-      "import { save } from './actions'\nexport default function Bad() { return <form action={save} /> }\n",
+      "import { Button } from './Button'\nexport default function Bad() { return <Button /> }\n",
   })
-  expect(String((error as Error | null)?.message)).toContain('NF-019')
+  const message = String((error as Error | null)?.message)
+  expect(message).toContain('NF-034')
+  expect(message).toContain('actions.ts')
+  expect(message).toContain('Button.tsx')
+}, 60000)
+
+// Runs requests against a built `rsc/index.js` in a child process: plugin-rsc's
+// server runtime keeps process-wide state, so a second build must not be
+// imported into this one (it would take over the fixture build's references).
+type BuiltResult = {
+  status: number
+  type: string | null
+  cors: string | null
+  body: string
+}
+
+function runBuilt(
+  dir: string,
+  requests: { url: string; init?: RequestInit }[],
+  nodeEnv: string | null = 'production'
+): BuiltResult[] & { stderr: string } {
+  const script = `
+    const { default: handler } = await import(${JSON.stringify(pathToFileURL(join(dir, 'rsc/index.js')).href)})
+    const out = []
+    for (const { url, init } of JSON.parse(process.argv[1])) {
+      const res = await handler(new Request(url, init))
+      out.push({ status: res.status, type: res.headers.get('content-type'),
+        cors: res.headers.get('access-control-allow-origin'), body: await res.text() })
+    }
+    process.stdout.write(JSON.stringify(out))
+  `
+  const env: Record<string, string | undefined> = { ...process.env }
+  if (nodeEnv === null) delete env.NODE_ENV
+  else env.NODE_ENV = nodeEnv
+  const run = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', script, JSON.stringify(requests)],
+    { cwd: dir, env, encoding: 'utf8' }
+  )
+  if (run.status !== 0) throw new Error(`built handler failed: ${run.stderr}`)
+  return Object.assign(JSON.parse(run.stdout) as BuiltResult[], {
+    stderr: run.stderr,
+  })
+}
+
+test('a Server Component passing a Server Action to <Form> builds, and the route runs it', async () => {
+  const error = await buildVariant(
+    {
+      'actions.ts':
+        "'use server'\nexport async function save(n: number) { return n * 2 }\n",
+      'Bad.tsx':
+        "import { Form } from '@next-federation/island'\nimport { save } from './actions'\nexport default function Bad() { return <Form action={save}><button>x</button></Form> }\n",
+    },
+    [],
+    async (dir) => {
+      const [page] = runBuilt(dir, [
+        { url: 'http://127.0.0.1:4100/_nf/island/Bad' },
+      ])
+      expect(page!.status).toBe(200)
+      const env = parseEnvelope(JSON.parse(page!.body))
+      expect(env.island).toBe('Bad')
+      expect(env.html).toMatch(/<fieldset[^>]*disabled/)
+      const id = /\$ACTION_ID_([^"]+)"/.exec(env.html)?.[1]
+      expect(id).toMatch(/#save$/)
+      const text = 'text/plain;charset=UTF-8'
+      const [ran, unknown] = runBuilt(dir, [
+        {
+          url: 'http://127.0.0.1:4100/_nf/action?island=Bad',
+          init: {
+            method: 'POST',
+            headers: {
+              'x-nf-action': id!,
+              'content-type': text,
+              origin: 'http://localhost:3100',
+            },
+            body: '[21]',
+          },
+        },
+        {
+          url: 'http://127.0.0.1:4100/_nf/action',
+          init: {
+            method: 'POST',
+            headers: { 'x-nf-action': 'nope#save', 'content-type': text },
+            body: '[]',
+          },
+        },
+      ])
+      expect(ran!.status).toBe(200)
+      expect(ran!.type).toMatch(/^text\/x-component/)
+      expect(ran!.cors).toBe('http://localhost:3100')
+      expect(ran!.body).toContain('42')
+      expect(unknown!.status).toBe(404)
+      expect(JSON.parse(unknown!.body)).toEqual({ error: 'NF-031' })
+    }
+  )
+  expect(error).toBeNull()
+}, 60000)
+
+/** The island's action id, read from React's progressive-enhancement input. */
+function actionIdOf(dir: string): string {
+  const [page] = runBuilt(dir, [
+    { url: 'http://127.0.0.1:4100/_nf/island/Bad' },
+  ])
+  const html = parseEnvelope(JSON.parse(page!.body)).html
+  const id = /\$ACTION_ID_([^"]+)"/.exec(html)?.[1]
+  if (!id) throw new Error(`no action id in ${html}`)
+  return id
+}
+const postAction = (id: string, body = '[]') => ({
+  url: 'http://127.0.0.1:4100/_nf/action',
+  init: {
+    method: 'POST',
+    headers: { 'x-nf-action': id, 'content-type': 'text/plain;charset=UTF-8' },
+    body,
+  },
+})
+const FORM_ISLAND =
+  "import { Form } from '@next-federation/island'\nimport { save } from './actions'\nexport default function Bad() { return <Form action={save}><button>x</button></Form> }\n"
+
+test('actions.requireIdentity: true answers 401 NF-014 to an unwrapped action without a token', async () => {
+  const error = await buildVariant(
+    {
+      'actions.ts': "'use server'\nexport async function save() { return 1 }\n",
+      'Bad.tsx': FORM_ISLAND,
+    },
+    [],
+    async (dir) => {
+      const [res] = runBuilt(dir, [postAction(actionIdOf(dir))])
+      expect(res!.status).toBe(401)
+      expect(JSON.parse(res!.body)).toEqual({ error: 'NF-014' })
+    },
+    { actions: { requireIdentity: true } }
+  )
+  expect(error).toBeNull()
+}, 60000)
+
+test('a production build redacts action errors even when NODE_ENV is unset, and warns', async () => {
+  const error = await buildVariant(
+    {
+      'actions.ts':
+        "'use server'\nexport async function save() { throw new Error('secret detail') }\n",
+      'Bad.tsx': FORM_ISLAND,
+    },
+    [],
+    async (dir) => {
+      const id = actionIdOf(dir)
+      const result = runBuilt(dir, [postAction(id)], null)
+      expect(result[0]!.status).toBe(200)
+      expect(result[0]!.body).not.toContain('secret detail')
+      expect(result.stderr).toContain('NF-033')
+      expect(result.stderr).toMatch(/NF-002[^\n]*NODE_ENV/)
+    }
+  )
+  expect(error).toBeNull()
 }, 60000)
 
 test('a "use client" island entry fails the build with NF-002', async () => {

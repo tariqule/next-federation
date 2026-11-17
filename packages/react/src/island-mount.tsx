@@ -166,6 +166,11 @@ export function IslandMount(props: IslandMountProps): ReactElement {
       if (client?.key !== key) client = { key, value: createTokenClient(token) }
       return client.value.getToken()
     }
+    // A remote rejected `rejected` (401 NF-014). Only this mount's endpoint is
+    // affected, and only while it still caches that token.
+    const invalidateToken = (rejected: string): void => {
+      client?.value.invalidate(rejected)
+    }
 
     const markInert = (entry: IslandEntry, error: unknown) => {
       el.dataset.nfState = 'inert'
@@ -218,16 +223,24 @@ export function IslandMount(props: IslandMountProps): ReactElement {
         (mod) => {
           // Rule 3: unmounted, swapped or re-bootstrapped while loading.
           if (!isCurrent(entry) || entry.handle) return
-          const { remote, buildId, mode } = entry.original
+          const { remote, buildId, mode, island } = entry.original
           const original = applyIdPrefix(entry.original, mountId)
           let handle: IslandHandle
           try {
             handle = mod.mountIsland(el, {
-              envelope: { remote, buildId, mode },
+              envelope: {
+                remote,
+                buildId,
+                mode,
+                ...(island === undefined ? {} : { island }),
+              },
               rscPayload: original.rscPayload,
               identifierPrefix: original.identifierPrefix,
               bridge,
               getToken,
+              invalidateToken,
+              onAction: (report) =>
+                emit({ type: 'island:action', remote, buildId, ...report }),
               onError: (error, kind) => onIslandError(entry, error, kind),
             })
           } catch (error) {

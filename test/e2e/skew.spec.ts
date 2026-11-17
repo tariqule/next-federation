@@ -108,3 +108,28 @@ test('a retired build answers 410 and the host shows its fallback', async ({
     expect(((await res.json()) as { buildId: string }).buildId).toBe('v2')
   }
 })
+
+test("on one page, a v1 island's action runs on /b/v1 and a v2 island's on /b/v2", async ({
+  page,
+}) => {
+  const actions: string[] = []
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/_nf/action'))
+      actions.push(r.url())
+  })
+  await page.goto(`${HOST_SPA}/actions?skew=1`)
+  await expect(page.locator('[data-nf-state="live"]')).toHaveCount(2, {
+    timeout: 30_000,
+  })
+  for (const build of ['v1', 'v2']) {
+    const mount = page.getByTestId(`mount-${build}`)
+    await mount.getByTestId('submit-whoami').click()
+    await expect(mount.getByTestId('result-whoami')).toContainText(
+      `"buildId":"${build}"`
+    )
+  }
+  expect(actions).toEqual([
+    `${A}/b/v1/_nf/action?island=Cart`,
+    `${A}/b/v2/_nf/action?island=Cart`,
+  ])
+})

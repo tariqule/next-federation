@@ -1,5 +1,6 @@
 import {
   BUILD_ID_PATTERN,
+  DEFAULT_MAX_ACTION_BODY_BYTES,
   NAME_PATTERN,
   assertSecureUrl,
   parseAllowInsecureHttp,
@@ -46,6 +47,13 @@ export type IslandRemoteOptions = {
    * "development" / "test".
    */
   allowInsecureHttp?: boolean
+  /**
+   * Server Actions. `requireIdentity: true` makes every action need a verified
+   * token (`401 NF-014` without one), not only those wrapped in
+   * `requireIdentity()`: set it on remotes whose actions touch private data.
+   * `maxBodyBytes`: request body limit (default 1048576).
+   */
+  actions?: { requireIdentity?: boolean; maxBodyBytes?: number }
 }
 
 export type ResolvedOptions = {
@@ -72,6 +80,10 @@ export type ResolvedOptions = {
     libs: Array<{ name: string; version: string }>
   }
   allowInsecureHttp: boolean
+  /** From `actions.requireIdentity`; read by the action route. */
+  actionsRequireIdentity: boolean
+  /** From `actions.maxBodyBytes`. */
+  maxActionBodyBytes: number
 }
 
 export type ResolveContext = {
@@ -230,6 +242,45 @@ function resolveShare(
   return { scope: ISLAND_SHARE_SCOPE, libs: resolveShared(libs, readVersion) }
 }
 
+function resolveActions(actions: unknown): {
+  actionsRequireIdentity: boolean
+  maxActionBodyBytes: number
+} {
+  if (actions === undefined) {
+    return {
+      actionsRequireIdentity: false,
+      maxActionBodyBytes: DEFAULT_MAX_ACTION_BODY_BYTES,
+    }
+  }
+  if (typeof actions !== 'object' || actions === null) {
+    throw invalid(
+      `\`actions\` must be { requireIdentity?, maxBodyBytes? }, got ${JSON.stringify(actions)}.`
+    )
+  }
+  const {
+    requireIdentity = false,
+    maxBodyBytes = DEFAULT_MAX_ACTION_BODY_BYTES,
+  } = actions as Record<string, unknown>
+  if (typeof requireIdentity !== 'boolean') {
+    throw invalid(
+      `\`actions.requireIdentity\` must be a boolean, got ${JSON.stringify(requireIdentity)}.`
+    )
+  }
+  if (
+    typeof maxBodyBytes !== 'number' ||
+    !Number.isInteger(maxBodyBytes) ||
+    maxBodyBytes <= 0
+  ) {
+    throw invalid(
+      `\`actions.maxBodyBytes\` must be a positive integer, got ${JSON.stringify(maxBodyBytes)}.`
+    )
+  }
+  return {
+    actionsRequireIdentity: requireIdentity,
+    maxActionBodyBytes: maxBodyBytes,
+  }
+}
+
 /** Validates and normalises the remote plugin options for one Vite command. */
 export function resolveOptions(
   options: IslandRemoteOptions,
@@ -273,5 +324,6 @@ export function resolveOptions(
     maxAge,
     share: resolveShare(options.share, ctx),
     allowInsecureHttp: policy.allowInsecureHttp,
+    ...resolveActions(options.actions),
   }
 }

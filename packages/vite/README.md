@@ -53,8 +53,16 @@ type IslandRemoteOptions = {
   outDir?: string // output folder, default 'dist'
   share?: boolean | { libs?: string[] } // React sharing; default: true for build, false for serve
   allowInsecureHttp?: boolean // accept a plain-http base / JWKS URL in production (warns once)
+  actions?: {
+    requireIdentity?: boolean // every Server Action needs a verified token (401 NF-014); default false
+    maxBodyBytes?: number // Server Action body limit, default 1048576
+  }
 }
 ```
+
+A remote whose Server Actions read or change private data should set
+`actions: { requireIdentity: true }`, so an action that someone forgot to wrap in
+`requireIdentity()` is still refused without a token.
 
 `resolveOptions(options, { command, env, now })` validates them (`NF-020` for a relative `base`,
 `NF-002` for everything else) and returns the resolved shape. A `buildId` matches
@@ -89,6 +97,12 @@ only (a `NODE_ENV` other than `production` bundles React's development copies, w
 
 ## How a remote is built
 
+- **Run the server build with `NODE_ENV=production`.** `nf-serve` does this. A production build
+  always redacts Server Action errors (its mode comes from the build, not from `NODE_ENV`), but React
+  picks its development or production Flight server from `NODE_ENV` at runtime; a production build
+  started with another value logs an `NF-002` warning once. Set `NODE_ENV=production` when you run
+  `rsc/index.js` outside `nf-serve`.
+
 - **Absolute base.** plugin-rsc rejects a relative `base`, and hosts on other origins need absolute
   asset URLs.
 - **One flight client per build.** plugin-rsc keeps client-reference loading in page globals. The
@@ -111,7 +125,11 @@ only (a `NODE_ENV` other than `production` bundles React's development copies, w
 - **No Fast Refresh.** `@vitejs/plugin-react` and `@vitejs/plugin-react-swc` are rejected with `NF-002`; Vite's built-in oxc compiles
   JSX. Fast Refresh code needs a preamble that only Vite-served pages have, so it cannot run inside
   a host. Known DX gap: islands rendered inside a host reload instead of hot-refreshing.
-- **No Server Actions yet.** A module with a `'use server'` directive fails with `NF-019`.
+- **Server Actions reach client components as props.** A `'use server'` file imported by a client
+  module (browser or SSR build) fails with `NF-034`; pass the action from a Server Component
+  instead. A plain `<form action={action}>` or `formAction={action}` warns `NF-035`: use `<Form>`
+  from `@next-federation/island`. In dev, the action route loads only files the server build has
+  seen with `'use server'`.
 
 ## plugin-rsc version
 

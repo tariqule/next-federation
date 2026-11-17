@@ -1,10 +1,13 @@
 import { NFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
 import {
+  ACTION_PATH,
+  DEFAULT_MAX_ACTION_BODY_BYTES,
   DEFAULT_MAX_BODY_BYTES,
   HEALTH_PATH,
   ISLAND_PATH,
   decodeIslandRequest,
+  parseActionRequest,
   parseEnvelope,
   redactUrl,
 } from '@next-federation/protocol'
@@ -13,6 +16,8 @@ import type {
   IslandEnvelope,
   ReactMode,
 } from '@next-federation/protocol'
+import { isServerReference, requiresIdentity } from './action.ts'
+import type { ActionRuntime } from './action.ts'
 import { corsHeaders } from './cors.ts'
 import { runWithIdentity } from './identity-context.ts'
 import { createIdentityVerifier } from './identity-verify.ts'
@@ -48,6 +53,12 @@ export type IslandHandlerOptions = {
   maxBodyBytes?: number
   /** Enables NF-018 warnings for tags stripped from island HTML. */
   dev?: boolean
+  /** Serves Server Actions on `<base>/_nf/action`. Without it that path is a bare 404. */
+  actions?: ActionRuntime
+  /** Server Action request body limit in bytes. Default 1048576. */
+  maxActionBodyBytes?: number
+  /** Every Server Action needs a verified token (401 NF-014 without). Default false. */
+  actionsRequireIdentity?: boolean
 }
 
 const VARY = 'Origin, Authorization'
@@ -101,13 +112,13 @@ function isIslandPath(path: string): boolean {
 
 class TooLarge extends Error {}
 
-/** Reads the body as text, failing as soon as more than `limit` bytes have arrived. */
-async function readLimited(req: Request, limit: number): Promise<string> {
+/** Reads the body, failing as soon as more than `limit` bytes have arrived. */
+async function readLimited(req: Request, limit: number): Promise<Uint8Array> {
   const declared = req.headers.get('content-length')
   if (declared !== null && /^\d+$/.test(declared) && Number(declared) > limit) {
     throw new TooLarge()
   }
-  if (req.body === null) return ''
+  if (req.body === null) return new Uint8Array(0)
   const reader = req.body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -127,7 +138,20 @@ async function readLimited(req: Request, limit: number): Promise<string> {
     all.set(c, at)
     at += c.byteLength
   }
-  return new TextDecoder().decode(all)
+  return all
+}
+
+/** The action body as `decodeReply` takes it: UTF-8 text, or FormData for multipart. */
+async function actionBody(
+  bytes: Uint8Array,
+  contentType: string
+): Promise<string | FormData> {
+  if (contentType.toLowerCase().startsWith('multipart/form-data')) {
+    return new Response(bytes as BodyInit, {
+      headers: { 'content-type': contentType },
+    }).formData()
+  }
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
 }
 
 export function createIslandHandler(
@@ -146,6 +170,8 @@ export function createIslandHandler(
   } = options
   const maxAge = options.maxAge ?? 60
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
+  const maxActionBodyBytes =
+    options.maxActionBodyBytes ?? DEFAULT_MAX_ACTION_BODY_BYTES
   if (!Array.isArray(hosts)) {
     throw new NFError('NF-002', '`hosts` must be an array of origins.')
   }
@@ -165,6 +191,114 @@ export function createIslandHandler(
     return req.headers.has('authorization')
       ? { kind: 'invalid', code: 'NF-016' }
       : { kind: 'anonymous' }
+  }
+
+  type Reply = (
+    status: number,
+    body: BodyInit | null,
+    extra?: Record<string, string>
+  ) => Response
+  type Fail = (
+    status: number,
+    code: NFErrorCode,
+    extra?: Record<string, string>
+  ) => Response
+
+  // The protocol's Server Actions rows, top to bottom (health, OPTIONS and Origin come first).
+  const serveAction = async (
+    req: Request,
+    runtime: ActionRuntime,
+    reply: Reply,
+    fail: Fail
+  ): Promise<Response> => {
+    if (req.method !== 'POST') return reply(405, null)
+    let parsed: ReturnType<typeof parseActionRequest>
+    try {
+      parsed = parseActionRequest(req)
+    } catch {
+      return fail(400, 'NF-032')
+    }
+    const { id, island, contentType } = parsed
+    if (island !== null && !Object.hasOwn(islands, island)) {
+      return fail(404, 'NF-021')
+    }
+
+    let bytes: Uint8Array
+    try {
+      bytes = await readLimited(req, maxActionBodyBytes)
+    } catch (e) {
+      if (e instanceof TooLarge) return reply(413, null)
+      return fail(400, 'NF-032')
+    }
+
+    const outcome = await verifyIdentity(req)
+    if (outcome.kind === 'unavailable') {
+      return fail(503, 'NF-015', { 'retry-after': '5' })
+    }
+    if (outcome.kind === 'invalid') return fail(401, outcome.code)
+    const identity = outcome.kind === 'verified' ? outcome.identity : null
+    if (identity === null && island !== null && islands[island]!.private) {
+      return fail(401, 'NF-014')
+    }
+
+    // Bundler manifests are often plain objects: a file part such as
+    // `constructor` or `__proto__` must never reach a lookup.
+    if (id.split('#')[0]! in Object.prototype) return fail(404, 'NF-031')
+    let fn: unknown
+    try {
+      fn = await runtime.loadAction(id)
+    } catch {
+      fn = undefined
+    }
+    if (!isServerReference(fn, id)) return fail(404, 'NF-031')
+    if (
+      identity === null &&
+      (options.actionsRequireIdentity === true || requiresIdentity(fn))
+    ) {
+      return fail(401, 'NF-014')
+    }
+
+    let args: unknown
+    try {
+      args = await runtime.decodeReply(await actionBody(bytes, contentType))
+    } catch {
+      return fail(400, 'NF-032')
+    }
+    if (!Array.isArray(args)) return fail(400, 'NF-032')
+
+    let returnValue: unknown
+    let threw = false
+    try {
+      returnValue = await runWithIdentity(identity, async () => fn(...args))
+    } catch (cause) {
+      threw = true
+      logger.error('NF-033', `Server Action "${id}" threw.`, cause)
+      const shown =
+        mode === 'production'
+          ? new Error('A Server Action failed; see the remote log for NF-033.')
+          : cause
+      const rejected = Promise.reject(shown)
+      rejected.catch(() => {})
+      returnValue = rejected
+    }
+
+    let stream: ReadableStream<Uint8Array>
+    try {
+      stream = runtime.encodeResult({ returnValue }, (error) => {
+        if (threw) return // logged above
+        logger.error(
+          'NF-033',
+          `Server Action "${id}" result could not be streamed.`,
+          error
+        )
+      })
+    } catch (cause) {
+      logger.error('NF-033', `Server Action "${id}" result failed.`, cause)
+      return reply(500, null)
+    }
+    return reply(200, stream, {
+      'content-type': 'text/x-component;charset=utf-8',
+    })
   }
 
   return async (req) => {
@@ -214,13 +348,18 @@ export function createIslandHandler(
       return fail(403, 'NF-022', undefined, false)
     }
 
+    if (options.actions && isRoute(path, ACTION_PATH)) {
+      return serveAction(req, options.actions, reply, fail)
+    }
     if (!isIslandPath(path)) return reply(404, null)
     if (req.method !== 'GET' && req.method !== 'POST') return reply(405, null)
 
     let decodeReq = req
     try {
       if (req.method === 'POST') {
-        const text = await readLimited(req, maxBodyBytes)
+        const text = new TextDecoder().decode(
+          await readLimited(req, maxBodyBytes)
+        )
         decodeReq = new Request(req.url, {
           method: 'POST',
           headers: req.headers,
@@ -288,6 +427,7 @@ export function createIslandHandler(
         bootstrap: await bootstrapUrl(),
         reactVersion,
         idPlaceholder,
+        island,
       }
       parseEnvelope(envelope) // rejects non-absolute css/bootstrap URLs
       return new Response(JSON.stringify(envelope), {

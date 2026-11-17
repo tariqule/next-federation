@@ -26,11 +26,18 @@ export type IslandSpec = {
   locale?: string
 }
 
+/**
+ * The browser's token source for an island. `identityKey: null` (public islands on a
+ * host with `getIdentity`): the island's Server Actions fetch a token for whoever is
+ * signed in when they run, so the page stays static.
+ */
+export type IslandToken = { endpoint: string; identityKey: string | null }
+
 export type LoadedIsland =
   | {
       kind: 'ok'
       envelope: IslandEnvelope
-      token: { endpoint: string; identityKey: string } | null
+      token: IslandToken | null
     }
   | { kind: 'failed' }
   | { kind: 'anonymous' }
@@ -60,6 +67,7 @@ export async function loadIsland(
   const target = federation.target(spec.remote)
   const { island } = spec
   const props = spec.props ?? {}
+  const endpoint = `${host.basePath}${federation.routesPath}/token?aud=${encodeURIComponent(spec.remote)}`
 
   if (spec.private) {
     const loaded = await getPrivateEnvelope(
@@ -74,10 +82,7 @@ export async function loadIsland(
     return {
       kind: 'ok',
       envelope: loaded.result.envelope,
-      token: {
-        endpoint: `${host.basePath}${federation.routesPath}/token?aud=${encodeURIComponent(spec.remote)}`,
-        identityKey: loaded.identityKey,
-      },
+      token: { endpoint, identityKey: loaded.identityKey },
     }
   }
 
@@ -103,9 +108,15 @@ export async function loadIsland(
     if (takeFresh(cached)) reportIsland(federation, target, island, cached)
     result = cached
   }
-  return result.ok
-    ? { kind: 'ok', envelope: result.envelope, token: null }
-    : FAILED
+  if (!result.ok) return FAILED
+  // D2: no identity is read here (the island stays cacheable and the route static).
+  const actsAsUser =
+    options.getIdentity !== undefined && federation.identity !== null
+  return {
+    kind: 'ok',
+    envelope: result.envelope,
+    token: actsAsUser ? { endpoint, identityKey: null } : null,
+  }
 }
 
 /** Only the spec fields, with `false` flags dropped, so equal specs share a key. */

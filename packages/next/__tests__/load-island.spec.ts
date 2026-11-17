@@ -380,3 +380,55 @@ test('an unknown remote is NF-001', async () => {
     loadIsland(federation(), {}, { remote: 'nope', island: 'Banner' })
   ).rejects.toMatchObject({ code: 'NF-001' })
 })
+
+describe('public islands on a host with getIdentity (Server Actions, D2)', () => {
+  test('cached public island gets a null-key token and never reads identity at render', async () => {
+    const getIdentity = rs.fn<AppIdentity>(async () => ({ sub: 'user-1' }))
+    const r = await loadIsland(
+      federation(),
+      { getIdentity },
+      { remote: 'a', island: 'Banner' }
+    )
+    expect(r).toEqual({
+      kind: 'ok',
+      envelope,
+      token: {
+        endpoint: '/base/api/next-federation/token?aud=a',
+        identityKey: null,
+      },
+    })
+    // Static: no identity lookup, no request APIs, no token on the fetch.
+    expect(getIdentity).not.toHaveBeenCalled()
+    expect(cookies).not.toHaveBeenCalled()
+    expect(headers).not.toHaveBeenCalled()
+    expect(getPublicEnvelope).toHaveBeenCalledTimes(1)
+  })
+
+  test('dynamic public island gets the same null-key token, without a bearer on the fetch', async () => {
+    const getIdentity = rs.fn<AppIdentity>(async () => ({ sub: 'user-1' }))
+    const r = await loadIsland(
+      federation(),
+      { getIdentity },
+      { remote: 'a', island: 'Banner', dynamic: true }
+    )
+    expect(r).toMatchObject({
+      kind: 'ok',
+      token: { identityKey: null },
+    })
+    expect(seen.headers.authorization).toBeUndefined()
+    expect(getIdentity).not.toHaveBeenCalled()
+  })
+
+  test('without getIdentity, or without identity config, public islands keep token null', async () => {
+    expect(
+      await loadIsland(federation(), {}, { remote: 'a', island: 'Banner' })
+    ).toMatchObject({ token: null })
+    expect(
+      await loadIsland(
+        federation(false),
+        { getIdentity: () => ({ sub: 'u' }) },
+        { remote: 'a', island: 'Banner' }
+      )
+    ).toMatchObject({ token: null })
+  })
+})

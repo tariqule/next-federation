@@ -5,6 +5,7 @@ import { provideHostReact } from '@next-federation/react/share'
 import { useLiveIslandCount } from './lib/islands.ts'
 import { Inert } from './routes/Inert.tsx'
 import { Inject } from './routes/Inject.tsx'
+import { Actions } from './routes/Actions.tsx'
 import { Islands } from './routes/Islands.tsx'
 import { ModeA } from './routes/ModeA.tsx'
 import { ModeANext } from './routes/ModeANext.tsx'
@@ -24,6 +25,7 @@ if (
 
 const routes: Record<string, () => ReactNode> = {
   '/islands': Islands,
+  '/actions': Actions,
   '/inject': Inject,
   '/skew': Skew,
   '/inert': Inert,

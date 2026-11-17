@@ -85,9 +85,14 @@ export function islandRemoteConfig(fixture: IslandRemoteFixture = {}) {
           Links: './src/islands/Links.tsx',
           Slow: './src/islands/Slow.tsx',
           MyOrders: { entry: './src/islands/MyOrders.tsx', private: true },
+          Cart: './src/islands/Cart.tsx',
         },
       }),
     ],
+    // The build id the fixture's actions report (whoami), for the skew e2e.
+    define: {
+      __NF_FIXTURE_BUILD__: JSON.stringify(process.env.NF_BUILD_ID ?? 'dev'),
+    },
     server: { host: '127.0.0.1', port: PORT, strictPort: true },
   }) satisfies UserConfig
 }

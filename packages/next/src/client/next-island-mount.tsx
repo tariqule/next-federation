@@ -14,7 +14,8 @@ import { stripBasePath } from '../bridge.ts'
 export function NextIslandMount(props: {
   envelope: IslandEnvelope
   host: HostContext
-  token: { endpoint: string; identityKey: string } | null
+  /** `identityKey: null`: a public island whose actions act as the signed-in user. */
+  token: { endpoint: string; identityKey: string | null } | null
   errorFallback?: ReactNode
 }): ReactElement {
   const { envelope, host, token, errorFallback } = props

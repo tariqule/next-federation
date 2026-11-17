@@ -9,14 +9,33 @@ export type IslandBridge = {
 
 export type IslandErrorKind = 'uncaught' | 'caught' | 'recoverable'
 
+/** One Server Action call, as reported to the host. Never carries arguments or tokens. */
+export type ActionReport = {
+  ok: boolean
+  /** HTTP status of the final attempt; 0 when the request never got a response. */
+  status: number
+  code?: string
+  /** Wall time of the call including a retry, in milliseconds. */
+  ms: number
+  /** True when the call was resent once with a fresh token. */
+  retried: boolean
+}
+
 export type MountIslandOptions = {
-  envelope: Pick<IslandEnvelope, 'remote' | 'buildId' | 'mode'>
+  envelope: Pick<IslandEnvelope, 'remote' | 'buildId' | 'mode' | 'island'>
   /** Already prefixed by the host (see `applyIdPrefix`). */
   rscPayload: string
   identifierPrefix: string
   bridge: IslandBridge
-  /** Used from Phase 3. */
+  /** Identity token for Server Action calls (null when signed out). */
   getToken?: () => Promise<string | null>
+  /**
+   * Drops the cached token so the next `getToken` fetches a fresh one. Receives the token
+   * the remote rejected, so a host can ignore it when it already holds a newer one.
+   */
+  invalidateToken?: (rejected: string) => void
+  /** Called once per Server Action call. */
+  onAction?: (report: ActionReport) => void
   onError?: (error: unknown, kind: IslandErrorKind) => void
 }
 

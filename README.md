@@ -40,7 +40,8 @@ The wire contract is published at [`docs/protocol/v1.md`](docs/protocol/v1.md).
   [client-side React (SPA)](docs/guides/getting-started-spa.md)
 - Remotes: [Writing an island remote](docs/guides/writing-an-island-remote.md),
   [Remote components](docs/guides/remote-components.md),
-  [Sharing components from a Next app](docs/guides/sharing-components-from-a-next-app.md)
+  [Sharing components from a Next app](docs/guides/sharing-components-from-a-next-app.md),
+  [Server Actions in islands](docs/guides/server-actions.md)
 - Operations: [Identity and key rotation](docs/guides/identity.md), [CSP](docs/guides/csp.md),
   [Caching](docs/guides/caching.md), [Deployment](docs/guides/deployment.md),
   [Deploying a remote on Vercel](docs/guides/deploying-a-remote-on-vercel.md)

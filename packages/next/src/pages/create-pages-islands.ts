@@ -12,14 +12,16 @@ import type { PagesIdentity } from './api-handler.ts'
  * What `getIslandProps` returns, to spread into `<RemoteIsland>` from
  * `@next-federation/next/pages`. JSON-serialisable (no `undefined`), as Next
  * requires for page props. Never holds a token: private islands carry only
- * the token endpoint and an opaque per-user key.
+ * the token endpoint and an opaque per-user key. Public islands on a host with
+ * `getIdentity` carry the endpoint with `identityKey: null`, so their Server
+ * Actions act as whoever is signed in when they run.
  */
 export type IslandProps = {
   remote: string
   /** null: the remote failed, or the visitor is anonymous on a private island. */
   envelope: IslandEnvelope | null
   host: HostContext
-  token: { endpoint: string; identityKey: string } | null
+  token: { endpoint: string; identityKey: string | null } | null
 }
 
 export type PagesIslandSpec = {
@@ -71,11 +73,20 @@ export function createPagesIslands(
       const { remote, island } = spec
       const props = spec.props ?? {}
       const empty: IslandProps = { remote, envelope: null, host, token: null }
+      const endpoint = `${host.basePath}${federation.routesPath}/token?aud=${encodeURIComponent(remote)}`
 
       if (!spec.private) {
         const result = await fetchIsland(target, { island, props, host })
         reportIsland(federation, target, island, result)
-        return result.ok ? { ...empty, envelope: result.envelope } : empty
+        if (!result.ok) return empty
+        // D2: no identity is read (getStaticProps works, nothing per-user is rendered).
+        const actsAsUser =
+          options.getIdentity !== undefined && federation.identity !== null
+        return {
+          ...empty,
+          envelope: result.envelope,
+          token: actsAsUser ? { endpoint, identityKey: null } : null,
+        }
       }
 
       const req = 'req' in ctx ? ctx.req : undefined
@@ -108,7 +119,7 @@ export function createPagesIslands(
         ...empty,
         envelope: result.envelope,
         token: {
-          endpoint: `${host.basePath}${federation.routesPath}/token?aud=${encodeURIComponent(remote)}`,
+          endpoint,
           identityKey: await identityKey(federation, identity.sub),
         },
       }

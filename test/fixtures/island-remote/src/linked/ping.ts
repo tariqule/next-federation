@@ -1,0 +1,1 @@
+../../../island-remote-shared/ping.ts

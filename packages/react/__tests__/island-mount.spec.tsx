@@ -1037,3 +1037,145 @@ describe('IslandMount token wiring', () => {
     }
   })
 })
+
+describe('IslandMount Server Action wiring', () => {
+  function tokenFetch() {
+    const calls: string[] = []
+    let n = 0
+    const spy = rs.spyOn(globalThis, 'fetch').mockImplementation((async (
+      url: unknown
+    ) => {
+      calls.push(String(url))
+      n++
+      return new Response(
+        JSON.stringify({
+          token: `${new URL(String(url), 'http://h').searchParams.get('aud')}-${n}`,
+          expiresAt: Date.now() / 1000 + 600,
+          identityKey: 'u1',
+        }),
+        { status: 200 }
+      )
+    }) as typeof fetch)
+    return { calls, spy }
+  }
+
+  test('mountIsland gets the envelope island name', async () => {
+    const boot = fakeBootstrap()
+    render(mount({ boot, envelope: envelope({ island: 'Cart' }) }))
+    await boot.resolveAll()
+    expect(boot.mounts[0]!.options.envelope).toEqual({
+      remote: 'shop',
+      buildId: 'b1',
+      mode: 'development',
+      island: 'Cart',
+    })
+  })
+
+  test('onAction reports become island:action events, on onEvent and the DOM', async () => {
+    const boot = fakeBootstrap()
+    const onEvent = rs.fn()
+    const bubbled: CustomEvent[] = []
+    const listener = (e: Event) => bubbled.push(e as CustomEvent)
+    document.addEventListener(ISLAND_EVENT, listener)
+    try {
+      render(mount({ boot, onEvent }))
+      await boot.resolveAll()
+      const { onAction } = boot.mounts[0]!.options
+      act(() =>
+        onAction!({
+          ok: false,
+          status: 401,
+          code: 'NF-014',
+          ms: 12,
+          retried: true,
+        })
+      )
+    } finally {
+      document.removeEventListener(ISLAND_EVENT, listener)
+    }
+    const action = {
+      type: 'island:action',
+      remote: 'shop',
+      buildId: 'b1',
+      ok: false,
+      status: 401,
+      code: 'NF-014',
+      ms: 12,
+      retried: true,
+    }
+    expect(onEvent).toHaveBeenLastCalledWith(action)
+    expect(bubbled.at(-1)!.detail).toEqual(action)
+    expect(bubbled.at(-1)!.target).toBe(islandEl())
+  })
+
+  test("invalidateToken drops only this mount's endpoint", async () => {
+    clearIslandTokens()
+    const { calls, spy } = tokenFetch()
+    try {
+      const boot = fakeBootstrap()
+      render(
+        <>
+          <IslandMount
+            envelope={envelope()}
+            loadBootstrap={boot.loadBootstrap}
+            token={{ endpoint: '/t?aud=shop', identityKey: 'u1' }}
+          />
+          <IslandMount
+            envelope={envelope({ remote: 'blog' })}
+            loadBootstrap={boot.loadBootstrap}
+            token={{ endpoint: '/t?aud=blog', identityKey: 'u1' }}
+          />
+        </>
+      )
+      await boot.resolveAll()
+      const [shop, blog] = boot.mounts.map((m) => m.options)
+      const shopToken = await shop!.getToken!()
+      const blogToken = await blog!.getToken!()
+      expect(calls).toHaveLength(2)
+      shop!.invalidateToken!(shopToken!)
+      expect(await shop!.getToken!()).not.toBe(shopToken)
+      expect(await blog!.getToken!()).toBe(blogToken)
+      expect(calls).toEqual(['/t?aud=shop', '/t?aud=blog', '/t?aud=shop'])
+    } finally {
+      spy.mockRestore()
+      clearIslandTokens()
+    }
+  })
+
+  test('concurrent 401s for one endpoint trigger a single token refetch', async () => {
+    clearIslandTokens()
+    const { calls, spy } = tokenFetch()
+    try {
+      const boot = fakeBootstrap()
+      const token = { endpoint: '/t?aud=shop', identityKey: 'u1' }
+      render(
+        <>
+          <IslandMount
+            envelope={envelope()}
+            loadBootstrap={boot.loadBootstrap}
+            token={token}
+          />
+          <IslandMount
+            envelope={envelope()}
+            loadBootstrap={boot.loadBootstrap}
+            token={token}
+          />
+        </>
+      )
+      await boot.resolveAll()
+      const [a, b] = boot.mounts.map((m) => m.options)
+      const stale = await a!.getToken!()
+      expect(await b!.getToken!()).toBe(stale)
+      a!.invalidateToken!(stale!)
+      const fromA = a!.getToken!()
+      b!.invalidateToken!(stale!)
+      const fromB = b!.getToken!()
+      expect(await fromA).toBe(await fromB)
+      expect(await fromA).not.toBe(stale)
+      expect(calls).toHaveLength(2)
+    } finally {
+      spy.mockRestore()
+      clearIslandTokens()
+    }
+  })
+})

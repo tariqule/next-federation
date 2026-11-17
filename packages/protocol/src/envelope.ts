@@ -1,5 +1,9 @@
 import { NFError } from '@next-federation/sdk'
-import { ID_PLACEHOLDER_PATTERN, PROTOCOL_VERSION } from './constants.ts'
+import {
+  ID_PLACEHOLDER_PATTERN,
+  NAME_PATTERN,
+  PROTOCOL_VERSION,
+} from './constants.ts'
 
 export type ReactMode = 'development' | 'production'
 
@@ -24,6 +28,11 @@ export type IslandEnvelope = {
   reactVersion: string
   /** Token in html/rscPayload the host replaces with a per-mount prefix. */
   idPlaceholder: string
+  /**
+   * Name of the rendered island. Optional (added with Server Actions); the bootstrap
+   * sends it as the advisory `island` query on action requests.
+   */
+  island?: string
 }
 
 const STRING_FIELDS = [
@@ -66,6 +75,12 @@ export function parseEnvelope(json: unknown): IslandEnvelope {
       'NF-004',
       `Field "idPlaceholder" must match ${ID_PLACEHOLDER_PATTERN.source}.`
     )
+  }
+  if (
+    e.island !== undefined &&
+    (typeof e.island !== 'string' || !NAME_PATTERN.test(e.island))
+  ) {
+    throw new NFError('NF-004', 'Field "island" must be an island name.')
   }
   if (e.mode !== 'development' && e.mode !== 'production') {
     throw new NFError(
