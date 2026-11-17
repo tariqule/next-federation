@@ -425,20 +425,40 @@ for (const host of HOSTS) {
     }
 
     if (!host.pages) {
-      test('mixed router: a Pages route in an App Router host does not crash', async ({
+      test('mixed router: App Router and Pages Router routes both server-render, each on its own React', async ({
         page,
       }) => {
-        // The App Router's React registers first; the Pages route's React
-        // is a different copy in the same process: browser-only there.
-        await html(`${host.url}/mode-a`)
-        const { status } = await html(`${host.url}/mode-a-mixed`)
-        expect(status).toBe(200)
-        await page.goto(`${host.url}/mode-a-mixed`)
-        await expect(counterText(page)).toHaveText(
-          'host=from-mixed-host build=c1'
-        )
-        await page.getByTestId('counter-btn').click()
-        await expect(page.getByTestId('counter-btn')).toHaveText('count 2')
+        // Two Reacts in one process (Next's vendored copy for app/, the one
+        // in node_modules for pages/): each layer loads its own copy of the
+        // remote's server code. Both orders: whichever layer loads first.
+        const routes = [
+          { path: '/mode-a', value: 'from-app-host' },
+          { path: '/mode-a-mixed', value: 'from-mixed-host' },
+        ]
+        for (const route of [...routes, ...[...routes].reverse()]) {
+          const { status, body } = await html(`${host.url}${route.path}`)
+          expect(status).toBe(200)
+          expect(body).toContain(`host=${route.value} build=c1`)
+          expect(body).not.toContain('data-nf-browser-only')
+          // One React per layer: the remote got this layer's React.
+          expect(body).toMatch(/data-testid="react-probe"[^>]*>true</)
+        }
+        for (const route of routes) {
+          const { bad, all } = watch(page)
+          await page.goto(`${host.url}${route.path}`)
+          await expect(counterText(page)).toHaveText(
+            `host=${route.value} build=c1`
+          )
+          await expect(page.getByTestId('react-probe')).toHaveAttribute(
+            'data-client',
+            'true'
+          )
+          await page.getByTestId('counter-btn').click()
+          await expect(page.getByTestId('counter-btn')).toHaveText('count 2')
+          expect(bad, all.join('\n')).toEqual([])
+          page.removeAllListeners('console')
+          page.removeAllListeners('pageerror')
+        }
       })
     }
   })

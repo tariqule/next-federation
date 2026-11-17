@@ -75,7 +75,7 @@ for a canary job only).
 
 Any Module Federation 2.0 remote that emits `mf-manifest.json` works, built with
 `@module-federation/enhanced`. The e2e suite runs one built with Rspack 2.3.0 and
-`@module-federation/enhanced` 2.9.2 against App Router, Pages Router and SPA hosts
+`@module-federation/enhanced` 2.9.3 against App Router, Pages Router and SPA hosts
 (`test/fixtures/components-remote-rspack`). You make two builds (the browser copy and a CommonJS
 server copy for host SSR), then `nf-describe` (in `@next-federation/server`) writes the descriptor.
 
@@ -325,6 +325,75 @@ request: Next's `next: { revalidate }` fetch cache exists only in the App Router
 the component's HTML is always inline. `preloadRemoteComponent(descriptor, './Cart')` (or
 `Cart.preload(descriptor)`) loads the module ahead of rendering in `getServerSideProps`.
 
+### Mixed-router hosts
+
+A Next.js host can have App Router routes (`app/`) and Pages Router routes (`pages/`) at once. Use
+each router's own entry point on its own routes, as above: `@next-federation/next/components` and
+`@next-federation/next/server` under `app/`, `@next-federation/next/pages/components` and
+`@next-federation/next/pages/server` under `pages/`. Nothing else changes, and both routers
+server-render remote components.
+
+The two routers run two Reacts in one server process: the App Router uses Next's vendored copy,
+the Pages Router the one in `node_modules`. A remote component must render on the React of the
+route that renders it, so each router layer has its own remote component runtime:
+
+- its own Module Federation host instance;
+- its own copy of each remote build's server code, fetched and checked against the build's sha384
+  digests in that layer;
+- its own copy of the globals that copy keeps its Module Federation state in. A Vite remote's
+  share cache and init state (`__mf_module_cache__`, `__mf_init__…`) live in the layer, never on
+  the process-wide `globalThis`, so a remote copy reads only its own layer's React and host
+  modules. A Rspack or webpack remote bundles its own Module Federation runtime: its registry
+  (`__FEDERATION__`) is kept per layer too, so each layer's copy finds its own instance and share
+  scope.
+
+Two limits remain. First, this isolates cooperating builds; it is not a sandbox. A verified remote
+runs with the host process's full rights, and its code can still reach the real global object (for
+example through `global` or `Function('return this')()`). The host's own Module Federation
+instances, one per layer, stay visible process-wide in the runtime's registry
+(`__FEDERATION__.__INSTANCES__` and `__SHARE__`). Second, the server loader keeps a build apart per
+layer only when it knows how that build keeps its state: `@module-federation/vite` 1.24.0 builds,
+and `@module-federation/enhanced` 2.9.2 and 2.9.3 builds whose server entry bundles its own runtime (the
+`metaData.pluginVersion` of the build's `mf-manifest.json`). Any other build (an unlisted one) may
+leave state on the real global object that every other unlisted build shares. So all unlisted builds
+server-render in one layer per process only: the first layer in which one of them evaluated. Every
+other layer renders them in the browser only. Once a layer has them, the others decide right after
+the build's manifest, before any server code is fetched; `NF-028` is logged once per build and
+layer, and that layer never fetches the build's server code again.
+
+A build whose `mf-manifest.json` lists `remotes` of its own never server-renders, in any host. Its
+nested remotes would load through the Module Federation runtime's own Node loader, outside the
+server loader: unverified (no sha384 check) and on the real global object. So it renders in the
+browser only (`NF-028`, logged once). The same holds for a build without a manifest the server loader could
+check: a descriptor whose `manifest` is the remote entry itself, or one that does not answer JSON.
+The server loader checks every JSON response of the build, whatever its file name.
+
+What this costs and changes:
+
+- A mixed host loads each remote build up to twice, once per layer, and `maxBuilds` applies per
+  layer.
+- A remote's server entry initialises in one layer at a time, never in both at once. A layer waits
+  at most 10 s for the other layer's initialisation. After that, the load fails and is retried
+  after the cooldown, so the remote renders in the browser only meanwhile.
+- A satisfying host copy of a `fallback: true` shared module is seeded into each layer's own cache,
+  so each layer's routes get their own copy of the module.
+- When a layer's cache holds another copy of a `fallback: true` module than the host's (a bundled
+  copy cached before the host registered its own, or a module registered again with another
+  object), that layer moves to a new scope: a clean cache, and the remote's server code is
+  evaluated again. Every expose then loads again in the new scope, so module state (a module-level
+  store, for example) is not shared with the copies loaded before. A layer moves at most 4 times;
+  after that, such a build renders in the browser only in that layer (`NF-028`, logged once). A
+  timed-out load keeps the scope.
+- Register shared modules in each router: `registerSharedModules` in the root layout for `app/`
+  routes and in `_app` for `pages/` routes.
+
+`next dev --webpack` re-creates the host's server modules when it compiles another route. Each
+re-created runtime counts as a new layer with an empty share cache: it loads the remote's server
+code again, so remote components keep server-rendering on the current modules. A build the server
+loader cannot keep apart (see above) renders in the browser only after such a reload, until the
+dev server restarts. The dev server also keeps the earlier runtimes' loaded builds until it
+restarts. Production builds and `next dev` with Turbopack create each runtime once.
+
 ### SPA
 
 ```tsx
@@ -444,8 +513,10 @@ or digest; a descriptor refused for tampering (`NF-027`) keeps none of them. A r
 What a remote can get from the host, exactly:
 
 - **React, always the host's**: `react`, `react-dom`, `react-dom/client` and `react/jsx-runtime`.
-  The remote never bundles them (`import: false`); listing them in `shared` is `NF-002`. React
-  never falls back to a copy of the remote's.
+  The remote never bundles them (`import: false`); listing them in `shared` is `NF-002`. No module
+  of `react`, `react-dom` or `next` (any subpath, such as `react-dom/server` or `next/head`) ever
+  falls back to a copy of the remote's: a descriptor that says `fallback: true` for one is
+  refused.
 - **Host-provided modules** (the default for every other `shared` entry): the remote never bundles
   them, and the host passes each one with its real version, in
   `createRemoteComponent({ shared: { name: { version, module } } })` or once for every component
@@ -706,23 +777,33 @@ differ until it hydrates.
 - **Node.js ≥ 20.16 for server rendering.** The packages run on Node 20.9, but the server loader
   needs `process.getBuiltinModule`; on an older Node every remote component renders in the browser
   only (`NF-028`, logged once).
-- **Memory**: a process keeps at most `maxBuilds` (default 5) distinct builds of a remote loaded,
-  evicting the oldest. Old builds are garbage-collected (their code is evaluated with
-  `new Function`, never written to disk or `import()`ed). One residue remains per distinct build:
-  `@module-federation/vite` sets one `globalThis.__mf_init__…` key per distinct build (a settled
-  promise and its resolvers), never removed (upstream draft: `docs/upstream/mf-vite-init-keys.md`).
-- **Mixed-router hosts** (App Router and Pages Router routes in one host) are supported after v1.
-  `@module-federation/vite`'s process-wide share cache keeps the first React that registers; the
-  other router's routes render remote components in the browser only (`NF-028`), and never crash.
-  Tested: an App Router host with a Pages route renders it browser-only and the component works.
+- **Memory**: each server layer keeps at most `maxBuilds` (default 5) distinct builds of a remote
+  loaded, evicting the oldest. An old build is garbage-collected once nothing references it: its
+  code is evaluated with `new Function`, never written to disk or `import()`ed, and registering
+  another build of the container makes the Module Federation runtime drop the previous build's
+  container and entry load. When the runtime replaces its MF instance (after a timed-out load, or a
+  module registered late) it removes the old one from the MF registry, and when a layer moves to a
+  new scope ([Mixed-router hosts](#mixed-router-hosts)) it also drops the old scope's tagged
+  registry entries, so neither stays alive. `@module-federation/vite` keeps one `__mf_init__…`
+  entry per distinct build (a settled promise and its resolvers), never removed (upstream draft:
+  `docs/upstream/mf-vite-init-keys.md`); the host keeps it in the layer's scope, not on
+  `globalThis`.
+- **Mixed-router hosts** (App Router and Pages Router routes in one host): both routers
+  server-render remote components, each on its own React, and each router layer loads its own copy
+  of a remote build ([Mixed-router hosts](#mixed-router-hosts)). Only builds the server loader
+  knows (`@module-federation/vite` 1.24.0, `@module-federation/enhanced` 2.9.2, 2.9.3) server-render in
+  both layers; all other builds server-render in one layer per process, the first in which one
+  of them evaluated. Tested: an App
+  Router host with a Pages route server-renders the Vite remote and the Rspack remote in both
+  layers, in either order, the one-React probe holds in each, and both hydrate without warnings.
 - **First request after a deploy (App Router)**: the server streams the component (the shell has the
   fallback, the markup follows in the same response); later requests render it inline.
-- **Server logs**: when a build renders browser-only at request time (integrity failure, two
-  Reacts), Next logs the error React reports for that Suspense boundary, besides the `NF-` line.
+- **Server logs**: when a build renders browser-only at request time (an integrity failure, for
+  example), Next logs the error React reports for that Suspense boundary, besides the `NF-` line.
 - **`next dev --webpack`**: when the dev server compiles another route it re-creates the host's
-  server modules, while `@module-federation/vite`'s process-wide share cache keeps the old ones. The
-  host detects it and renders remote components in the browser only until the dev server restarts
-  (`NF-028`, "stale"); production builds and `next dev` with Turbopack are not affected.
+  server modules; the re-created runtime loads the remote's server code again and keeps
+  server-rendering ([Mixed-router hosts](#mixed-router-hosts)). A runtime whose own share cache
+  holds another instance of a host module renders browser-only (`NF-028`, "stale").
 - **Load timeout**: one load attempt (manifest, entry and chunks) fails after 10 s, so a stalled
   remote never holds a server render; the server then renders the component in the browser only.
 - **Edge runtime**: no server rendering (no Node built-ins); components render in the browser.

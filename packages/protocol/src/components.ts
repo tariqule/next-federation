@@ -165,14 +165,38 @@ export type ComponentTrustKind = 'signature' | 'pinned' | 'unsafe-dev'
  * build only when its descriptor is in `verified` or re-verifies against
  * `trust`; a descriptor prop alone (ssr.integrity) is never trusted.
  */
+/** One container `init` in the process-wide lock chain (server loader). */
+export type ComponentInitLock = {
+  settled: Promise<void>
+  started?: number
+  done: boolean
+  waitingFor?: ComponentInitLock
+}
+
 export type ComponentTrustRegistry = {
   verified: Map<string, ComponentTrustKind>
   trust: Map<string, ComponentTrustPolicy[]>
   /**
-   * The React of every server-side remote component runtime in this process
-   * (one per Next layer): more than one means a mixed-router host.
+   * How many server-side remote component runtimes this process created (one
+   * per Next layer, plus one per dev reload): each gets its own number, which
+   * scopes its Module Federation state (a mixed-router host has two Reacts).
    */
-  reacts?: Set<unknown>
+  hostRuntimes?: number
+  /**
+   * Per container name: the last `init` of that container's server entry
+   * (when it started running, whether it settled, and the one it waited
+   * for). Every layer's copy of a container resolves its shares through the
+   * one Module Federation instance the container finds by name in the
+   * process, so their inits run one at a time; one running for longer than
+   * the wait is treated as hung and no longer waited for.
+   */
+  initLocks?: Map<string, ComponentInitLock>
+  /**
+   * The layer (runtime number) of the first runtime that loaded a build the
+   * server loader cannot keep apart per layer (not in its allowlist). Every
+   * such build server-renders in that layer only.
+   */
+  unlistedLayer?: string
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')
@@ -281,16 +305,17 @@ function parseAssets(
 const BARE_SPECIFIER =
   /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
 
-/** Always the host's: never a fallback copy in a build (React, the router). */
-export const NEVER_FALLBACK: readonly string[] = [
-  'react',
-  'react-dom',
-  'react-dom/client',
-  'react/jsx-runtime',
-  'next/link',
-  'next/navigation',
-  'next/router',
-]
+/**
+ * Always the host's, never a fallback copy in a build: React, React DOM and
+ * Next.js, each with every subpath (`react/jsx-dev-runtime`,
+ * `react-dom/server`, `next/head`, ...). A second copy of any of them breaks
+ * hooks, context or the router.
+ */
+export function isNeverFallback(name: string): boolean {
+  return ['react', 'react-dom', 'next'].some(
+    (root) => name === root || name.startsWith(`${root}/`)
+  )
+}
 
 /** An expose key as Module Federation writes it: './Name'. */
 const isExposeKey = (key: unknown): key is string =>
@@ -311,7 +336,7 @@ function parseShared(
       return null
     }
     if (typeof fallback !== 'boolean') return null
-    if (fallback && NEVER_FALLBACK.includes(name)) return null
+    if (fallback && isNeverFallback(name)) return null
     if (
       exposes !== undefined &&
       (!Array.isArray(exposes) || !exposes.every(isExposeKey))

@@ -56,11 +56,16 @@ const runtime = createComponentRuntime({
       options as unknown as Parameters<typeof createInstance>[0]
     ) as unknown as FederationInstance,
   serverPlugin: serverLoader
-    ? (integrityFor) =>
+    ? (integrityFor, scope) =>
         serverLoader!.createServerEntryPlugin({
           integrityFor,
           hostModules: { '@module-federation/runtime': MFRuntime },
+          // This layer's own MF state (a mixed-router host has two).
+          scope,
         })
+    : undefined,
+  forget: serverLoader
+    ? (instance, scope) => serverLoader!.forgetInstance(instance, scope)
     : undefined,
   canLoadServerCode: () => serverLoader?.canLoadServerCode() ?? false,
   isTrusted: (descriptor) =>

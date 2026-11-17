@@ -62,24 +62,47 @@ Next 14 (React 18) is not supported: islands and remote components need React 19
   version outside the remote's `requiredVersion`, renders the fallback (`NF-036`); the remote's
   other components still load. With `fallback: true` the remote bundles its own copy and uses it
   when the host's copy is missing or does not satisfy the range. Do not use a fallback for a module
-  whose identity matters, such as a context module. React and `next/*` never fall back.
+  whose identity matters, such as a context module. `react`, `react-dom`, `next` and their
+  subpaths never fall back.
 - **A satisfying host copy is seeded page-wide.** A fallback copy is looked up in
   `@module-federation/vite`'s module cache by its name and bundled version, and the host seeds its
-  own copy under that key when it satisfies the range. The key is page-wide (process-wide on the
-  server): any other `@module-federation/vite` app on the page that bundles the same version reads
-  the host's copy, even when its own range is narrower. If two remotes bundle the same version with
-  different ranges, they share whichever copy loaded first. A server process that hosts more than
-  one React (an App Router and a Pages Router route, or `next dev --webpack` after it re-created the
-  host's modules), or whose share cache holds another instance of a host module, never seeds. A
-  component whose host copy satisfies the range then renders in the browser only (`NF-028`), where
-  it gets the host's copy, so server and browser never render different copies.
+  own copy under that key when it satisfies the range. In the browser the key is page-wide: any
+  other `@module-federation/vite` app on the page that bundles the same version reads the host's
+  copy, even when its own range is narrower. On the server it belongs to one router layer's runtime
+  (never the process-wide cache), and every remote component of that layer shares it. If two
+  remotes bundle the same version with different ranges, they share whichever copy loaded first.
+  On the server, when a layer's cache holds under a fallback key another object than the host copy
+  that satisfies the range (a bundled copy cached before the host registered its own, or a module
+  registered again with another object), the layer moves to a new scope with an empty cache, so
+  the server renders the host copy the browser seeds; at most 4 times per layer, then such a build
+  renders in the browser only there (`NF-028`). A cache that holds another instance of a host
+  module also renders browser-only.
+- **A mixed-router host loads each remote build up to twice.** A host with App Router and Pages
+  Router routes runs two Reacts in one server process. Each router layer loads, verifies and
+  evaluates its own copy of a remote build's server code, so the server keeps up to `maxBuilds`
+  builds of a remote per layer (up to twice as many in all). A remote's server entry never
+  initialises in both layers at once: a layer waits at most 10 s for the other, then its load
+  fails and is retried after the cooldown. Only `@module-federation/vite` 1.24.0 and
+  `@module-federation/enhanced` 2.9.2 and 2.9.3 builds server-render in both layers; all other
+  builds server-render in one layer per process, the first in which one of them evaluated. A
+  build whose manifest lists `remotes` of its own, or that has no manifest the server loader could
+  check, never server-renders. The layers are kept apart, not
+  sandboxed: a verified remote runs with the host process's rights
+  ([Remote components](remote-components.md#mixed-router-hosts)).
+- **No top-level `let`/`const` named `document`, `window` or `self` in server chunks.** The
+  server loader evaluates each server chunk inside a function whose parameters include
+  `document`, `window` and `self` (always `undefined` in a router layer's scope), so a remote's
+  code never reaches the real global through a server-side polyfill of them. A chunk that declares
+  one of these names at its top level with `let` or `const` is then a `SyntaxError`: that build
+  fails safe and renders in the browser only (`NF-029`). `var` and function declarations of these
+  names are fine.
 - **Register shared modules early.** Provide them at module scope, in a module every page imports
   (the root layout or `_app`). A module first registered after a remote component has loaded (for
   example by a page reached through a client navigation) makes the runtime start over for later
-  loads. On the server, the remote's code is then evaluated again for those later loads, so they do
-  not share module state with the components loaded before. The earlier instance's evaluated
-  graphs stay in memory as long as the components loaded from it, and `maxBuilds` does not count
-  them: it counts builds, not instances.
+  loads with a new Module Federation instance. On the server, the remote's container is reused and
+  initialised again with the new module. When a fallback copy cached earlier would shadow the
+  host's, the layer moves to a new scope and evaluates the remote's code again, so those later
+  loads do not share module state with the components loaded before.
 - **Only three `next/*` modules.** `next/link`, `next/navigation` (App Router) and `next/router`
   (Pages Router) come from the host's router, through `@next-federation/next/components` or
   `@next-federation/next/pages/components`. An SPA provides none. `next/image`, `next/head` and the
