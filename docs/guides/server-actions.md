@@ -106,9 +106,22 @@ not per island.
 
 ## Errors
 
-- An action that throws rejects the caller's promise. In a production build the message is redacted
-  and the remote logs [`NF-033`](../errors/action-failed.md). Return an error state (for
-  `useActionState`) for failures the user should see.
+- An action that throws rejects the caller's promise. In a production build the message is redacted:
+  the caller's `error.message` is **"Minified React error #441"** (the validation threw
+  `new Error('secret internal detail ...')` and the secret stayed on the remote), and the remote logs
+  [`NF-033`](../errors/action-failed.md) with the real error. A user cannot act on #441, so **return
+  an error state instead of throwing** for failures the user should see:
+
+  ```ts
+  'use server'
+  export async function addToCart(sku: string): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
+    const stock = await getStock(sku)
+    if (stock === 0) return { ok: false, message: 'Out of stock' }
+    return { ok: true, count: await cart.add(sku) }
+  }
+  ```
+
+  Keep `throw` for bugs.
 - `404 NF-031`: the action id is unknown to the build that served the request (usually a page
   rendered by one build calling another). See [action-not-found](../errors/action-not-found.md).
 - `400 NF-032`: the request is malformed: wrong header, content type or body.

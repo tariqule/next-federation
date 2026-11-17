@@ -27,8 +27,12 @@ Remote components: see [Remote components](remote-components.md).
 ## 1. Install
 
 ```sh
-pnpm add @next-federation/core @next-federation/next @next-federation/react react react-dom
+pnpm add @next-federation/core @next-federation/next @next-federation/react
+pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 ```
+
+Pin React to one exact version, the one the repo's tests run (19.3.1): `create-next-app` scaffolds
+19.1.0 or 19.3.0, and the remotes you embed should run the same version to share one copy of React.
 
 ## 2. Wrap `next.config.ts`
 
@@ -45,19 +49,31 @@ export default withNextFederation({
 
 ## 3. Define the federation (server-side only)
 
-Import this file only from `getServerSideProps`, `getStaticProps` and API routes.
+Use two files. The config imports nothing from Next.js, so `nf-types` (remote components) can load it
+with plain Node.
+
+```ts
+// lib/federation.config.ts
+import { defineFederation } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: { shop: { origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com' } },
+})
+```
+
+Import `lib/federation.ts` only from `getServerSideProps`, `getStaticProps` and API routes.
 
 ```ts
 // lib/federation.ts
-import { defineFederation } from '@next-federation/core'
 import { createPagesIslands } from '@next-federation/next/pages/server'
+import { federation } from './federation.config'
 
-export const federation = defineFederation({
-  remotes: { shop: { origin: 'https://shop.example.com' } },
-})
-
+export { federation }
 export const { getIslandProps } = createPagesIslands(federation)
 ```
+
+Environment variables the config reads come from `.env.local` under `next dev` and `next build`,
+but not under plain Node: see [Remote components](remote-components.md#types) for `nf-types`.
 
 ## 4. Render an island
 
@@ -110,7 +126,8 @@ in development or on a React pre-release. See [Limits](limits.md) for what it sa
 
 ## What to know
 
-- Add each remote origin to `script-src`, `connect-src` and `style-src` ([CSP](csp.md)).
+- Add each remote origin to `script-src`, `connect-src` and `style-src`; [CSP](csp.md) has a complete
+  policy for Next.js in dev and production.
 - Island HTML is stored about three times in the page. React context does not cross into an island.
 - Remote components (client components, with SSR): see [Remote components](remote-components.md).
 
