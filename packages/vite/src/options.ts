@@ -51,9 +51,15 @@ export type IslandRemoteOptions = {
    * Server Actions. `requireIdentity: true` makes every action need a verified
    * token (`401 NF-014` without one), not only those wrapped in
    * `requireIdentity()`: set it on remotes whose actions touch private data.
-   * `maxBodyBytes`: request body limit (default 1048576).
+   * `maxBodyBytes`: request body limit (default 1048576). `timeoutMs`: in
+   * the browser, an action whose response has not started within this many
+   * ms rejects with NF-038 (default: no limit).
    */
-  actions?: { requireIdentity?: boolean; maxBodyBytes?: number }
+  actions?: {
+    requireIdentity?: boolean
+    maxBodyBytes?: number
+    timeoutMs?: number
+  }
 }
 
 export type ResolvedOptions = {
@@ -84,6 +90,8 @@ export type ResolvedOptions = {
   actionsRequireIdentity: boolean
   /** From `actions.maxBodyBytes`. */
   maxActionBodyBytes: number
+  /** From `actions.timeoutMs`; null: no client-side limit. */
+  actionTimeoutMs: number | null
 }
 
 export type ResolveContext = {
@@ -245,22 +253,35 @@ function resolveShare(
 function resolveActions(actions: unknown): {
   actionsRequireIdentity: boolean
   maxActionBodyBytes: number
+  actionTimeoutMs: number | null
 } {
   if (actions === undefined) {
     return {
       actionsRequireIdentity: false,
       maxActionBodyBytes: DEFAULT_MAX_ACTION_BODY_BYTES,
+      actionTimeoutMs: null,
     }
   }
   if (typeof actions !== 'object' || actions === null) {
     throw invalid(
-      `\`actions\` must be { requireIdentity?, maxBodyBytes? }, got ${JSON.stringify(actions)}.`
+      `\`actions\` must be { requireIdentity?, maxBodyBytes?, timeoutMs? }, got ${JSON.stringify(actions)}.`
     )
   }
   const {
     requireIdentity = false,
     maxBodyBytes = DEFAULT_MAX_ACTION_BODY_BYTES,
+    timeoutMs = null,
   } = actions as Record<string, unknown>
+  if (
+    timeoutMs !== null &&
+    (typeof timeoutMs !== 'number' ||
+      !Number.isInteger(timeoutMs) ||
+      timeoutMs <= 0)
+  ) {
+    throw invalid(
+      `\`actions.timeoutMs\` must be a positive integer (ms), got ${JSON.stringify(timeoutMs)}.`
+    )
+  }
   if (typeof requireIdentity !== 'boolean') {
     throw invalid(
       `\`actions.requireIdentity\` must be a boolean, got ${JSON.stringify(requireIdentity)}.`
@@ -278,6 +299,7 @@ function resolveActions(actions: unknown): {
   return {
     actionsRequireIdentity: requireIdentity,
     maxActionBodyBytes: maxBodyBytes,
+    actionTimeoutMs: timeoutMs,
   }
 }
 

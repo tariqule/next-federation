@@ -8,5 +8,6 @@ import { createRemoteComponent } from '@next-federation/react/components'
 export const CartButton = createRemoteComponent<{ sku: string }>({
   expose: './CartButton',
   shared: { 'example-cart-context': { version: '1.0.0', module: CartContext } },
-  fallback: <p>cart button unavailable</p>,
+  fallback: <p>loading the cart button…</p>,
+  errorFallback: <p>cart button unavailable</p>,
 })

@@ -373,6 +373,75 @@ for (const host of HOSTS) {
       expectServerMarkup(body, `host=${host.value} build=c1`)
     })
 
+    if (!host.pages) {
+      test('a remote component that throws while the server renders it: the static page keeps its fallback, the browser renders it (NF-040)', async ({
+        page,
+      }) => {
+        const path = '/mode-a/crash-static'
+        if (MODE === 'prod') {
+          // `next build` prerendered it (it fails on any render error).
+          const log = readFileSync(
+            join(
+              LOGS_DIR,
+              `host-app-${host.cc ? PORTS.hostAppCc : PORTS.hostApp}.build.log`
+            ),
+            'utf8'
+          )
+          expect(log).toMatch(/^[├└┌] [○◐] \/mode-a\/crash-static\b/m)
+          expect(log).toContain('NF-040')
+          expect(log).not.toContain('Error occurred prerendering')
+        }
+        const { status, body } = await html(`${host.url}${path}`)
+        expect(status).toBe(200)
+        // Both booms: the loading fallback, marked for the browser (a
+        // streamed render also has Suspense's own fallback before it).
+        expect(body.match(/<template data-nf-browser-only=/g)).toHaveLength(2)
+        expect(
+          body.match(/data-testid="boom-loading"/g)?.length
+        ).toBeGreaterThanOrEqual(2)
+        expect(body).not.toContain('boom unavailable')
+        // The component next to them still server-renders.
+        expectServerMarkup(body, `host=${host.value} build=c1`)
+        await page.addInitScript(() => {
+          const seen: unknown[] = []
+          ;(window as unknown as { __nfEvents: unknown[] }).__nfEvents = seen
+          document.addEventListener('nf:component', (e) => {
+            const { type, code, expose, env, remote, buildId } = (
+              e as CustomEvent
+            ).detail as Record<string, unknown>
+            seen.push({ type, code, expose, env, remote, buildId })
+          })
+        })
+        const { bad, all } = watch(page)
+        await page.goto(`${host.url}${path}`)
+        // Throws on the server only: the browser renders it.
+        await expect(page.getByTestId('boom-server')).toHaveText(
+          'rendered in the browser'
+        )
+        // Throws everywhere: the error fallback, reported once.
+        await expect(
+          page.getByTestId('boom-always-slot').getByTestId('boom-failed')
+        ).toBeVisible()
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => (window as unknown as { __nfEvents: unknown[] }).__nfEvents
+            )
+          )
+          .toContainEqual({
+            type: 'component:error',
+            code: 'NF-040',
+            expose: './Boom',
+            env: 'client',
+            remote: 'cached',
+            buildId: 'c1',
+          })
+        expect(all.join('\n')).toContain('NF-040')
+        await clickOnceHydrated(page)
+        expect(bad, all.join('\n')).toEqual([])
+      })
+    }
+
     if (host.dist && MODE === 'prod') {
       test('the client bundle has the runtime but never the server loader', () => {
         const dir = join(

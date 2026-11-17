@@ -47,6 +47,27 @@ export function loadIsland(target: IslandTarget, island: string, props?: unknown
 The remote must list your app's origin in its `hosts` option, or the browser request is refused
 (`NF-022`).
 
+### Timeout and retries
+
+Each island fetch has a total budget of `timeoutMs` (default `3000`), which covers every attempt.
+A network error or a `502`, `503` or `504` is retried `retries` times (default `1`) after a short
+pause, while the budget lasts; a timeout (`NF-008`), another status or an invalid envelope is not
+retried. Set them for all remotes or per remote:
+
+```ts
+export const federation = defineFederation({
+  islands: { timeoutMs: 5000, retries: 2 },
+  remotes: {
+    shop: { origin: 'https://shop.example.com' },
+    // A slow remote gets more time; a flaky one more retries.
+    reports: { origin: 'https://reports.example.com', timeoutMs: 8000, retries: 0 },
+  },
+})
+```
+
+When the budget runs out, `fetchIsland` resolves with `{ ok: false, code }` (`NF-007`, `NF-008`)
+instead of throwing, and your page renders its fallback.
+
 ## 3. Mount an island
 
 ```tsx

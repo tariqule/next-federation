@@ -26,6 +26,8 @@ export default defineConfig({
         './NavLink': './src/NavLink.tsx',
         './PagesNavLink': './src/PagesNavLink.tsx',
         './Versioned': './src/Versioned.tsx',
+        // Throws while rendering (render-error handling).
+        './Boom': './src/Boom.tsx',
       },
       shared: {
         // The host owns this context: the remote reads the host's value.

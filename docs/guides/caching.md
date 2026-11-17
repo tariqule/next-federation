@@ -63,12 +63,22 @@ caching consequences:
 
 - The whole route becomes per-request. With `cacheComponents` it loses its static shell: every
   layout above the island, the rest of the page and its public islands render on each request
-  (`ƒ` instead of `◐`). Keep `blocking` off pages that should be served from a static shell. `instant = false` does not make a route dynamic by itself; the island's `cookies()`
-  read outside `<Suspense>` does, and `instant = false` is how the route accepts it. Without
+  (`ƒ` instead of `◐`). Keep `blocking` off pages that should be served from a static shell.
+  `instant = false` does not make a route dynamic by itself; the island's `cookies()` read outside
+  `<Suspense>` does, and `instant = false` is how the route accepts it. Without
   `instant = false`, `next build` fails with Next's "Next.js encountered uncached or runtime data
-  during prerendering" error, so the change is never silent.
+  during prerendering" error, so the change is never silent. The same build error appears when an
+  ancestor layout sets `instant = true`: Next skips the static-shell check only when the highest
+  `instant` in the tree is `false`.
+- Without `cacheComponents`, `next build` refuses `instant` (Turbopack: "Route segment config
+  "instant" requires `nextConfig.cacheComponents` to be enabled"; webpack: "Route "/x" cannot use
+  `export const instant = ...` without enabling `cacheComponents`").
 - The response waits for the remote, up to the island timeout (`timeoutMs`, 3 seconds by default).
   A remote that fails or times out renders `errorFallback` in place and the page answers `200`.
+  That covers remote failures only: if the host's own `getIdentity` or token minting throws, the
+  error reaches the route's `error.tsx` (no `200`), where without `blocking` the island would be
+  rendered in the browser under its own `<Suspense>`. Return `null` from `getIdentity` instead of
+  throwing.
 - Public islands on the same page are still cached (their envelopes), but they render within the
   per-request page. `blocking` on a public island throws `NF-002`.
 

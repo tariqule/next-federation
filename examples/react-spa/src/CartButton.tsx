@@ -8,7 +8,8 @@ import { Suspense, use } from 'react'
 const RemoteCartButton = createRemoteComponent<{ sku: string }>({
   expose: './CartButton',
   shared: { 'example-cart-context': { version: '1.0.0', module: CartContext } },
-  fallback: <p>cart button unavailable</p>,
+  fallback: <p>loading the cart button…</p>,
+  errorFallback: <p>cart button unavailable</p>,
 })
 
 // A client component from the `cart` remote, rendered in the browser only

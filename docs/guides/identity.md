@@ -63,6 +63,42 @@ import { routes } from '../../../../lib/federation'
 export const { GET, POST } = routes
 ```
 
+### What `getIdentity` returns
+
+`getIdentity` returns `{ sub, claims? }` for a signed-in user, or `null` for an anonymous one:
+
+```ts
+const getIdentity: AppIdentity = async ({ cookies }) => {
+  const session = await readSession(cookies.get('session')?.value)
+  if (!session) return null
+  return {
+    sub: session.userId, // required, a non-empty string
+    claims: { name: session.name, email: session.email, roles: session.roles },
+  }
+}
+```
+
+- `sub` becomes the token's `sub`. Each key of `claims` becomes a claim of its own, at the top level
+  of the token (not under a `claims` key). Keep claims small and JSON-serializable: the token
+  travels in an `Authorization` header.
+- `iss`, `aud`, `sub`, `exp`, `iat`, `nbf` and `jti` are reserved: the library sets them, and a
+  `claims` object that sets one is refused with `NF-002`.
+- `getIdentity` should not throw. Catch your session lookup's errors and return `null`: the visitor
+  is then treated as anonymous (`errorFallback`).
+
+On the remote, `getIdentity()` (`@next-federation/island`) returns the whole verified payload:
+`sub`, your claims, and `iss`, `aud`, `iat` and `exp`. For the example above:
+
+```ts
+{ sub: 'u_123', name: 'Ada', email: 'ada@example.com', roles: ['admin'],
+  iss: 'https://www.example.com', aud: 'shop', iat: 1763380000, exp: 1763380120 }
+```
+
+**`sub` is unique per issuer only.** Two hosts can both have a user `42`. A remote that trusts more
+than one host (several entries in `issuers`) should key its data by `(iss, sub)`, not by `sub`
+alone. Decide permissions from the remote's own data for that key; treat claims such as `roles` as
+display hints unless the remote trusts that host to grant them.
+
 The library cannot add routes to your `app/`, so you create this file. It serves
 `GET <routesPath>/jwks` and `POST <routesPath>/token?aud=<remote>`. `routesPath` defaults to
 `/api/next-federation`.
@@ -93,7 +129,17 @@ NF_ISSUER='http://localhost:3000'
 ```
 
 Keep the key secret. `signingKeys` takes private ES256 JWKs as JSON strings, each with a `kid`. Call
-`await validateIdentity(federation)` from `instrumentation.ts` to fail at boot on a malformed key.
+`await validateIdentity(federation)` from `instrumentation.ts` to fail at boot on a malformed key:
+
+```ts
+// instrumentation.ts
+export async function register() {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return
+  const { validateIdentity } = await import('@next-federation/core/identity')
+  const { federation } = await import('./lib/federation.config')
+  await validateIdentity(federation)
+}
+```
 
 ### Sign in and sign out
 

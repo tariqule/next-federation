@@ -6,6 +6,19 @@ pinned to exactly **0.5.39**.
 
 Requires Node `^20.19.0 || >=22.12.0` (Vite 8's floor), unlike the host-side packages (`>=20.9`).
 
+## Install
+
+```sh
+# An island remote: react-server-dom-webpack at exactly your React's version
+npm install --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@19.3.1
+npm install -D @next-federation/vite @next-federation/server vite
+```
+
+`react-server-dom-webpack` is an optional peer dependency: a components remote
+(`nextFederationComponents`) never uses it, so npm accepts any React 19 there. An island remote
+needs it (its bootstrap imports the browser flight client): `nextFederationIslands` fails with
+`NF-002` and the install command for your React version when it is missing.
+
 ## Usage
 
 ```ts
@@ -56,6 +69,7 @@ type IslandRemoteOptions = {
   actions?: {
     requireIdentity?: boolean // every Server Action needs a verified token (401 NF-014); default false
     maxBodyBytes?: number // Server Action body limit, default 1048576
+    timeoutMs?: number // browser: reject with NF-038 when no response started in time; default none
   }
 }
 ```
@@ -63,6 +77,10 @@ type IslandRemoteOptions = {
 A remote whose Server Actions read or change private data should set
 `actions: { requireIdentity: true }`, so an action that someone forgot to wrap in
 `requireIdentity()` is still refused without a token.
+
+Server Action calls have no client-side timeout unless you set `actions.timeoutMs`: a call whose
+response has not started within that many milliseconds is aborted and rejects with `NF-038`. The
+action may still have run on the remote.
 
 `resolveOptions(options, { command, env, now })` validates them (`NF-020` for a relative `base`,
 `NF-002` for everything else) and returns the resolved shape. A `buildId` matches
@@ -201,6 +219,13 @@ so a project on TypeScript 7 (create-vite's default) still installs with npm; on
 needs TypeScript 6. Without `typescript`, with TypeScript 7, when TypeScript cannot emit
 them, or when a declaration names an absolute path or a path above the root, the build warns
 (`NF-002`) and publishes no types.
+`nextFederationComponents` applies to the whole Vite project: every module gets React and the
+`shared` modules from the host, and `vite build` builds only the exposed modules. A page of that
+project cannot run on its own (`createContext is not a function`), and the dev server warns `NF-002`
+once when a browser opens one. To keep a standalone app, use two Vite configs: `vite.config.ts` for
+the app (with `@vitejs/plugin-react`) and `vite.remote.config.ts` for the remote, built with
+`vite build --config vite.remote.config.ts` into its own `outDir`
+([Keeping a standalone app](../../docs/guides/remote-components.md#keeping-a-standalone-app)).
 Guide: [Remote components](../../docs/guides/remote-components.md).
 
 ## API

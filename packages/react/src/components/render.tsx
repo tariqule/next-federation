@@ -4,7 +4,7 @@ import type {
   ComponentExposeAssets,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
-import { NFError } from '@next-federation/sdk'
+import { NFError, logger } from '@next-federation/sdk'
 import {
   Component,
   Suspense,
@@ -17,6 +17,7 @@ import {
 import type { ComponentType, ReactNode } from 'react'
 import { preinit, preload, preloadModule } from 'react-dom'
 import type {
+  ComponentEvent,
   ComponentRuntime,
   RemoteModule,
   SharedModules,
@@ -31,8 +32,17 @@ export type BindingsRuntime = Pick<
 export type RemoteComponentOptions = {
   /** The exposed module, e.g. './Counter' (its default export renders). */
   expose: string
-  /** Shown while loading, when the remote is down, and when it failed. */
+  /**
+   * Shown while the component loads (and in the server HTML of a component
+   * the browser renders). Also on failure, unless `errorFallback` is set.
+   */
   fallback?: ReactNode
+  /**
+   * Shown when the component failed: the remote could not be reached
+   * (`descriptor` is null), its module could not load, or it threw while
+   * rendering. Default: `fallback`.
+   */
+  errorFallback?: ReactNode
   /**
    * Modules this host provides to remotes, besides React: the remote lists
    * them in its `shared`. `version` is the real version of the host's copy
@@ -51,6 +61,7 @@ export type RemoteComponentProps<P> = P & {
    */
   descriptor: RemoteComponentDescriptor | null
   fallback?: ReactNode
+  errorFallback?: ReactNode
 }
 
 export type RemoteComponentType<P> = ((
@@ -92,14 +103,91 @@ export const BROWSER_ONLY_ATTR = 'data-nf-browser-only'
 
 type BoundaryProps = { fallback: ReactNode; children: ReactNode }
 
-class Boundary extends Component<BoundaryProps, { failed: boolean }> {
+/**
+ * Browser only: React error boundaries do not run on the server (a server
+ * render error is caught where the remote component renders, see
+ * `renderer`). Reports what it caught through `onError`.
+ */
+class Boundary extends Component<
+  BoundaryProps & { onError: (error: unknown) => void },
+  { failed: boolean }
+> {
   override state = { failed: false }
   static getDerivedStateFromError(): { failed: boolean } {
     return { failed: true }
   }
+  override componentDidCatch(error: unknown): void {
+    this.props.onError(error)
+  }
   override render(): ReactNode {
     return this.state.failed ? this.props.fallback : this.props.children
   }
+}
+
+/**
+ * Thrown values a server render must never catch: React's own suspension
+ * (`use`, a thrown thenable, postpone) and a framework's control-flow errors,
+ * which carry a string `digest` (a client-rendering bailout, a redirect).
+ */
+function isControlFlow(thrown: unknown): boolean {
+  if (typeof thrown !== 'object' || thrown === null) return false
+  const value = thrown as {
+    then?: unknown
+    digest?: unknown
+    message?: unknown
+    $$typeof?: unknown
+  }
+  return (
+    typeof value.then === 'function' ||
+    typeof value.digest === 'string' ||
+    value.$$typeof === Symbol.for('react.postpone') ||
+    (typeof value.message === 'string' &&
+      value.message.startsWith('Suspense Exception:'))
+  )
+}
+
+type RendererProps = {
+  props: Record<string, unknown>
+  /** Server: renders instead of the component when its render threw. */
+  onServerError: (error: unknown) => ReactNode
+}
+
+/**
+ * Renders a remote module's default export. A plain function component is
+ * called by this renderer itself (the same on both sides, so hooks and ids
+ * match during hydration), which lets a server render catch an error from
+ * the component's own render: React has no error boundaries on the server,
+ * and a framework may fail a whole prerender on such an error. Class, memo
+ * and forwardRef components render as elements.
+ */
+function renderer(
+  type: unknown,
+  isServer: boolean,
+  renderers: WeakMap<object, ComponentType<RendererProps>>
+): ComponentType<RendererProps> | null {
+  if (typeof type !== 'function') return null
+  if (
+    (type as { prototype?: { isReactComponent?: unknown } }).prototype
+      ?.isReactComponent
+  ) {
+    return null
+  }
+  const known = renderers.get(type)
+  if (known) return known
+  const render = type as (props: Record<string, unknown>) => ReactNode
+  const Render = ({ props, onServerError }: RendererProps): ReactNode => {
+    if (!isServer) return render(props)
+    try {
+      return render(props)
+    } catch (error) {
+      if (isControlFlow(error)) throw error
+      return onServerError(error)
+    }
+  }
+  const named = type as { displayName?: unknown; name?: unknown }
+  Render.displayName = String(named.displayName || named.name || 'Remote')
+  renderers.set(type, Render)
+  return Render
 }
 
 const subscribeNothing = () => () => {}
@@ -170,10 +258,63 @@ export type Bindings = {
 export function createBindings({
   runtime,
   isServer,
+  emit,
 }: {
   runtime: BindingsRuntime
   isServer: boolean
+  /** Receives `component:error` for a render error (NF-040). */
+  emit?: (event: ComponentEvent) => void
 }): Bindings {
+  // Module load failures the runtime reported itself (thrown by `use`).
+  const loadFailures = new WeakSet<object>()
+  // Server: each render error is logged once per build, expose and message.
+  const loggedOnServer = new Set<string>()
+  // One renderer per component type, so its identity (and state) is stable.
+  const renderers = new WeakMap<object, ComponentType<RendererProps>>()
+
+  /** NF-040 for an error a remote component threw while rendering. */
+  function reportRenderError(
+    descriptor: RemoteComponentDescriptor,
+    expose: string,
+    error: unknown
+  ): void {
+    const env = isServer ? 'server' : 'client'
+    const what = `Remote component ${descriptor.remote}:${expose} (build ${descriptor.buildId}) threw while rendering`
+    if (isServer) {
+      const message = error instanceof Error ? error.message : String(error)
+      const key = `${descriptor.base} ${expose} ${message}`
+      if (!loggedOnServer.has(key)) {
+        // Bounded: messages may carry ids, and a server runs for long.
+        if (loggedOnServer.size >= 1000) loggedOnServer.clear()
+        loggedOnServer.add(key)
+        logger.error(
+          'NF-040',
+          `${what} on the server; the page keeps its fallback and the browser renders the component.`,
+          error
+        )
+      }
+    } else {
+      logger.error(
+        'NF-040',
+        `${what} in the browser; rendering its error fallback.`,
+        error
+      )
+    }
+    try {
+      emit?.({
+        type: 'component:error',
+        remote: descriptor.remote,
+        buildId: descriptor.buildId,
+        expose,
+        code: 'NF-040',
+        error,
+        env,
+      })
+    } catch (observerError) {
+      logger.debug('component event observer threw', observerError)
+    }
+  }
+
   /**
    * Loads an exposed module of one remote build (cached per build). On the
    * server it is evaluated only for a descriptor verified in this process.
@@ -258,12 +399,23 @@ export function createBindings({
       </>
     )
     if (marked && !hydrated) return browserOnly
-    const mod = use(
-      (isServer
+    const loading = (
+      isServer
         ? runtime.serverLoad(descriptor, expose)
-        : runtime.load(descriptor, expose)) as Promise<RemoteModule | null>
-    )
+        : runtime.load(descriptor, expose)
+    ) as Thenable<RemoteModule | null>
+    // The runtime logged and reported a failed load: the boundary only
+    // renders its fallback for it.
+    if (
+      loading.status === 'rejected' &&
+      typeof loading.reason === 'object' &&
+      loading.reason !== null
+    ) {
+      loadFailures.add(loading.reason)
+    }
+    const mod = use(loading as Promise<RemoteModule | null>)
     if (!mod) return browserOnly
+    const Render = renderer(mod.default, isServer, renderers)
     return (
       <>
         {clientMount
@@ -276,9 +428,19 @@ export function createBindings({
                 precedence={CSS_PRECEDENCE}
               />
             ))}
-        {createElement(
-          mod.default as ComponentType<Record<string, unknown>>,
-          props
+        {Render ? (
+          <Render
+            props={props}
+            onServerError={(error) => {
+              reportRenderError(descriptor, expose, error)
+              return browserOnly
+            }}
+          />
+        ) : (
+          createElement(
+            mod.default as ComponentType<Record<string, unknown>>,
+            props
+          )
         )}
       </>
     )
@@ -316,13 +478,26 @@ export function createBindings({
     function RemoteComponent({
       descriptor,
       fallback: fallbackProp,
+      errorFallback: errorFallbackProp,
       ...props
     }: RemoteComponentProps<P>): ReactNode {
       const fallback = fallbackProp ?? options.fallback ?? null
-      if (!descriptor) return fallback
+      const errorFallback =
+        errorFallbackProp ?? options.errorFallback ?? fallback
+      if (!descriptor) return errorFallback
       if (isServer) preloadAssets(descriptor, expose)
+      const onError = (error: unknown) => {
+        if (typeof error === 'object' && error !== null) {
+          if (loadFailures.has(error)) return
+        }
+        reportRenderError(descriptor, expose, error)
+      }
       const tree = (
-        <Boundary key={descriptor.base} fallback={fallback}>
+        <Boundary
+          key={descriptor.base}
+          fallback={errorFallback}
+          onError={onError}
+        >
           <Suspense fallback={fallback}>
             <Loaded
               descriptor={descriptor}

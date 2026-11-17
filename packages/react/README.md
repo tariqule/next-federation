@@ -62,7 +62,8 @@ import { createRemoteComponent } from '@next-federation/react/components'
 export const Cart = createRemoteComponent<{ items: number }>({
   expose: './Cart',
   shared: { '@acme/host-context': { version: '1.0.0', module: HostContext } },
-  fallback: <p>Cart unavailable</p>,
+  fallback: <p>Loading the cart…</p>, // while it loads
+  errorFallback: <p>Cart unavailable</p>, // when it failed (default: fallback)
 })
 // <Cart descriptor={descriptor} items={3} />  (descriptor: from @next-federation/next, or
 // fetchDescriptorInBrowser() in an SPA)
@@ -95,6 +96,12 @@ host does not provide, or provides outside the remote's `requiredVersion`, rende
 `createRemoteComponent` from `@next-federation/next/components` (App Router) or
 `@next-federation/next/pages/components` (Pages Router) instead, which also provide the host's
 `next/*` modules.
+`fallback` shows while the component loads; `errorFallback` (default: `fallback`) when the remote
+is unreachable (`descriptor` is `null`), its module did not load, or it threw while rendering. A
+render error is `NF-040` and a `component:error` event in the browser. On the server, where React has
+no error boundaries, an error thrown by the exposed function component's own render is caught: the
+server HTML gets `fallback`, marked for the browser, which renders the component after hydration
+(so a statically prerendered page still builds), and `NF-040` is logged.
 Stylesheets listed in the descriptor are React stylesheet resources (`precedence="next-federation"`,
 one link per URL): rendered with a server-rendered component, inserted with `preinit` by one first
 mounted in the browser; a server render also modulepreloads the remote entry and chunks.

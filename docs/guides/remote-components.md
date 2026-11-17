@@ -31,11 +31,16 @@ components remote does not need. These are the edits that worked in the validati
    (`react({ exclude: [/src\/Cart\.tsx$/] })`). An exposed module compiled with Fast Refresh fails
    the build with `NF-002`, because a host page has no Vite preamble. The validated remote removed
    the plugin: Vite compiles JSX without it.
-2. **`index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/assets/`:** the build only
-   reads the files in `exposes`, so the scaffold's page is unused. Delete them, or keep them as a
-   dev playground if you applied the exclusion above. Exposed modules must not import from them.
-3. **`vite.config.ts`:** replace it with the `nextFederationComponents` config below.
-4. **Build script:** `"build": "vite build"` and `"start": "nf-serve --dir dist --port 4110"`.
+2. **`index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/assets/`:** the remote
+   build only reads the files in `exposes`, so the scaffold's page is unused. Delete them, or keep
+   the app running on its own with a second Vite config
+   ([Keeping a standalone app](#keeping-a-standalone-app)). Exposed modules must not import from
+   them.
+3. **`vite.config.ts`:** replace it with the `nextFederationComponents` config below, or, to keep
+   the standalone app, leave it as it is and put the remote's config in `vite.remote.config.ts`.
+4. **Build script:** `"build": "vite build"` and `"start": "nf-serve --dir dist --port 4110"`
+   (with two configs: `"build:remote": "vite build --config vite.remote.config.ts"` and
+   `"start:remote"`, see below).
    The scaffold's `tsc -b && vite build` still works as a type check when every file in `src`
    compiles. `vite preview` does not serve a remote: use `nf-serve`.
 5. **Dependencies:** `@next-federation/vite` and `@next-federation/server` as dev dependencies. If an
@@ -99,9 +104,65 @@ descriptor (`Cache-Control: no-store`), `/b/<buildId>/…` serves every build ke
 a retired build answers `410` (`NF-023`), exactly as for islands.
 
 Exposed modules must not be compiled with Fast Refresh (a host page has no Vite preamble). Without
-`@vitejs/plugin-react` nothing is needed (Vite compiles JSX). If the remote has its own dev app
-with the plugin, exclude the exposed files: `react({ exclude: [/src\/Cart\.tsx$/] })`. The build
-fails with `NF-002` when an exposed module contains Fast Refresh code.
+`@vitejs/plugin-react` nothing is needed (Vite compiles JSX). The build fails with `NF-002` when an
+exposed module contains Fast Refresh code. A standalone app of the same project keeps the plugin in
+its own config (next section).
+
+### Keeping a standalone app
+
+`nextFederationComponents` applies to the whole Vite project it is in: `react`, `react-dom` and
+every `shared` module become host-provided for every module, and `vite build` builds only the
+exposed modules (no `index.html`). A page of that project cannot run on its own: its dev server
+fails with `createContext is not a function` (or `module is not defined` with `shared: {}`), and the
+dev server logs one `NF-002` warning when a browser opens a page of it. To keep the app working as
+an app (a dev playground, or a product of its own), give the remote its own Vite config in the same
+project:
+
+```ts
+// vite.config.ts: the standalone app (create-vite's config, unchanged)
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+
+export default defineConfig({ plugins: [react()] })
+```
+
+```ts
+// vite.remote.config.ts: the components remote (no @vitejs/plugin-react)
+import { nextFederationComponents } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [
+    nextFederationComponents({
+      name: 'widgets',
+      base: 'https://widgets.example.com/',
+      outDir: 'dist-remote',
+      exposes: { './Counter': './src/components/Counter.tsx' },
+      shared: { '@acme/host-context': { requiredVersion: '^1.0.0' } },
+    }),
+  ],
+})
+```
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "dev:remote": "vite --config vite.remote.config.ts",
+    "build:remote": "vite build --config vite.remote.config.ts",
+    "start:remote": "nf-serve --dir dist-remote --port 4110"
+  }
+}
+```
+
+The app and the remote build the same component files: `npm run dev` and `npm run build` are the
+app (its own React, `dist/`), `npm run build:remote` and `npm run start:remote` are the remote
+(host-provided React, `dist-remote/`). Use a separate `outDir` so neither build empties the other's
+folder. This is the setup the validation ran: a create-vite app served by `vite preview` and, from
+the same source, a signed components remote that App Router, Pages Router and Next 15 hosts
+server-render.
 
 `@module-federation/vite` is pinned to exactly **1.24.0** (`NF-026` otherwise; `NF_ALLOW_MF_VITE=1`
 for a canary job only).
@@ -314,9 +375,17 @@ export const Cart = createRemoteComponent<{ items: number }>({
   expose: './Cart',
   // Modules this host provides to the remote (its `shared` list):
   shared: { '@acme/host-context': { version: '1.0.0', module: HostContext } },
-  fallback: <p>Cart unavailable</p>,
+  fallback: <p>Loading the cart…</p>,
+  errorFallback: <p>Cart unavailable</p>,
 })
 ```
+
+`fallback` shows while the component loads, and in the server HTML of a component the browser
+renders (an unverified build, or one that threw on the server). `errorFallback` shows when it
+failed: the remote could not be reached (`descriptor` is `null`), its module did not load after the
+retries, a shared module it needs is missing (`NF-036`), or it threw while rendering (`NF-040`).
+Without `errorFallback`, `fallback` is used for both, so word it for both ("Cart unavailable" reads
+wrong while the cart is loading). Both can also be passed per use, as props of the component.
 
 ### App Router
 
@@ -844,23 +913,38 @@ or an `onNavigate` callback as a prop instead.
 - **One React**: the host registers its own `react`, `react/jsx-runtime`, `react-dom` and
   `react-dom/client` (whichever copy renders it, per Next layer) plus your `shared` modules and,
   with a Next.js entry, its `next/*` modules.
-- **Loading**: `ErrorBoundary > Suspense(fallback) > component`. A loaded module is cached per build.
-  A failure is cached too (no retry loop): the server retries it after one second; the browser
-  retries with a bounded backoff (500 ms, 1 s, 2 s) and then shows the fallback for that page.
+- **Loading**: `ErrorBoundary(errorFallback) > Suspense(fallback) > component`. A loaded module is
+  cached per build. A failure is cached too (no retry loop): the server retries it after one
+  second; the browser retries with a bounded backoff (500 ms, 1 s, 2 s) and then shows
+  `errorFallback` for that page.
+- **Render errors** (`NF-040`): React error boundaries do not run on the server, so the host catches
+  an error the exposed component throws in its own render there. The server HTML gets `fallback`
+  (marked for the browser), the error is logged once per build, expose and message, and the browser
+  renders the component after hydration. This keeps a statically prerendered page buildable: `next
+  build` fails a prerender on any render error that reaches React, even inside `<Suspense>`. A
+  component that only fails on the server (it reads `window` during render) then works in the
+  browser; one that throws there too renders `errorFallback`, logs `NF-040` and sends
+  `component:error`. The server catches errors of the exposed function component's own render, not
+  of the components it renders, nor of a class, `memo` or `forwardRef` export: such an error still
+  reaches Next (the browser renders that boundary at request time; a build-time prerender fails).
+  Keep browser-only code in effects, or render that part only after mount.
 - **An inert boundary can be replaced early**: while the browser retries, React 19 keeps the server
   HTML of the boundary only as long as nothing above it re-renders with changed props or context;
   if a parent does, React replaces the dehydrated boundary with the fallback (and logs two
   recoverable errors in the console). The component then loads into the fallback's place.
-- **Remote down**: the page answers 200. A host that never fetched a descriptor renders the
-  fallback; one that did keeps rendering the last known build. If the server rendered the
+- **Remote down**: the page answers 200. A host that never fetched a descriptor renders
+  `errorFallback`; one that did keeps rendering the last known build. If the server rendered the
   component but the browser cannot load its module, the server HTML stays visible (not
-  interactive) while the browser retries, and the fallback replaces it only when every attempt
+  interactive) while the browser retries, and `errorFallback` replaces it only when every attempt
   failed.
 - **Redeploys** are picked up without a host restart (within `revalidate`), and in-flight pages keep
   loading the build they were rendered with.
 - **Events**: in the browser, every load and failure is a `nf:component` `CustomEvent` on
-  `document` (`COMPONENT_EVENT`); on the server, `defineFederation({ onEvent })` receives
-  `component:descriptor` and `component:error`.
+  `document` (`COMPONENT_EVENT`), a render error included (`component:error` with `code: 'NF-040'`,
+  `remote`, `expose`, `buildId` and `error`); on the server, `defineFederation({ onEvent })`
+  receives `component:descriptor` and the descriptor's `component:error`. Load and render failures
+  on the server are logged (`NF-029`, `NF-040`, ...), not sent to `onEvent`: they happen in the
+  client component's server render, which has no access to the federation.
 
 ## Devtools
 

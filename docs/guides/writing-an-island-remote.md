@@ -32,11 +32,20 @@ app and a remote is not. These are the edits that made the scaffold work (checke
    ([Remote components](remote-components.md#types)) needs TypeScript 5 or 6: with TypeScript 7,
    which create-vite currently installs, the build still succeeds, warns `NF-002` naming
    `npm install -D typescript@6`, and publishes no types.
+8. **`node:*` imports in island code:** island Server Components and Server Actions run on Node, so
+   they can read files or a database (`import { readFile } from 'node:fs/promises'`). The
+   scaffold's `tsconfig.app.json` lists only `"types": ["vite/client"]`, so `tsc -b` fails with
+   "Cannot find module 'node:fs'". Add `"node"` to that list (`"types": ["vite/client", "node"]`) and
+   keep `@types/node` in `devDependencies` (create-vite already installs it for its Vite config).
+   Never import a `node:*` module from a `'use client'` file: it runs in the browser.
 
 ## 1. Install
 
 Pin React and React DOM to one exact version (the repo's tests run 19.3.1) and
-`react-server-dom-webpack` to the same one:
+`react-server-dom-webpack` to the same one. `@next-federation/vite` lists `react-server-dom-webpack`
+as an optional peer dependency (a components remote never uses it), so npm does not install it for
+you: an island remote without it fails at `vite` startup with `NF-002`, naming the install command
+for your React version.
 
 ```sh
 pnpm add --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@19.3.1

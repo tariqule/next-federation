@@ -30,6 +30,11 @@ export type IslandBootstrapDeps = {
    * it (bootstraps built by an older plugin) every action rejects with NF-019.
    */
   encodeReply?(args: unknown[]): Promise<string | FormData>
+  /**
+   * Server Actions reject with NF-038 when the remote has not started
+   * answering within this many ms. Default: no limit.
+   */
+  actionTimeoutMs?: number
 }
 
 const toStream = (text: string): ReadableStream<Uint8Array> =>
@@ -131,6 +136,9 @@ export function createIslandBootstrap(
             getToken: options.getToken,
             invalidateToken: options.invalidateToken,
             onAction: options.onAction,
+            ...(deps.actionTimeoutMs === undefined
+              ? {}
+              : { timeoutMs: deps.actionTimeoutMs }),
             encodeReply,
             createFromReadableStream: deps.createFromReadableStream,
           })

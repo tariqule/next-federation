@@ -41,6 +41,7 @@ export type NFErrorCode =
   | 'NF-037'
   | 'NF-038'
   | 'NF-039'
+  | 'NF-040'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
   {
@@ -180,6 +181,10 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
     'NF-039': {
       slug: 'component-deferred',
       title: 'Remote component deferred to request time',
+    },
+    'NF-040': {
+      slug: 'component-render-failed',
+      title: 'Remote component threw while rendering',
     },
   }
 

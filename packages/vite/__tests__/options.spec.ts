@@ -261,7 +261,16 @@ test('actions: requireIdentity defaults to false, maxBodyBytes to 1 MiB, both va
   )
   expect(set.actionsRequireIdentity).toBe(true)
   expect(set.maxActionBodyBytes).toBe(4096)
+  // No client-side action timeout unless the remote sets one.
+  expect(r.actionTimeoutMs).toBeNull()
+  expect(
+    resolveOptions({ ...opts, actions: { timeoutMs: 15_000 } }, build)
+      .actionTimeoutMs
+  ).toBe(15_000)
   for (const actions of [
+    { timeoutMs: 0 },
+    { timeoutMs: 2.5 },
+    { timeoutMs: '10s' },
     { requireIdentity: 'yes' },
     { maxBodyBytes: 0 },
     { maxBodyBytes: 1.5 },

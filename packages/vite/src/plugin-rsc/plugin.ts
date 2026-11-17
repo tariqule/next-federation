@@ -20,7 +20,10 @@ import { remoteViteConfig, rscPluginOptions } from './config.ts'
 import { registerDevActions } from './dev-actions.ts'
 import { islandCssPlugin } from './island-css.ts'
 import { flightScopePlugin } from './scope.ts'
-import { assertInstalledPluginRsc } from './version.ts'
+import {
+  assertFlightClientInstalled,
+  assertInstalledPluginRsc,
+} from './version.ts'
 import {
   VIRTUAL_BOOTSTRAP,
   VIRTUAL_CONFIG,
@@ -163,8 +166,16 @@ function serverConfigModule(resolved: ResolvedOptions): string {
 
 // The browser bundle only needs these; issuers and hosts stay on the server.
 function clientConfigModule(resolved: ResolvedOptions): string {
-  const { name, buildId, publicBase, scopeKey, mode } = resolved
-  return `export default ${codeLiteral({ name, buildId, publicBase, scopeKey, mode })}\n`
+  const { name, buildId, publicBase, scopeKey, mode, actionTimeoutMs } =
+    resolved
+  return `export default ${codeLiteral({
+    name,
+    buildId,
+    publicBase,
+    scopeKey,
+    mode,
+    ...(actionTimeoutMs === null ? {} : { actionTimeoutMs }),
+  })}\n`
 }
 
 function islandsModule(
@@ -217,6 +228,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
     // Before plugin-rsc's config hook, which reads the environment outDirs.
     enforce: 'pre',
     config(user, env) {
+      assertFlightClientInstalled(resolve(user.root ?? process.cwd()))
       builtAt = Date.now()
       resolved = resolveOptions(options, {
         command: env.command,

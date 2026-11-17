@@ -7,7 +7,7 @@ import {
   COMPONENTS_DESCRIPTOR_PATH,
 } from '@next-federation/protocol'
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
-import { NFError } from '@next-federation/sdk'
+import { NFError, logger } from '@next-federation/sdk'
 import type { Plugin, PluginOption, UserConfig } from 'vite'
 import {
   SHARED_USAGE_FILE,
@@ -160,6 +160,22 @@ export function nextFederationComponents(
       },
     },
     configureServer(server) {
+      // A browser opening a page of this project (a host only loads modules,
+      // manifests and the descriptor): it cannot run here, since React and
+      // every shared module are host-provided for the whole project.
+      server.middlewares.use((req, _res, next) => {
+        if (
+          req.method === 'GET' &&
+          req.headers.accept?.includes('text/html') === true
+        ) {
+          logger.warnOnce(
+            'NF-002',
+            'components-dev-page',
+            `${req.url ?? '/'} is a page of this Vite project, served by a components remote's dev server. nextFederationComponents makes react, react-dom and every \`shared\` module host-provided for the whole project, so no page of it runs on its own ("createContext is not a function", "module is not defined"). Keep a standalone app in its own Vite config, next to the remote's (vite.remote.config.ts): see docs/guides/remote-components.md#keeping-a-standalone-app.`
+          )
+        }
+        next()
+      })
       // Dev: hosts render the remote in the browser only (no server build).
       server.middlewares.use((req, res, next) => {
         if (req.url?.split('?')[0] !== COMPONENTS_DESCRIPTOR_PATH) return next()

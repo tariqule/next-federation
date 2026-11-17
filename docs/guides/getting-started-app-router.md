@@ -106,6 +106,26 @@ and `getIdentity` to `lib/federation.ts`). Environment variables the config read
 A remote is an origin, not a path. The host fetches envelopes only from this origin (and from
 `assetOrigins`, if you list any), and it refuses redirects.
 
+### Timeout and retries
+
+Each island fetch has a total budget of `timeoutMs` (default `3000`), which covers every attempt.
+A network error or a `502`, `503` or `504` is retried `retries` times (default `1`) after a short
+pause, while the budget lasts; a timeout (`NF-008`), another status or an invalid envelope is not
+retried. Set them for all remotes or per remote:
+
+```ts
+export const federation = defineFederation({
+  islands: { timeoutMs: 5000, retries: 2 },
+  remotes: {
+    shop: { origin: 'https://shop.example.com' },
+    // A slow remote gets more time; a flaky one more retries.
+    reports: { origin: 'https://reports.example.com', timeoutMs: 8000, retries: 0 },
+  },
+})
+```
+
+A failed island renders `errorFallback` (default: `fallback`) and the page still answers `200`.
+
 ## 4. Render an island
 
 ```tsx
@@ -211,17 +231,27 @@ renders `errorFallback` in place with the same `NF-007`, `NF-008` or `NF-004` lo
 answers `200`. An anonymous visitor gets `errorFallback` in place. The token never enters the HTML
 or the RSC payload, and the envelope is fetched with `cache: 'no-store'`.
 
+What changes on a host failure: the `200` covers remote failures only. If the host's own
+`getIdentity` or token minting throws (a session store that is down, a missing signing key), there
+is no island boundary to catch it: the error goes to the route's `error.tsx` and the page does not
+answer `200`, where without `blocking` React would render the island in the browser under its own
+`<Suspense>`. Make `getIdentity` not throw: catch your session lookup's errors and return `null`,
+which renders `errorFallback` like an anonymous visitor.
+
 The Next config the route needs:
 
 | Host | What to add |
 | --- | --- |
 | `cacheComponents` (Next 16) | `export const instant = false` in the page that renders the island. Without it, `next build` fails with Next's "Route "/orders": Next.js encountered uncached or runtime data during prerendering" error. |
-| No `cacheComponents` (Next 16 or 15) | Nothing. A private island already makes the route dynamic. Do not add `instant`: Next refuses it without `cacheComponents` ("Route segment config "instant" requires `nextConfig.cacheComponents` to be enabled"). |
+| No `cacheComponents` (Next 16 or 15) | Nothing. A private island already makes the route dynamic. Do not add `instant`: without `cacheComponents`, `next build` refuses it (Turbopack: "Route segment config "instant" requires `nextConfig.cacheComponents` to be enabled"; webpack: "Route "/orders" cannot use `export const instant = ...` without enabling `cacheComponents`"). |
 
 Put `instant = false` in the page file, not only in a layout: with it in the layout alone the build
 passes (the route is still `ƒ`), but `next dev` still logs Next's instant-navigation check for the page ("Next.js encountered
-uncached data during prerendering or a navigation"). `blocking` on a public island throws
-[`NF-002`](../errors/invalid-config.md): a public island is cached and already renders in place.
+uncached data during prerendering or a navigation"). An ancestor layout with `instant = true`
+defeats the page's `instant = false`: Next skips its static-shell check only when the highest
+`instant` in the tree is `false`, so `next build` fails with the error above (loudly, never
+silently). `blocking` on a public island throws [`NF-002`](../errors/invalid-config.md): a public
+island is cached and already renders in place.
 
 ## 6. Open the CSP
 

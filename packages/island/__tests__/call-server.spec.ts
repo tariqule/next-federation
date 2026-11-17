@@ -276,3 +276,49 @@ test('redirects are refused, never followed', async () => {
   await callServer('f.ts#x', [])
   expect(sent[0]!.init.redirect).toBe('error')
 })
+
+describe('timeoutMs: the remote must start answering in time (NF-038)', () => {
+  // A fetch that answers only when its signal aborts (a hung remote).
+  const hang = () => {
+    globalThis.fetch = ((url: string, init: RequestInit) => {
+      sent.push({ url, init })
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () =>
+          reject(init.signal!.reason)
+        )
+      })
+    }) as typeof fetch
+  }
+
+  test('a remote that does not answer within timeoutMs rejects with NF-038 and is aborted', async () => {
+    hang()
+    const { callServer, reports } = make({ timeoutMs: 30 })
+    const error = (await callServer('src/a.ts#slow', []).catch(
+      (e: unknown) => e
+    )) as Error & { code?: string }
+    expect(isNFError(error)).toBe(true)
+    expect(error.code).toBe('NF-038')
+    expect(error.message).toContain('did not answer within 30 ms')
+    expect(sent[0]!.init.signal?.aborted).toBe(true)
+    expect(reports).toEqual([
+      {
+        ok: false,
+        status: 0,
+        code: 'NF-038',
+        ms: expect.any(Number),
+        retried: false,
+      },
+    ])
+  })
+
+  test('an answer in time is not aborted afterwards, and no timeoutMs sends no signal', async () => {
+    replies.push(flight({ returnValue: 1 }))
+    const timed = make({ timeoutMs: 20 })
+    await expect(timed.callServer('src/a.ts#fast', [])).resolves.toBe(1)
+    await new Promise((r) => setTimeout(r, 40))
+    expect(sent[0]!.init.signal?.aborted).toBe(false)
+    replies.push(flight({ returnValue: 2 }))
+    await expect(make().callServer('src/a.ts#fast', [])).resolves.toBe(2)
+    expect(sent[1]!.init.signal).toBeUndefined()
+  })
+})
