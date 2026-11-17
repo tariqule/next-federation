@@ -304,3 +304,50 @@ describe('performance', () => {
     expect(r).toBeLessThan(LIMIT)
   }, 180_000)
 })
+
+// React's form-replay runtime, copied from react-dom/server (Fizz's
+// `formReplayingRuntimeScript`): 19.0 to 19.2, and 19.3.
+const REPLAY_19_0 = `addEventListener("submit",function(a){if(!a.defaultPrevented){var c=a.target,d=a.submitter,e=c.action,b=d;if(d){var f=d.getAttribute("formAction");null!=f&&(e=f,b=null)}"javascript:throw new Error('React form unexpectedly submitted.')"===e&&(a.preventDefault(),b?(a=document.createElement("input"),a.name=b.name,a.value=b.value,b.parentNode.insertBefore(a,b),b=new FormData(c),a.parentNode.removeChild(a)):b=new FormData(c),a=c.ownerDocument||c,(a.$$reactFormReplay=a.$$reactFormReplay||[]).push(c,d,b))}});`
+const REPLAY_19_3 = `addEventListener("submit",function(a){if(!a.defaultPrevented){var b=a.target,d=a.submitter,c=b.action,e=d;if(d){var f=d.getAttribute("formAction");null!=f&&(c=f,e=null)}"javascript:throw new Error('React form unexpectedly submitted.')"===c&&(a.preventDefault(),a=new FormData(b,e),c=b.ownerDocument||b,(c.$$reactFormReplay=c.$$reactFormReplay||[]).push(b,d,a))}});`
+const FORM = `<form action="javascript:throw new Error('React form unexpectedly submitted.')"><button>go</button></form>`
+
+describe("React's form-replay script", () => {
+  test.each([
+    ['19.0-19.2', REPLAY_19_0],
+    ['19.3', REPLAY_19_3],
+  ])('React %s: removed, and reported as known', (_v, runtime) => {
+    const r = stripIslandHtml(`<script>${runtime}</script>${FORM}`)
+    expect(r.html).toBe(FORM)
+    expect(r.removed).toEqual([
+      { tag: 'script', attrs: '', known: 'react-form-replay' },
+    ])
+  })
+
+  test.each([
+    ['extra code after it', `<script>${REPLAY_19_3}fetch("/x")</script>`],
+    ['extra code before it', `<script>fetch("/x");${REPLAY_19_3}</script>`],
+    ['whitespace around it', `<script> ${REPLAY_19_3}</script>`],
+    [
+      'a changed character',
+      `<script>${REPLAY_19_3.replace('c=b.', 'c=x.')}</script>`,
+    ],
+    ['an id attribute', `<script id="r">${REPLAY_19_3}</script>`],
+    ['a src attribute', `<script src="/evil.js">${REPLAY_19_3}</script>`],
+    ['a type attribute', `<script type="module">${REPLAY_19_3}</script>`],
+    ['an empty attribute', `<script async>${REPLAY_19_3}</script>`],
+    ['an svg script', `<svg><script>${REPLAY_19_3}</script></svg>`],
+    [
+      'two scripts in one',
+      `<script>${REPLAY_19_3}</script><script>${REPLAY_19_3}x()</script>`,
+    ],
+  ])(
+    'an imitation (%s) is removed and not reported as known',
+    (_case, html) => {
+      const r = stripIslandHtml(html + '<p>k</p>')
+      expect(r.html).not.toContain('<script')
+      expect(r.html).toContain('<p>k</p>')
+      const unknown = r.removed.filter((t) => t.known === undefined)
+      expect(unknown.length).toBeGreaterThanOrEqual(1)
+    }
+  )
+})

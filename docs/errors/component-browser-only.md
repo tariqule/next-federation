@@ -25,13 +25,12 @@ just has no server HTML for it. The message names the case:
   cache holds another React, or another instance of a host-provided module (two copies installed,
   one registered twice, a fallback copy cached before the host registered its own, or a dev server
   such as `next dev --webpack` reloaded the host's modules).
-- **Not loaded in this server process yet** (App Router with `cacheComponents`, after
-  `next start`): a static regeneration ran before this process had loaded the build. That render
-  leaves the remote components to request time (each request waits for the build) instead of
-  keeping their fallback in the static page, and the page is static again once the build is
-  loaded. The components do render on the server; nothing is browser-only for the visitor.
 
 Each case is logged once per build (and router layer), or once per process.
+
+A static regeneration that runs before the server process has loaded the build is not this code:
+the components still render on the server, at request time. See
+[NF-039](component-deferred.md).
 
 ## How to fix
 
@@ -45,5 +44,4 @@ Each case is logged once per build (and router layer), or once per process.
   library lists (see "Mixed-router hosts" in `docs/guides/remote-components.md`).
 - Stale share cache in development: restart the dev server. In production, install one copy of
   each host-provided module and register it once.
-- Not loaded yet: nothing to fix; it resolves by itself once the process has loaded the build.
 - `components.ssr: false` turns server rendering off for a remote without a warning.

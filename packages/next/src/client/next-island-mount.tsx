@@ -17,7 +17,7 @@ export function NextIslandMount(props: {
   /** `identityKey: null`: a public island whose actions act as the signed-in user. */
   token: { endpoint: string; identityKey: string | null } | null
   errorFallback?: ReactNode
-  /** The page gave no `errorFallback` of its own: keep the HTML if the code cannot load. */
+  /** Keep the HTML (inert) if the code cannot load; see `RemoteIslandProps`. */
   inertOnLoadFailure?: boolean
 }): ReactElement {
   const { envelope, host, token, errorFallback, inertOnLoadFailure } = props

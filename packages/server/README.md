@@ -15,6 +15,10 @@ const { html, removed } = stripIslandHtml(islandHtml)
 // removed: [{ tag: 'link', attrs: ' rel="modulepreload" href="/a.js"/' }]
 ```
 
+React's form-replay script (emitted before a `<form>` whose `action` is a function) is removed too,
+and reported as `{ tag: 'script', attrs: '', known: 'react-form-replay' }`: only an exact copy of a
+React release's script, with no attributes, gets `known`.
+
 It is built on the parse5 HTML tokenizer (quoted attributes, comments, CDATA, raw-text elements), not a
 regular expression, so `<SCRIPT>`, a `>` inside an attribute value, `</script >` and scripts inside
 `<svg>` are handled. Escaped text such as `&lt;script&gt;` is never touched.
@@ -70,7 +74,8 @@ Options:
 - `maxBodyBytes` (default 65536): POST body limit, enforced on `Content-Length` and on bytes read
   (`413`).
 - `dev`: logs `NF-018` for each tag `stripIslandHtml` removed from your HTML (except
-  `link[rel=modulepreload]`). The HTML is always stripped, in every mode.
+  `link[rel=modulepreload]` and React's own form-replay script). The HTML is always stripped, in
+  every mode.
 - `actions`: an `ActionRuntime` (`loadAction`, `decodeReply`, `encodeResult`) that serves Server
   Actions on `<base>/_nf/action`, following the protocol's Server Actions table. The Vite plugin
   supplies it; without it that path is a bare `404`. An export runs only if it is a server reference

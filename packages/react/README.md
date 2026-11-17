@@ -39,7 +39,10 @@ a fresh container and bootstraps the island again. When the island's code cannot
 bootstrap, or a module it needs while hydrating: the remote is down or the build was retired), the
 island reports `NF-011` and renders `errorFallback`. Without an `errorFallback` prop (or with
 `inertOnLoadFailure`), a bootstrap that fails to load leaves the server HTML in place and marks the
-island `inert`.
+island `inert`. Pass `inertOnLoadFailure` together with `errorFallback` to keep the server HTML when
+the island's build has been retired (skew) while an uncaught island error still shows
+`errorFallback`. The `RemoteIsland` components of `@next-federation/next` (App Router and Pages
+Router) take the same prop and pass it through; their default is the same.
 The container's `data-nf-state` becomes `live` (and `island:hydrate` fires) only once the
 island's hydration has committed, so the island is interactive from that point.
 `IslandMount` also renders the envelope's stylesheets as

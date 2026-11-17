@@ -133,7 +133,7 @@ export async function skipStaticShellUntilReady(
   }
   if (componentTrustRegistry().serverReady?.has(descriptor.base)) return
   logger.warnOnce(
-    'NF-028',
+    'NF-039',
     `not-loaded:${descriptor.base}`,
     `Build "${descriptor.buildId}" of "${descriptor.remote}" is not loaded in this server process yet: this render leaves its remote components to request time (each request waits for the build) instead of keeping their fallback in the static page, and the page regenerates once it is loaded.`
   )

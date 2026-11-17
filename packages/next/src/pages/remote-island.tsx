@@ -14,6 +14,15 @@ export type RemoteIslandProps = IslandProps & {
    * to `fallback`.
    */
   errorFallback?: ReactNode
+  /**
+   * When the island's code cannot load in the browser (its bootstrap,
+   * `NF-011`: the remote is down or the build was retired), keep the server
+   * HTML in place, not interactive (`inert`), instead of `errorFallback`.
+   * Default: true without `errorFallback`, false with one. Set it with an
+   * `errorFallback` to keep the HTML across a retired build (skew) while
+   * still showing `errorFallback` after an island error.
+   */
+  inertOnLoadFailure?: boolean
 }
 
 /**
@@ -25,7 +34,8 @@ export type RemoteIslandProps = IslandProps & {
  * found in the island's href.
  */
 export function RemoteIsland(props: RemoteIslandProps): ReactElement {
-  const { envelope, host, token, fallback, errorFallback } = props
+  const { envelope, host, token, fallback, errorFallback, inertOnLoadFailure } =
+    props
   const onError = errorFallback ?? fallback ?? null
   const router = useRouter()
   const { basePath, locale } = host
@@ -57,9 +67,10 @@ export function RemoteIsland(props: RemoteIslandProps): ReactElement {
       bridge={bridge}
       token={token}
       errorFallback={onError}
-      // Without its own errorFallback, an island whose code cannot load in
-      // the browser keeps its server HTML (inert) rather than `fallback`.
-      inertOnLoadFailure={errorFallback === undefined}
+      // Without its own errorFallback (unless the page says otherwise), an
+      // island whose code cannot load in the browser keeps its server HTML
+      // (inert) rather than `fallback`.
+      inertOnLoadFailure={inertOnLoadFailure ?? errorFallback === undefined}
     />
   )
 }
