@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/protocol",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Island protocol v1 for next-federation: envelope, request codec, bootstrap contract. Bundler-neutral.",
   "license": "MIT",
   "author": "tariqule",
