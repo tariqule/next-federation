@@ -1,5 +1,10 @@
 import { isNFError } from '@next-federation/sdk'
-import { eventFor, fetchIsland, islandTags } from '../src/index.ts'
+import {
+  MAX_ENVELOPE_BYTES,
+  eventFor,
+  fetchIsland,
+  islandTags,
+} from '../src/index.ts'
 import type { IslandResult, IslandTarget } from '../src/index.ts'
 
 const target: IslandTarget = {
@@ -363,4 +368,106 @@ test('the token never leaks into results or events; cookie headers are dropped',
     'cookie'
   )
   expect(JSON.stringify(headers)).not.toContain('sid=abc')
+})
+
+describe('envelope size limit', () => {
+  /** A body that never ends: `chunk` spaces per pull, each after `delayMs`. */
+  function drip(chunk: number, delayMs: number, signal?: AbortSignal | null) {
+    const seen = { pulls: 0, cancelled: false }
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        seen.pulls++
+        await new Promise((r) => setTimeout(r, delayMs))
+        if (signal?.aborted) {
+          // What undici does to a body whose request was aborted.
+          controller.error(new DOMException('aborted', 'AbortError'))
+          return
+        }
+        controller.enqueue(new Uint8Array(chunk).fill(32))
+      },
+      cancel() {
+        seen.cancelled = true
+      },
+    })
+    return { body, seen }
+  }
+
+  test('MAX_ENVELOPE_BYTES is 5 MiB', () => {
+    expect(MAX_ENVELOPE_BYTES).toBe(5 * 1024 * 1024)
+  })
+
+  test('a slow drip past maxBytes is NF-007, cancelled and not retried', async () => {
+    const { body, seen } = drip(16, 10)
+    const f = rs.fn(async () => new Response(body))
+    const p = fetchIsland(
+      { ...target, maxBytes: 64 },
+      { island: 'Cart', fetch: asFetch(f) }
+    )
+    await rs.advanceTimersByTimeAsync(200)
+    const r = await p
+    expect(r).toMatchObject({ ok: false, code: 'NF-007' })
+    expect(r).not.toHaveProperty('status')
+    expect(r.meta.ms).toBeLessThan(200)
+    expect(seen.cancelled).toBe(true)
+    expect(seen.pulls).toBeLessThanOrEqual(6)
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+
+  test('a declared content-length over maxBytes is refused without reading the body', async () => {
+    let pulls = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++
+        controller.enqueue(new Uint8Array(16))
+      },
+    })
+    const f = rs.fn(
+      async () => new Response(body, { headers: { 'content-length': '65' } })
+    )
+    const r = await fetchIsland(
+      { ...target, maxBytes: 64 },
+      { island: 'Cart', fetch: asFetch(f) }
+    )
+    expect(r).toMatchObject({ ok: false, code: 'NF-007' })
+    expect(pulls).toBeLessThanOrEqual(1)
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+
+  test('without maxBytes the 5 MiB default applies', async () => {
+    rs.useRealTimers()
+    const over = new Uint8Array(MAX_ENVELOPE_BYTES + 1).fill(32)
+    const f = rs.fn(async () => new Response(over))
+    const r = await fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+    expect(r).toMatchObject({ ok: false, code: 'NF-007' })
+  })
+
+  test('an envelope at maxBytes is accepted and meta.bytes counts bytes', async () => {
+    const text = JSON.stringify(envelope({ html: '<p>é</p>' }))
+    const size = new TextEncoder().encode(text).byteLength
+    const f = rs.fn(async () => new Response(text))
+    const r = await fetchIsland(
+      { ...target, maxBytes: size },
+      { island: 'Cart', fetch: asFetch(f) }
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.envelope.html).toBe('<p>é</p>')
+      expect(r.meta.bytes).toBe(size)
+    }
+  })
+
+  test('a slow drip under the limit still times out with NF-008', async () => {
+    let seen: { cancelled: boolean } | undefined
+    const f = rs.fn(async (_url: string, init: RequestInit) => {
+      const d = drip(1, 100, init.signal)
+      seen = d.seen
+      return new Response(d.body)
+    })
+    const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+    await rs.advanceTimersByTimeAsync(3200)
+    const r = await p
+    expect(r).toMatchObject({ ok: false, code: 'NF-008' })
+    expect(seen).toBeDefined()
+    expect(f).toHaveBeenCalledTimes(1)
+  })
 })

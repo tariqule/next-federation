@@ -90,7 +90,8 @@ jobs:
       matrix:
         # installed, installed:webpack: next-federation from packed tarballs
         # in a real node_modules, `next dev` on Next 15 and 16, with and
-        # without source maps (installed-dev.spec.ts).
+        # without source maps (installed-dev.spec.ts). They set NF_MIN_PASSED=1
+        # (test/e2e/run.ts): a run where every test skipped fails.
         cell:
           [
             dev,

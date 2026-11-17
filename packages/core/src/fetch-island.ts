@@ -7,6 +7,7 @@ import type { HostContext, IslandEnvelope } from '@next-federation/protocol'
 import { NFError, isNFError } from '@next-federation/sdk'
 import type { IslandTarget } from './config.ts'
 import type { FederationEvent } from './events.ts'
+import { readBodyLimited } from './read-body.ts'
 
 export type IslandFetchMeta = { ms: number; bytes: number; attempts: number }
 
@@ -36,6 +37,13 @@ export type FetchIslandRequest = {
   /** Merged into every fetch call, e.g. `{ next: { revalidate, tags } }` or `{ cache: 'no-store' }`. */
   init?: Record<string, unknown>
 }
+
+/**
+ * Default ceiling for an island response body (`islands.maxBytes`). Envelopes
+ * are usually a few KB (the host warns above `islands.warnBytes`, 100 KB); the
+ * ceiling only stops a remote from making the host buffer an unbounded body.
+ */
+export const MAX_ENVELOPE_BYTES: number = 5 * 1024 * 1024
 
 const RETRY_DELAY_MS = 100
 const RETRYABLE_STATUS = new Set([502, 503, 504])
@@ -134,17 +142,23 @@ export async function fetchIsland(
         retry: RETRYABLE_STATUS.has(response.status),
       }
     }
-    let text: string
+    let body: Uint8Array | null
     try {
-      text = await response.text()
+      body = await readBodyLimited(
+        response,
+        target.maxBytes ?? MAX_ENVELOPE_BYTES
+      )
     } catch (error) {
       if (timedOut() || errorName(error) === 'AbortError') {
         return { code: 'NF-008', retry: false }
       }
       return { code: 'NF-007', retry: true }
     }
-    bytes = text.length
+    // Over the limit: the body was cancelled. Deterministic, so not retried.
+    if (body === null) return { code: 'NF-007', retry: false }
+    bytes = body.byteLength
     try {
+      const text = new TextDecoder().decode(body)
       const envelope = parseEnvelope(JSON.parse(text) as unknown)
       assertEnvelopeUrls(envelope, target.allowedOrigins)
       if (envelope.remote !== target.remote) {

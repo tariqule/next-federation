@@ -644,7 +644,8 @@ strips types. For each remote, `nf-types`:
    build, counted while the body streams), checks each file's raw bytes against its sha384
    (`NF-027`), writes those bytes unchanged, and only then replaces
    `next-federation-types/<remote>/`. A failed remote keeps the types it had, and the command
-   exits 1.
+   exits 1. A verified build that publishes no types removes the remote's previous folder and
+   its `index.d.ts` entry (so its `RemoteProps` become a type error rather than stale types).
 
 Nothing downloaded ever runs: the files are only read by TypeScript. Next.js's default
 `tsconfig.json` (`include: ["**/*.ts", …]`, `skipLibCheck: true`) picks up `index.d.ts`; with a

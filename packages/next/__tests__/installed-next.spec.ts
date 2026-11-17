@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -28,14 +28,14 @@ function caught(fn: () => unknown): unknown {
   return undefined
 }
 
-describe('readNext against real installs (cacheLife feature detection)', () => {
-  test('Next 15 (next/cache has unstable_cacheLife only): no stable cacheLife', () => {
+describe('readNext against real installs', () => {
+  test('Next 15: no cacheComponents', () => {
     const next = readNext(NEXT15)
     expect(next).toMatchObject({ version: '15.5.28', cacheComponents: false })
     expect(next!.path).toContain('next@15.5.28')
   })
 
-  test('the workspace Next 16: stable cacheLife', () => {
+  test('the workspace Next 16: cacheComponents', () => {
     const next = readNext(PACKAGE)
     expect(next).toMatchObject({ version: '16.4.6', cacheComponents: true })
     expect(next!.path).toContain('next@16.4.6')
@@ -44,6 +44,36 @@ describe('readNext against real installs (cacheLife feature detection)', () => {
   test('no node_modules/next from the folder upwards: null, even when NODE_PATH would resolve one', () => {
     expect(readNext(EMPTY)).toBeNull()
     expect(readNext(ROOT)).toBeNull()
+  })
+})
+
+describe('readNext decides cacheComponents by the major, without loading next/cache', () => {
+  /** A fake install whose next/cache throws when loaded. */
+  function fakeNext(version: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'nf-fake-next-'))
+    const pkg = join(dir, 'node_modules', 'next')
+    mkdirSync(pkg, { recursive: true })
+    writeFileSync(
+      join(pkg, 'package.json'),
+      JSON.stringify({ name: 'next', version, main: 'index.js' })
+    )
+    writeFileSync(
+      join(pkg, 'cache.js'),
+      "throw new Error('next/cache must not be loaded at config time')\n"
+    )
+    return dir
+  }
+
+  test.each([
+    ['15.5.28', false],
+    ['15.6.0', false],
+    ['16.0.0', true],
+    ['16.4.6', true],
+  ])('next@%s: cacheComponents %p', (version, expected) => {
+    expect(readNext(fakeNext(version))).toMatchObject({
+      version,
+      cacheComponents: expected,
+    })
   })
 })
 
@@ -127,10 +157,21 @@ describe('callerDir: paths with parentheses and spaces', () => {
   })
 
   test('a Windows path', () => {
-    const dir = callerDir(
-      at('at Object.<anonymous> (C:\\work\\proj (copy)\\next.config.js:3:16)')
+    expect(
+      callerDir(
+        at('at Object.<anonymous> (C:\\work\\proj (copy)\\next.config.js:3:16)')
+      )
+    ).toBe('C:\\work\\proj (copy)')
+    expect(callerDir(at('at C:\\work\\web\\next.config.compiled.js:5:2'))).toBe(
+      'C:\\work\\web'
     )
-    expect(dir === null || dir.endsWith('proj (copy)')).toBe(true)
+    expect(
+      callerDir(
+        at(
+          'at async default (file:///C:/work/proj%20(copy)/next.config.mjs:3:16)'
+        )
+      )
+    ).toBe('C:\\work\\proj (copy)')
   })
 })
 

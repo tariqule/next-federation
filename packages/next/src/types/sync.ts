@@ -164,6 +164,10 @@ async function syncOne(
   const trust = await verifyDescriptorTrust(target, file)
   if (!trust.ok) throw new SyncError(trust.code, trust.detail)
   if (!file.types) {
+    // The current (verified) build publishes no types: the previous build's
+    // declarations and meta go, so writeIndex drops the remote's entry
+    // instead of keeping stale types.
+    await rm(join(outDir, remote), { recursive: true, force: true })
     return { remote, status: 'none', buildId: file.buildId }
   }
   // The signed index: its raw bytes must hash to the descriptor's sha384
@@ -332,7 +336,8 @@ async function writeIndex(outDir: string): Promise<void> {
 /**
  * Syncs the type declarations of each components remote's current build.
  * Never throws for a remote's failure: each result says what happened. A
- * failed remote keeps the declarations it had.
+ * failed remote keeps the declarations it had; a remote whose current build
+ * publishes no types (`none`) has its previous declarations removed.
  */
 export async function syncRemoteTypes(
   options: SyncTypesOptions

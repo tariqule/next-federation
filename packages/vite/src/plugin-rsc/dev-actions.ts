@@ -28,9 +28,13 @@ export function registerDevActions(
   registry()[scopeKey] = { root: trimTrailingSlashes(root), files }
 }
 
+// `/C:/x` (the path part of `/@fs/C:/x`): a Windows drive letter.
+const DRIVE_PATH = /^\/([A-Za-z]):\//
+
 /**
  * True when the file part of a dev action id (`/src/x.ts#name` for files under
  * the root, `/@fs/abs/x.ts#name` outside it) is a recorded Server Action file.
+ * On Windows `/@fs/C:/x.ts` names the file id `C:/x.ts`, in either drive case.
  */
 export function isDevActionAllowed(scopeKey: string, id: string): boolean {
   const entry = registry()[scopeKey]
@@ -38,8 +42,14 @@ export function isDevActionAllowed(scopeKey: string, id: string): boolean {
   // Dev reference keys are URL paths: always rooted.
   if (!entry || hash <= 0 || !id.startsWith('/')) return false
   const ref = id.slice(0, hash)
-  const file = ref.startsWith('/@fs/')
-    ? ref.slice('/@fs'.length)
-    : `${entry.root}${ref}`
-  return entry.files.has(file)
+  if (!ref.startsWith('/@fs/')) return entry.files.has(`${entry.root}${ref}`)
+  const file = ref.slice('/@fs'.length)
+  const drive = DRIVE_PATH.exec(file)
+  if (!drive) return entry.files.has(file)
+  const rest = file.slice(drive[0].length)
+  const letter = drive[1]!
+  return (
+    entry.files.has(`${letter.toUpperCase()}:/${rest}`) ||
+    entry.files.has(`${letter.toLowerCase()}:/${rest}`)
+  )
 }

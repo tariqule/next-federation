@@ -167,3 +167,25 @@ test('findRawFormActions ignores string actions, other elements, <Form> and spre
   expect(findRawFormActions('export const a = 1', 'a.ts')).toEqual([])
   expect(findRawFormActions('<form action={', 'bad.tsx')).toEqual([])
 })
+
+test('findRawFormActions: formAction inside <Form> is safe, inside <form> it is not', () => {
+  const code = [
+    'import { Form, Form as IslandForm } from "@next-federation/island"',
+    'export function A({ save, items }) {',
+    '  return (<>',
+    '    <Form action={save}>',
+    '      <button formAction={save}>x</button>',
+    '      {items.map((i) => <input key={i} formAction={save} />)}',
+    '      <div><button formAction={save}>nested</button></div>',
+    '    </Form>',
+    '    <IslandForm><button formAction={save}>alias</button></IslandForm>',
+    '    <form action={save}>',
+    '      <button formAction={save}>raw</button>',
+    '    </form>',
+    '    <button formAction={save}>outside</button>',
+    '    <Form><form><button formAction={save}>inner raw</button></form></Form>',
+    '  </>)',
+    '}',
+  ].join('\n')
+  expect(findRawFormActions(code, 'A.tsx')).toEqual([10, 11, 13, 14])
+})

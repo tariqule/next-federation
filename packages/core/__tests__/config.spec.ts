@@ -12,6 +12,7 @@ test('resolves defaults', () => {
     allowedOrigins: ['https://shop.example.com'],
     timeoutMs: 3000,
     retries: 1,
+    maxBytes: 5 * 1024 * 1024,
   })
   expect(f.islands).toEqual({ revalidate: 60, warnBytes: 102400 })
   expect(f.identity).toBeNull()
@@ -27,10 +28,17 @@ test('per-remote values override islands defaults', () => {
         assetOrigins: ['https://cdn.example.com/'],
         timeoutMs: 500,
         retries: 0,
+        maxBytes: 4096,
       },
       b: { origin: 'https://b.example.com' },
     },
-    islands: { timeoutMs: 1000, retries: 2, revalidate: 5, warnBytes: 10 },
+    islands: {
+      timeoutMs: 1000,
+      retries: 2,
+      revalidate: 5,
+      warnBytes: 10,
+      maxBytes: 2048,
+    },
   })
   expect(f.target('a')).toEqual({
     remote: 'a',
@@ -38,8 +46,13 @@ test('per-remote values override islands defaults', () => {
     allowedOrigins: ['http://localhost:4000', 'https://cdn.example.com'],
     timeoutMs: 500,
     retries: 0,
+    maxBytes: 4096,
   })
-  expect(f.target('b')).toMatchObject({ timeoutMs: 1000, retries: 2 })
+  expect(f.target('b')).toMatchObject({
+    timeoutMs: 1000,
+    retries: 2,
+    maxBytes: 2048,
+  })
   expect(f.islands).toEqual({ revalidate: 5, warnBytes: 10 })
 })
 
@@ -367,4 +380,22 @@ test('identity.ttlSeconds above 900 is NF-002 (remotes refuse older tokens)', ()
   expect(() => defineFederation(config(901))).toThrow(
     /NF-002.*identity\.ttlSeconds.*900/
   )
+})
+
+test('maxBytes must be an integer >= 1 (NF-002)', () => {
+  for (const bad of [0, -1, 1.5, Number.POSITIVE_INFINITY, '10']) {
+    expect(() =>
+      defineFederation({
+        remotes: shop,
+        islands: { maxBytes: bad as number },
+      })
+    ).toThrow(/NF-002.*islands\.maxBytes/)
+    expect(() =>
+      defineFederation({
+        remotes: {
+          a: { origin: 'https://a.example.com', maxBytes: bad as number },
+        },
+      })
+    ).toThrow(/NF-002.*remotes\.a\.maxBytes/)
+  }
 })

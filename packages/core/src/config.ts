@@ -11,6 +11,7 @@ import {
 } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import { safeEmit } from './events.ts'
+import { MAX_ENVELOPE_BYTES } from './fetch-island.ts'
 import type { FederationEvent } from './events.ts'
 
 export type RemoteConfig = {
@@ -18,6 +19,8 @@ export type RemoteConfig = {
   assetOrigins?: string[]
   timeoutMs?: number
   retries?: number
+  /** Largest island response body accepted, in bytes. Default `islands.maxBytes`. */
+  maxBytes?: number
   /** Mode A: this remote also serves Module Federation client components. */
   components?: RemoteComponentsConfig
 }
@@ -84,6 +87,11 @@ export type FederationConfig = {
     timeoutMs?: number
     retries?: number
     warnBytes?: number
+    /**
+     * Largest island response body accepted, in bytes (default 5 MiB). A
+     * larger body is cancelled and the island fails with NF-007.
+     */
+    maxBytes?: number
   }
   identity?: {
     issuer: string
@@ -115,6 +123,8 @@ export type IslandTarget = {
   allowedOrigins: string[]
   timeoutMs: number
   retries: number
+  /** Largest response body accepted, in bytes. Default `MAX_ENVELOPE_BYTES` (5 MiB). */
+  maxBytes?: number
 }
 
 export type Federation = {
@@ -159,6 +169,14 @@ function parseNumber(value: unknown, key: string, fallback: number): number {
     )
   }
   return value
+}
+
+function parseByteLimit(value: unknown, key: string, fallback: number): number {
+  const n = parseNumber(value, key, fallback)
+  if (!Number.isInteger(n) || n < 1) {
+    throw invalid(`\`${key}\` must be an integer >= 1, got ${String(value)}.`)
+  }
+  return n
 }
 
 function parseUrl(
@@ -410,6 +428,11 @@ export function defineFederation(config: FederationConfig): Federation {
     'islands.retries',
     DEFAULT_RETRIES
   )
+  const defaultMaxBytes = parseByteLimit(
+    islandsIn.maxBytes,
+    'islands.maxBytes',
+    MAX_ENVELOPE_BYTES
+  )
 
   const targets = new Map<string, IslandTarget>()
   const componentTargets = new Map<string, ComponentTarget>()
@@ -445,6 +468,11 @@ export function defineFederation(config: FederationConfig): Federation {
         defaultTimeout
       ),
       retries: parseNumber(remote.retries, `${where}.retries`, defaultRetries),
+      maxBytes: parseByteLimit(
+        remote.maxBytes,
+        `${where}.maxBytes`,
+        defaultMaxBytes
+      ),
     })
     if (remote.components !== undefined) {
       const componentTarget = parseComponents(remote.components, {

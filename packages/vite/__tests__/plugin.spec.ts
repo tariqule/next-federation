@@ -401,3 +401,19 @@ test('the dev allowlist only accepts ids that start with "/"', () => {
   expect(isDevActionAllowed('https://m2.example/', '/src/x.ts#a')).toBe(true)
   expect(isDevActionAllowed('https://m2.example/', 'src/x.ts#a')).toBe(false)
 })
+
+test('the dev allowlist matches Windows drive-letter paths', () => {
+  const key = 'https://win.example/'
+  const files = new Set(['C:/app/src/x.ts', 'D:/shared/actions.ts'])
+  registerDevActions(key, 'C:/app/', files)
+  expect(isDevActionAllowed(key, '/src/x.ts#a')).toBe(true)
+  // Vite serves files outside the root as /@fs/<absolute path>.
+  expect(isDevActionAllowed(key, '/@fs/D:/shared/actions.ts#a')).toBe(true)
+  expect(isDevActionAllowed(key, '/@fs/C:/app/src/x.ts#a')).toBe(true)
+  // Drive letters are case-insensitive on Windows.
+  expect(isDevActionAllowed(key, '/@fs/d:/shared/actions.ts#a')).toBe(true)
+  expect(isDevActionAllowed(key, '/@fs/D:/shared/other.ts#a')).toBe(false)
+  expect(isDevActionAllowed(key, '/@fs/E:/shared/actions.ts#a')).toBe(false)
+  // Only a leading drive letter is rewritten.
+  expect(isDevActionAllowed(key, '/@fs/x/D:/shared/actions.ts#a')).toBe(false)
+})

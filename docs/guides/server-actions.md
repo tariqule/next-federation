@@ -70,8 +70,9 @@ hydrated**:
 - `<Form>` from `@next-federation/island` renders its fields inside a `<fieldset disabled>` on the
   server and enables it after hydration. Enter, autofocus, submit buttons and `<button form>` inside
   it do nothing until then (checked in Chromium, Firefox and WebKit).
-- A plain `<form action={action}>` or `formAction={action}` warns
-  [`NF-035`](../errors/raw-form-action.md) at build and dev time.
+- A plain `<form action={action}>`, or a `formAction={action}` outside a `<Form>`, warns
+  [`NF-035`](../errors/raw-form-action.md) at build and dev time. A `formAction` button written
+  inside `<Form>` (in the same component) is fine.
 - A form that must work without JavaScript belongs in the host, not in an island.
 
 ## Who the action runs as
@@ -131,8 +132,12 @@ not per island.
   default. It is the `maxActionBodyBytes` option of `serveBuilds()` only; the `nf-serve` CLI has no
   flag for it. Above it, `nf-serve` answers `413` itself (`Access-Control-Allow-Origin: *`). Keep the
   build's limit below the ceiling so callers see the build's answer.
-- Run a production `rsc/index.js` with `NODE_ENV=production` (`nf-serve` does). Errors are redacted
-  either way, but React chooses its development or production server at runtime.
+- Run a production `rsc/index.js` with `NODE_ENV=production` (`nf-serve` does). An action that
+  throws is redacted by the handler whatever `NODE_ENV` is. A rejected promise nested inside the
+  return value is serialized by React, which picks its development or production Flight server
+  from `NODE_ENV` at runtime: only the production server redacts it; the development one sends the
+  error's message and stack to the browser. The build logs a warning at startup when `NODE_ENV` is
+  not `production`.
 
 ## Closures and replicas
 
