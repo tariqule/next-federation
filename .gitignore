@@ -24,3 +24,6 @@ examples/*/next-env.d.ts
 examples/*/AGENTS.md
 .vercel/
 .vercel
+
+# The installed-library hosts (test/e2e/fixtures/installed-host.ts).
+test/e2e/.installed*/

@@ -1,6 +1,7 @@
-import { createRequire } from 'node:module'
 import type { NextConfig } from 'next'
 import { NFError } from '@next-federation/sdk'
+import { installedNext, nextProjectDir } from './installed-next.ts'
+import type { InstalledNext } from './installed-next.ts'
 
 /** The `next.config` function form: `(phase, { defaultConfig }) => config`. */
 export type NextConfigFunction<Ctx = unknown> = (
@@ -32,27 +33,33 @@ function assertNotExternal(config: NextConfig): void {
   }
 }
 
-/** The installed Next.js version (the host's); NF-002 when unreadable. */
-function nextVersion(): string {
-  let version: unknown
-  try {
-    version = (
-      createRequire(import.meta.url)('next/package.json') as {
-        version?: unknown
-      }
-    ).version
-  } catch {
-    version = undefined
-  }
-  if (typeof version === 'string' && version !== '') return version
+/**
+ * Without cacheComponents (Next 15) the adapter uses the legacy model
+ * (fetch `revalidate` and tags); a config that turns on Next 15's
+ * experimental equivalents would silently change how islands are cached.
+ */
+function assertCacheModelSupported(
+  config: NextConfig,
+  next: InstalledNext
+): void {
+  if (next.cacheComponents) return
+  const experimental = (config.experimental ?? {}) as Record<string, unknown>
+  const used = [
+    config.cacheComponents ? '`cacheComponents`' : null,
+    experimental.cacheComponents ? '`experimental.cacheComponents`' : null,
+    experimental.dynamicIO ? '`experimental.dynamicIO`' : null,
+  ].filter((key): key is string => key !== null)
+  if (used.length === 0) return
   throw new NFError(
     'NF-002',
-    "withNextFederation could not read the installed Next.js version (next/package.json): remote components check remotes' next/* ranges against it. Install `next` where @next-federation/next can resolve it."
+    `${used.join(', ')}: next-federation supports cacheComponents on Next.js 16 only (installed: ${next.version}). On Next.js 15 it uses the legacy caching model (fetch \`revalidate\` and tags): remove ${used.length === 1 ? 'this option' : 'these options'} or upgrade to Next.js 16.`
   )
 }
 
-function wrap(config: NextConfig): NextConfig {
+function wrap(config: NextConfig, projectDir: string | null): NextConfig {
   assertNotExternal(config)
+  const next = installedNext(projectDir)
+  assertCacheModelSupported(config, next)
   const model = config.cacheComponents ? 'cache-components' : 'legacy'
   const implementation = IMPLEMENTATION[model]
   const userWebpack: WebpackFn | null | undefined = config.webpack
@@ -86,7 +93,7 @@ function wrap(config: NextConfig): NextConfig {
       NF_BASE_PATH: config.basePath ?? '',
       // The version of next/link, next/navigation and next/router that
       // remote components get (@next-federation/next/components).
-      NF_NEXT_VERSION: nextVersion(),
+      NF_NEXT_VERSION: next.version,
     },
     transpilePackages: transpile.includes(PACKAGE)
       ? [...transpile]
@@ -116,8 +123,14 @@ export function withNextFederation<Ctx>(
 export function withNextFederation<Ctx>(
   config: NextConfig | NextConfigFunction<Ctx>
 ): NextConfig | ((phase: string, ctx: Ctx) => Promise<NextConfig>) {
+  // The project folder: where the calling next.config is (Next compiles a
+  // next.config.ts next to it). Next's CLI never changes directory, so cwd
+  // alone can be a monorepo root with another Next installed.
+  const site: { stack?: string } = {}
+  Error.captureStackTrace(site, withNextFederation)
+  const projectDir = nextProjectDir(site.stack)
   if (typeof config === 'function') {
-    return async (phase, ctx) => wrap(await config(phase, ctx))
+    return async (phase, ctx) => wrap(await config(phase, ctx), projectDir)
   }
-  return wrap(config)
+  return wrap(config, projectDir)
 }

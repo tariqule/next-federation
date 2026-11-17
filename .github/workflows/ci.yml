@@ -88,7 +88,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cell: [dev, 'dev:webpack', prod, 'prod:webpack', skew]
+        # installed, installed:webpack: next-federation from packed tarballs
+        # in a real node_modules, `next dev` on Next 15 and 16, with and
+        # without source maps (installed-dev.spec.ts).
+        cell:
+          [
+            dev,
+            'dev:webpack',
+            prod,
+            'prod:webpack',
+            skew,
+            installed,
+            'installed:webpack',
+          ]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0

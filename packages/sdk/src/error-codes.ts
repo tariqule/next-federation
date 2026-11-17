@@ -38,6 +38,7 @@ export type NFErrorCode =
   | 'NF-034'
   | 'NF-035'
   | 'NF-036'
+  | 'NF-037'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
   {
@@ -165,6 +166,10 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
       slug: 'component-shared-unavailable',
       title:
         'Host does not provide a shared module version the remote component accepts',
+    },
+    'NF-037': {
+      slug: 'dev-debug-info',
+      title: 'Under `next dev`, private island values may reach the browser',
     },
   }
 

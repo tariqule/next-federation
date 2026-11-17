@@ -1,6 +1,6 @@
 # next-federation
 
-Runtime composition of React UI from separately deployed apps, for **Next.js 16**
+Runtime composition of React UI from separately deployed apps, for **Next.js 16 and 15**
 (App Router and Pages Router, Turbopack or webpack) and, later, **React Router**.
 
 > **Status: Phase 1 library, feature-complete, not yet published to npm.** Both modes are
@@ -9,7 +9,8 @@ Runtime composition of React UI from separately deployed apps, for **Next.js 16*
 > both with Vite remotes.
 > See the [design document](docs/specs/2026-11-13-federation-lib-design.md).
 
-**Supported:** React 19 (required), Next.js 16, Node.js 20.9 or newer (server rendering of remote
+**Supported:** React 19 (required), Next.js 16 or 15 (`>=15.5.28 <17`; `cacheComponents` is Next 16
+only; Next 14 is not supported), Node.js 20.9 or newer (server rendering of remote
 components needs Node 20.16 or newer; older Node renders them in the browser only). Remotes build
 with Vite 8.
 
@@ -47,7 +48,7 @@ The wire contract is published at [`docs/protocol/v1.md`](docs/protocol/v1.md).
   [Deploying a remote on Vercel](docs/guides/deploying-a-remote-on-vercel.md)
 - [Limits](docs/guides/limits.md): what islands cannot do and what they cost
 - [Migrating from nextjs-mf](docs/guides/migrating-from-nextjs-mf.md): concept map and a Pages
-  Router upgrade path to Next 16
+  Router path for Next 15 or 16 apps
 - [Examples](examples/README.md): a Vite island remote, a components remote and three hosts
   (App Router, Pages Router, SPA) you can run with `pnpm examples:dev`
 

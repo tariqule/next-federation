@@ -432,3 +432,65 @@ describe('public islands on a host with getIdentity (Server Actions, D2)', () =>
     ).toMatchObject({ token: null })
   })
 })
+
+describe('NF-037: `next dev` where React debug info may carry private island values', () => {
+  // Next's dev tooling treats code outside node_modules as the app's own, so
+  // React's debug info records the values this library awaits (cookies,
+  // headers, the identity, the token) and sends them to the browser. The
+  // tests import the source, which is such a link.
+  const spec = { remote: 'a', island: 'MyOrders', private: true }
+  const user = { getIdentity: () => ({ sub: 'user-1' }) }
+
+  test('a private island still renders on the server, with one warning naming the values and limits.md', async () => {
+    setNodeEnv('development')
+    const warnOnce = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    const fed = federation()
+    expect(await loadIsland(fed, user, spec)).toMatchObject({ kind: 'ok' })
+    expect(seen.headers.authorization).toMatch(/^Bearer ey/)
+    await loadIsland(fed, user, { ...spec, props: { page: 2 } })
+    const calls = warnOnce.mock.calls.filter(([code]) => code === 'NF-037')
+    expect(calls).toHaveLength(2) // the logger itself keeps it to once
+    expect(calls.map(([, key]) => key)).toEqual(['linked', 'linked'])
+    const detail = calls[0]![2]!
+    for (const word of [
+      'outside node_modules',
+      '-H 127.0.0.1',
+      'token',
+      'cookies',
+      'headers',
+      'getIdentity',
+      'docs/guides/limits.md',
+    ]) {
+      expect(detail).toContain(word)
+    }
+  })
+
+  test('installed, with source maps off: the warning names that cause', async () => {
+    setNodeEnv('development')
+    rs.doMock('../src/server/dev-debug-info.ts', () => ({
+      devDebugInfoCause: () => 'source-maps-off',
+    }))
+    rs.resetModules()
+    const { loadIsland: load } = await import('../src/server/load-island.ts')
+    const sdk = await import('@next-federation/sdk')
+    const warnOnce = rs
+      .spyOn(sdk.logger, 'warnOnce')
+      .mockImplementation(() => {})
+    expect(await load(federation(), user, spec)).toMatchObject({ kind: 'ok' })
+    const call = warnOnce.mock.calls.find(([code]) => code === 'NF-037')!
+    expect(call[1]).toBe('source-maps-off')
+    expect(call[2]).toContain('--disable-source-maps')
+    expect(call[2]).toContain('docs/guides/limits.md')
+    rs.doUnmock('../src/server/dev-debug-info.ts')
+    rs.resetModules()
+  })
+
+  test('no warning in production, nor for a public island', async () => {
+    const warnOnce = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    setNodeEnv('production')
+    await loadIsland(federation(), user, spec)
+    setNodeEnv('development')
+    await loadIsland(federation(), user, { remote: 'a', island: 'Banner' })
+    expect(warnOnce.mock.calls.filter(([c]) => c === 'NF-037')).toEqual([])
+  })
+})

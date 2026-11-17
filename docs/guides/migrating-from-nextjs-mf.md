@@ -4,7 +4,11 @@
 with the Pages Router, only with webpack (`NEXT_PRIVATE_LOCAL_WEBPACK`), and it makes Next apps
 expose and consume each other's code. next-federation keeps runtime composition but changes who
 builds what: **remotes are Vite builds**, and **Next apps are hosts only**. This guide maps the
-concepts, then walks a Pages Router app on Next 14 or 15 to Next 16.
+concepts, then walks a Pages Router app from nextjs-mf to next-federation.
+
+**Next 15 is supported; Next 14 is not.** next-federation needs React 19, so a Next 15 app can stay on
+Next 15 (`>=15.5.28`) and a Next 14 app must upgrade to Next 15 or 16 first. `cacheComponents` is Next
+16 only ([Limits](limits.md#nextjs-15)).
 
 ## Concept map
 
@@ -67,14 +71,16 @@ CSS imported by an exposed module works as is (`import './Cart.css'`, CSS Module
 and serve `dist/` with `nf-serve` or deploy it ([Deployment](deployment.md)). `Reviews` becomes an
 island entry of an island remote ([Writing an island remote](writing-an-island-remote.md)).
 
-### 3. Upgrade the host to Next 16
+### 3. Move the host to next-federation (Next 15 or 16)
 
 1. Remove `@module-federation/nextjs-mf` and the `NextFederationPlugin` block from `next.config.js`.
-   Remove `NEXT_PRIVATE_LOCAL_WEBPACK` from your scripts: Turbopack (the Next 16 default) and
-   `--webpack` both work.
+   Remove `NEXT_PRIVATE_LOCAL_WEBPACK` from your scripts: Turbopack and webpack both work (Next 16
+   defaults to Turbopack, `--webpack` opts out; Next 15 defaults to webpack, `--turbopack` opts in).
 2. Remove `FlushedChunks` / `flushChunks` from `pages/_document` and any `revalidate()` call.
-3. Upgrade: `pnpm add next@16 react@19 react-dom@19`, then follow the Next 15 and 16 upgrade guides
-   for the rest of the app (async request APIs, removed options).
+3. On Next 15, make sure React is 19: `pnpm add next@15 react@19 react-dom@19` (Next 15's Pages Router
+   also runs on React 18, which next-federation does not support). On Next 14, upgrade: `pnpm add
+   next@16 react@19 react-dom@19` (or `next@15`), then follow the Next 15 (and 16) upgrade guides for
+   the rest of the app (async request APIs, removed options).
 4. Install next-federation and wrap the config:
 
 ```sh

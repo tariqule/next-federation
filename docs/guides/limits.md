@@ -5,10 +5,27 @@ different approach.
 
 ## Supported
 
-React 19 (required). Next.js 16 App Router and Pages Router, with Turbopack or webpack, on Node 20.9
-or newer (server rendering of remote components needs Node 20.16 or newer). React Router hosts come
-after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
+React 19 (required). Next.js 16 or 15 (`>=15.5.28 <17`) App Router and Pages Router, with Turbopack
+or webpack, on Node 20.9 or newer (server rendering of remote components needs Node 20.16 or newer).
+React Router hosts come after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
 fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
+
+### Next.js 15
+
+Islands and remote components work on Next 15 (React 19) the same way, App Router and Pages
+Router, Turbopack (`--turbopack`) or webpack (Next 15's default). What is Next 16 only:
+
+- **`cacheComponents`** (`'use cache'`, `cacheLife`, `cacheTag`, partial prerendering of islands).
+  On Next 15 the adapter always uses the legacy model: island envelopes and descriptors are fetched
+  with `next: { revalidate, tags }` ([Caching](caching.md#app-router-legacy-mode-no-cachecomponents)).
+  `withNextFederation` fails with `NF-002` when `cacheComponents`, `experimental.cacheComponents`
+  or `experimental.dynamicIO` is on with Next 15.
+- **`revalidateIsland` expires at once** on Next 15 too, but through Next 15's one-argument
+  `revalidateTag` (Next 16's profile argument does not exist there).
+- **Next 15's `experimental.useCache`** is not checked: an island rendered inside your own
+  `'use cache'` scope is cached with that scope, failures included.
+
+Next 14 (React 18) is not supported: islands and remote components need React 19.
 
 ## What an island cannot do
 
@@ -80,6 +97,36 @@ fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
   host-provided module the build shares. A fallback copy there is chosen by the remote's own
   Module Federation runtime. Rspack remotes are tested; webpack remotes are documented but
   untested ([Remote components](remote-components.md#remotes-built-with-rspack-or-webpack)).
+
+## `next dev` and linked installs
+
+In development, React records the values that Server Components await and sends them to the
+browser as debug info. Next.js 15 inlines it in the App Router's HTML and RSC payload; Next.js 16
+(checked on 16.4.6) sends it over the dev server's HMR websocket (`/_next/hmr`). Next's dev tooling
+leaves code under `node_modules` out of it, using Node's source maps.
+
+- **Installed from npm** (the library under `node_modules`), with Next's default dev source maps: a
+  private island renders on the server in `next dev` exactly as in production, and none of its
+  values reach the browser. This is tested on Next 15 and 16 under `next dev`, with Turbopack and
+  webpack (`test/e2e/installed-dev.spec.ts`).
+- **Linked** (a workspace package, `npm link`, a source checkout: the library outside
+  `node_modules`, as when you develop next-federation itself): Next treats the library as your own
+  code, so the debug info carries what it awaits for a private island: the request's cookies
+  (HttpOnly ones included) and headers (`Authorization` too), what your `getIdentity` returns, and
+  the minted island token. With Turbopack all of these reach the browser; with webpack on Next 16 we
+  saw the token only. The host logs `NF-037` once per process when this applies.
+- **Source maps disabled** (`next dev --disable-source-maps`): Next may not recognise the installed
+  library either. With Turbopack and webpack on Next 15.5.28 and 16.4.6 no values reached the
+  browser (also tested), but the host logs `NF-037` for this case too.
+- **Production builds** never contain this debug info, linked or not.
+- **Your own code** is always "your code" to Next: if your `getIdentity` awaits something (a session
+  lookup, say), Next sends that value to the browser in development, as it does for any Server
+  Component that awaits `cookies()` or `headers()`.
+
+Why this is not gated: the token is minted for the same signed-in user, whose browser can already
+get it from the token endpoint, and the cookie and header exposure comes from Next's own dev tooling
+for any app that awaits `cookies()` or `headers()`. Keep the dev server on your machine: `next dev`
+listens on every network interface (`0.0.0.0`) by default, so start it with `next dev -H 127.0.0.1`.
 
 ## Trust
 
