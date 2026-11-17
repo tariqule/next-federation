@@ -9,7 +9,12 @@ export type {
   RemoteConfig,
 } from './config.ts'
 export type { FederationEvent } from './events.ts'
-export { eventFor, fetchIsland, islandTags } from './fetch-island.ts'
+export {
+  MAX_ENVELOPE_BYTES,
+  eventFor,
+  fetchIsland,
+  islandTags,
+} from './fetch-island.ts'
 export type {
   FetchIslandRequest,
   IslandFailureCode,

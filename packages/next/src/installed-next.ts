@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { NFError } from '@next-federation/sdk'
 
@@ -9,7 +9,7 @@ export type InstalledNext = {
   version: string
   /** Where `next/package.json` resolved, for error messages. */
   path: string
-  /** `cacheComponents` exists: Next 16 (stable `cacheLife` in `next/cache`). */
+  /** `cacheComponents` exists: Next 16 and later (stable `cacheLife` in `next/cache`). */
   cacheComponents: boolean
 }
 
@@ -19,7 +19,8 @@ type NodeRequire = ((id: string) => unknown) & {
 
 /**
  * The Next.js installed for `from` (a folder, or a module URL), read from its
- * public entry points (`next/package.json`, `next/cache`), no internals.
+ * `next/package.json` only (no internals, and no Next module is loaded at
+ * config time). `cacheComponents` follows the major: Next 16 made it stable.
  * Looks in `node_modules` folders from `from` upwards only, so `NODE_PATH`
  * (which pnpm sets for scripts) cannot make a folder without its own Next
  * look like it has one. `resolve: true` uses Node's full resolution instead
@@ -47,25 +48,15 @@ export function readNext(
       typeof load.resolve === 'function'
         ? dirname(load.resolve('next/package.json'))
         : join(dir, 'node_modules', 'next')
-    return { version, path, cacheComponents: hasCacheLife(load) }
+    return { version, path, cacheComponents: major(version) >= 16 }
   } catch {
     return null
   }
 }
 
-/** Feature detection: Next 16 exports a stable `cacheLife`; Next 15 has `unstable_cacheLife` only. */
-function hasCacheLife(load: NodeRequire): boolean {
-  try {
-    return (
-      typeof (load('next/cache') as { cacheLife?: unknown }).cacheLife ===
-      'function'
-    )
-  } catch {
-    return false
-  }
+function major(version: string): number {
+  return Number.parseInt(version, 10)
 }
-
-const major = (version: string): number => Number.parseInt(version, 10)
 
 /**
  * The host's Next.js. Next's CLI never changes directory, so `next build
@@ -107,6 +98,8 @@ export function installedNext(
 
 /** A frame location's start: an absolute POSIX path, a file URL or a Windows drive. */
 const LOCATION_START = /^(?:\/|file:|[A-Za-z]:[\\/])/
+const WINDOWS_PATH = /^[A-Za-z]:[\\/]/
+const WINDOWS_FILE_URL = /^file:\/\/\/[A-Za-z]:\//i
 
 /**
  * The folder of the file at the top of a V8 stack (captured with the
@@ -135,11 +128,16 @@ export function callerDir(stack: string | undefined): string | null {
   if (file === null) return null
   if (file.startsWith('file:')) {
     try {
-      file = fileURLToPath(file)
+      // A drive-letter URL is a Windows path wherever this runs.
+      file = WINDOWS_FILE_URL.test(file)
+        ? fileURLToPath(file, { windows: true })
+        : fileURLToPath(file)
     } catch {
       return null
     }
   }
+  // Windows stacks print `C:\dir\file.js`: parsed as a Windows path on any OS.
+  if (WINDOWS_PATH.test(file)) return win32.dirname(file)
   return isAbsolute(file) ? dirname(file) : null
 }
 

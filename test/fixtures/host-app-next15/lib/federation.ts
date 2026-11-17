@@ -16,6 +16,8 @@ const remote = (base: number) => ({
 export const federation = defineFederation({
   remotes: {
     a: remote(4100),
+    // The e2e fake remote: its content revision changes on `POST /_rev`.
+    fake: remote(4102),
     // Nothing listens here: used by the remote-down case.
     down: remote(4199),
   },
@@ -30,5 +32,7 @@ const getIdentity: AppIdentity = ({ cookies }) => {
   return sub ? { sub } : null
 }
 
-export const { RemoteIsland } = createIslands(federation, { getIdentity })
+export const { RemoteIsland, revalidateIsland } = createIslands(federation, {
+  getIdentity,
+})
 export const routes = createFederationRoutes(federation, { getIdentity })

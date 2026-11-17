@@ -128,3 +128,65 @@ test.each([
     }
   }
 )
+
+test('a read still pending when the response finishes settles instead of hanging', async () => {
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown) => unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  let reading: Promise<string> | undefined
+  let idle: Request | undefined
+  try {
+    const base = await start(async (req) => {
+      if (new URL(req.url).pathname === '/idle') {
+        idle = req // never read while the response is written
+        return new Response(null, { status: 202 })
+      }
+      // Reads in the background and answers before the body has ended.
+      reading = req.text().then(
+        () => 'resolved',
+        () => 'rejected'
+      )
+      return new Response(null, { status: 202 })
+    })
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 })
+    const pending = (url: string) =>
+      new Promise<number>((resolve, reject) => {
+        // The upload never ends: only its first chunk is sent.
+        const req = request(url, { agent, method: 'POST' }, (res) => {
+          res.resume()
+          resolve(res.statusCode ?? 0)
+        })
+        req.on('error', reject)
+        req.write('first chunk')
+      })
+    try {
+      expect(await pending(`${base}/mid-read`)).toBe(202)
+      const outcome = await Promise.race([
+        reading!,
+        new Promise((r) => setTimeout(() => r('still pending'), 1000)),
+      ])
+      expect(outcome).toBe('rejected')
+    } finally {
+      agent.destroy()
+    }
+    const agent2 = new Agent({ keepAlive: true, maxSockets: 1 })
+    try {
+      expect(await pending(`${base}/idle`)).toBe(202)
+      await new Promise((r) => setTimeout(r, 50))
+      const late = await Promise.race([
+        idle!.text().then(
+          () => 'resolved',
+          () => 'rejected'
+        ),
+        new Promise((r) => setTimeout(() => r('still pending'), 1000)),
+      ])
+      expect(late).toBe('rejected')
+    } finally {
+      agent2.destroy()
+    }
+    await new Promise((r) => setTimeout(r, 50))
+    expect(unhandled).toEqual([])
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
+})

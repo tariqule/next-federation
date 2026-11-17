@@ -6,7 +6,7 @@ The host could not fetch an island from its remote.
 
 ## Why
 
-The request failed with a network error or a non-success status: the remote may be down, unreachable from the host, or returning an error.
+The request failed with a network error or a non-success status: the remote may be down, unreachable from the host, or returning an error. A response body larger than the remote's `maxBytes` (`islands.maxBytes`, 5 MiB by default) also fails this way: the host stops reading it and does not retry.
 
 ## How to fix
 

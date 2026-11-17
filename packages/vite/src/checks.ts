@@ -122,15 +122,54 @@ type JsxNode = {
   name?: { type?: unknown; name?: unknown }
   value?: { type?: unknown } | null
   attributes?: JsxNode[]
+  openingElement?: JsxNode
   start?: number
 }
+
+type ImportNode = {
+  type?: unknown
+  source?: { value?: unknown }
+  specifiers?: {
+    type?: unknown
+    imported?: { name?: unknown; value?: unknown }
+    local?: { name?: unknown }
+  }[]
+}
+
+const ISLAND_PACKAGE = '@next-federation/island'
 
 const isExpressionValue = (attr: JsxNode): boolean =>
   attr.value?.type === 'JSXExpressionContainer'
 
+/** `Form`, plus every local name the island's `Form` is imported under. */
+function formNames(body: unknown[]): Set<string> {
+  const names = new Set(['Form'])
+  for (const statement of body as ImportNode[]) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.source?.value !== ISLAND_PACKAGE
+    ) {
+      continue
+    }
+    for (const spec of statement.specifiers ?? []) {
+      const imported = spec.imported?.name ?? spec.imported?.value
+      if (
+        spec.type === 'ImportSpecifier' &&
+        imported === 'Form' &&
+        typeof spec.local?.name === 'string'
+      ) {
+        names.add(spec.local.name)
+      }
+    }
+  }
+  return names
+}
+
 /**
- * 1-based lines of `<form action={...}>` and of any `formAction={...}` (a Server
- * Action on a plain form: NF-035). String values, `<Form>`, member names
+ * 1-based lines of `<form action={...}>` and of `formAction={...}` (a Server
+ * Action on a plain form: NF-035). A `formAction` inside a `<Form>` element
+ * (the island's `Form`, under any local name) is safe: that form stays
+ * disabled until hydration. String values, `<Form>` itself, member names
  * (`<x.form>`) and spreads are not reported. Code that does not parse returns [].
  */
 export function findRawFormActions(
@@ -140,16 +179,35 @@ export function findRawFormActions(
   if (!code.includes('action')) return []
   const { program, errors } = parseSync(filename, code)
   if (errors.length > 0) return []
+  const safeForms = formNames(program.body as unknown[])
   const offsets: number[] = []
-  const stack: unknown[] = [program]
+  // Each entry carries whether it sits inside a `<Form>` (nearest form wins).
+  const stack: [unknown, boolean][] = [[program, false]]
   while (stack.length > 0) {
-    const value = stack.pop()
+    const [value, inForm] = stack.pop()!
     if (Array.isArray(value)) {
-      for (const item of value) stack.push(item)
+      for (const item of value) stack.push([item, inForm])
       continue
     }
     if (value === null || typeof value !== 'object') continue
     const node = value as JsxNode
+    let childInForm = inForm
+    if (node.type === 'JSXElement') {
+      const opening = node.openingElement
+      const tag =
+        opening?.name?.type === 'JSXIdentifier' ? opening.name.name : null
+      if (typeof tag === 'string' && safeForms.has(tag)) childInForm = true
+      else if (tag === 'form') childInForm = false
+      // The opening element's own attributes belong to the enclosing form.
+      if (opening) stack.push([opening, inForm])
+      for (const [key, child] of Object.entries(value)) {
+        if (key === 'openingElement') continue
+        if (child !== null && typeof child === 'object') {
+          stack.push([child, childInForm])
+        }
+      }
+      continue
+    }
     if (node.type === 'JSXOpeningElement') {
       const tag = node.name?.type === 'JSXIdentifier' ? node.name.name : null
       for (const attr of node.attributes ?? []) {
@@ -157,7 +215,8 @@ export function findRawFormActions(
         const prop = attr.name?.type === 'JSXIdentifier' ? attr.name.name : null
         if (
           (tag === 'form' && prop === 'action') ||
-          (typeof tag === 'string' &&
+          (!inForm &&
+            typeof tag === 'string' &&
             /^[a-z]/.test(tag) &&
             prop === 'formAction')
         ) {
@@ -166,7 +225,9 @@ export function findRawFormActions(
       }
     }
     for (const child of Object.values(value)) {
-      if (child !== null && typeof child === 'object') stack.push(child)
+      if (child !== null && typeof child === 'object') {
+        stack.push([child, childInForm])
+      }
     }
   }
   const lineOf = (offset: number): number =>

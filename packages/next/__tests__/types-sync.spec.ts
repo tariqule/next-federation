@@ -319,6 +319,26 @@ test('a build without types is reported, nothing is written', async () => {
   expect(existsSync(join(outDir, 'components'))).toBe(false)
 })
 
+test('a build that stops publishing types removes the previous ones and their index entry', async () => {
+  const { priv, pub } = keyPair()
+  const fed = federation({ publicKeys: [pub] })
+  await publish(payload(), priv)
+  await syncRemoteTypes({ federation: fed, outDir })
+  expect(existsSync(join(outDir, 'components', 'nf-types.json'))).toBe(true)
+  expect(await readFile(join(outDir, 'index.d.ts'), 'utf8')).toContain(
+    '"components": {'
+  )
+  const withoutTypes = payload()
+  delete withoutTypes.types
+  await publish(withoutTypes, priv)
+  const results = await syncRemoteTypes({ federation: fed, outDir })
+  expect(results[0]).toMatchObject({ status: 'none', buildId: 'c1' })
+  expect(existsSync(join(outDir, 'components'))).toBe(false)
+  const index = await readFile(join(outDir, 'index.d.ts'), 'utf8')
+  expect(index).toContain('interface NextFederationRemoteComponents')
+  expect(index).not.toContain('components')
+})
+
 test('an index that does not match its signed sha384 is refused before any declaration is fetched (NF-027)', async () => {
   const { priv, pub } = keyPair()
   const forged = indexOf({

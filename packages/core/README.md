@@ -11,13 +11,14 @@ export const federation = defineFederation({
   onEvent: (event) => metrics.record(event),
 })
 
-federation.target('shop') // { remote, origin, allowedOrigins, timeoutMs: 3000, retries: 1 }
+federation.target('shop') // { remote, origin, allowedOrigins, timeoutMs: 3000, retries: 1, maxBytes: 5242880 }
 ```
 
 Invalid configuration throws `NF-002` naming the offending key; an unknown remote throws `NF-001`.
 `target()` returns plain JSON, so it is safe as a `'use cache'` argument.
 
 Defaults: `timeoutMs` 3000 (per-remote values override `islands.timeoutMs`), `retries` 1,
+`maxBytes` 5 MiB (`MAX_ENVELOPE_BYTES`; per-remote values override `islands.maxBytes`),
 `islands.revalidate` 60, `islands.warnBytes` 102400, `identity.ttlSeconds` 300 (at most 900),
 `routesPath` `/api/next-federation`.
 
@@ -80,7 +81,7 @@ pnpm add @next-federation/core
 | ------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
 | `defineFederation(config)`                              | `@next-federation/core`            | Validate the host config and return a `Federation`.                         |
 | `fetchIsland(federation, request)`                      | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
-| `islandTags`, `eventFor`                                | `@next-federation/core`            | Cache tags and event helpers for adapters.                                  |
+| `islandTags`, `eventFor`, `MAX_ENVELOPE_BYTES`          | `@next-federation/core`            | Cache tags, event helpers and the default island body limit.                |
 | `generateSigningKey`, `publicJwks`, `validateIdentity`  | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).                  |
 | `mintIslandToken`, `identityKey`                        | `@next-federation/core/identity`   | Mint a per-remote island token and derive its cache identity key.           |
 | `fetchComponentDescriptor`, `verifyComponentDescriptor` | `@next-federation/core/components` | Remote components: fetch and verify a components remote's build descriptor. |
@@ -92,6 +93,7 @@ License: MIT
 ## Constraints
 
 - Remote names match `NAME_PATTERN` (`^[A-Za-z][A-Za-z0-9_-]*$`). A remote `origin` has no path, query or credentials.
+- `fetchIsland` reads at most `maxBytes` of a response body (5 MiB by default) and cancels the rest: a larger body is a failed fetch (`NF-007`, not retried) and the island renders its fallback.
 - `fetchIsland` refuses redirects (`redirect: 'error'`); a redirect is a failed fetch. The host accepts envelope URLs only from the remote's origin and `assetOrigins`.
 - `identity.issuer` is kept exactly as written and compared literally with the token `iss`, so a trailing slash makes a different issuer. Use `https` outside local development.
 - Island props are plain JSON (`NF-009`).

@@ -127,8 +127,8 @@ only (a `NODE_ENV` other than `production` bundles React's development copies, w
   a host. Known DX gap: islands rendered inside a host reload instead of hot-refreshing.
 - **Server Actions reach client components as props.** A `'use server'` file imported by a client
   module (browser or SSR build) fails with `NF-034`; pass the action from a Server Component
-  instead. A plain `<form action={action}>` or `formAction={action}` warns `NF-035`: use `<Form>`
-  from `@next-federation/island`. In dev, the action route loads only files the server build has
+  instead. A plain `<form action={action}>`, or a `formAction={action}` outside a `<Form>`, warns
+  `NF-035`: use `<Form>` from `@next-federation/island`. In dev, the action route loads only files the server build has
   seen with `'use server'`.
 
 ## plugin-rsc version

@@ -7,14 +7,17 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { Page, Request } from '@playwright/test'
+import { decodeJwt } from 'jose'
 import {
   BUNDLER,
+  FAKE_REMOTE,
   HOST_APP_NEXT15,
   HOST_PAGES_NEXT15,
   LOGS_DIR,
   MODE,
   PORTS,
+  REMOTE_A,
 } from './servers.ts'
 import { markup } from './lib/strip-scripts.ts'
 
@@ -377,6 +380,50 @@ for (const host of HOSTS) {
   })
 }
 
+// Island Server Actions on the Next 15 App Router host (as actions.spec.ts
+// does on the Next 16 hosts): a public island on a static page whose action
+// runs as the signed-in user, with the island's bearer and never a cookie.
+test.describe('Next 15 App Router host: island Server Actions', () => {
+  test.describe.configure({ timeout: 120_000 })
+
+  test('an action runs as the signed-in user, with a bearer and no cookie', async ({
+    page,
+  }) => {
+    const actions: Request[] = []
+    page.on('request', (r) => {
+      if (
+        r.method() === 'POST' &&
+        new URL(r.url()).pathname.endsWith('/_nf/action')
+      )
+        actions.push(r)
+    })
+    await page.context().addCookies([
+      { name: 'nf-user', value: 'alice', url: 'http://localhost' },
+      // A cookie the remote set must not be sent with the action either.
+      { name: 'remote-session', value: 'leak', url: REMOTE_A },
+    ])
+    const { bad, all } = watch(page)
+    await page.goto(`${HOST_APP_NEXT15}/actions`)
+    const mount = page.getByTestId('mount-a1')
+    await expect(
+      mount.locator('[data-nf-root][data-nf-state="live"]')
+    ).toHaveCount(1, { timeout: MODE === 'dev' ? 90_000 : 30_000 })
+    const result = mount.getByTestId('result-whoami')
+    await mount.getByTestId('submit-whoami').click()
+    await expect(result).toHaveAttribute('data-calls', '1')
+    await expect(result).toContainText('"sub":"alice"')
+    await expect(mount.getByTestId('error-whoami')).toHaveText('')
+    expect(actions).toHaveLength(1)
+    expect(new URL(actions[0]!.url()).origin).toBe(REMOTE_A)
+    const headers = await actions[0]!.allHeaders()
+    expect(headers.cookie).toBeUndefined()
+    expect(headers.authorization).toMatch(/^Bearer ey/)
+    const claims = decodeJwt(headers.authorization!.slice(7))
+    expect(claims).toMatchObject({ aud: 'a', sub: 'alice' })
+    expect(bad, all.join('\n')).toEqual([])
+  })
+})
+
 // Static stays static on Next 15: read from the `next build` logs the harness
 // writes (servers.ts), as static.spec.ts and pages-router.spec.ts do.
 test.describe('production builds of the Next 15 hosts', () => {
@@ -408,5 +455,43 @@ test.describe('production builds of the Next 15 hosts', () => {
     expect(html).not.toContain('banner unavailable')
     const orders = await fetch(`${HOST_PAGES_NEXT15}/orders`)
     expect(orders.headers.get('x-nextjs-cache')).toBeNull()
+  })
+
+  // revalidateIsland calls `revalidateTag(tag, { expire: 0 })`; Next 15's
+  // revalidateTag takes the tag only and must still expire it.
+  test('App Router: revalidateIsland makes the next request pick up new remote content', async ({
+    request,
+  }) => {
+    const url = `${HOST_APP_NEXT15}/reval`
+    const page = async () => markup(await (await request.get(url)).text())
+    const revOf = (html: string) =>
+      Number(/echo reval rev (\d+)/.exec(html)?.[1])
+    // Start from a fresh entry: a background regeneration still in flight
+    // when the tag is revalidated would store the old content as new.
+    await expect
+      .poll(async () => (await request.get(url)).headers()['x-nextjs-cache'], {
+        timeout: 10_000,
+        intervals: [250],
+      })
+      .not.toBe('STALE')
+    const before = revOf(await page())
+    expect(before).toBeGreaterThan(0)
+    const { rev } = (await (
+      await request.post(`${FAKE_REMOTE}/_rev`)
+    ).json()) as { rev: number }
+    expect(rev).toBeGreaterThan(before)
+    // Still cached: the remote changed, the host has not been told.
+    expect(revOf(await page())).toBe(before)
+    const res = await request.post(
+      `${HOST_APP_NEXT15}/api/revalidate?remote=fake`
+    )
+    expect(res.status()).toBe(200)
+    expect(await res.json()).toEqual({ revalidated: 'fake' })
+    await expect
+      .poll(async () => revOf(await page()), {
+        timeout: 5_000,
+        intervals: [100],
+      })
+      .toBe(rev)
   })
 })

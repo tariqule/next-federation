@@ -8,6 +8,7 @@ type WebHandler = (req: Request) => Promise<Response>
  * no one reads: a handler may answer before the end of an upload (a 413 on the
  * declared length, a cancelled read), and the rest of that upload must not stay
  * on a keep-alive connection, where the next request on it would never be parsed.
+ * A body not yet read to its end is errored, so a pending read settles.
  */
 function requestBody(req: IncomingMessage): {
   stream: ReadableStream<Uint8Array>
@@ -42,8 +43,17 @@ function requestBody(req: IncomingMessage): {
     req.off('error', onError)
   }
   const drain = () => {
-    if (state === 'reading') detach()
-    state = 'done'
+    if (state !== 'done') {
+      if (state === 'reading') detach()
+      state = 'done'
+      // A read the handler still has pending (or starts later) rejects
+      // instead of waiting forever for data that is now dropped. A no-op
+      // when the stream was cancelled; a read promise rejects only for its
+      // reader, so nothing is left unhandled.
+      controller.error(
+        new Error('The response finished before the request body was read.')
+      )
+    }
     // Flowing with no 'data' listener: the rest is read and dropped.
     req.resume()
   }

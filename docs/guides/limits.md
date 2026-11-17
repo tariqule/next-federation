@@ -182,7 +182,9 @@ remotes on React 19.3.1, gzip:
 - **Island HTML appears about three times in a host page** (the DOM, the envelope in the framework's
   embedded data, and the island's RSC payload, which encodes the same tree); **the RSC payload
   appears once**. This holds for the App Router (with and without `cacheComponents`) and the Pages
-  Router. Keep islands small. The host warns in development above 100 KB per envelope (`NF-024`).
+  Router. Keep islands small. The host warns in development above 100 KB per envelope (`NF-024`)
+  and refuses a response body above 5 MiB (`islands.maxBytes`, or a remote's `maxBytes`): the
+  island fails with `NF-007` and renders its fallback.
 - **Each island costs a host-to-remote server hop.** Use caching, `preloadIsland` and co-locate the
   regions of host and remote.
 

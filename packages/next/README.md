@@ -245,7 +245,8 @@ the build's signed declarations index, each file's raw bytes checked against its
 body read with a size limit; nothing downloaded runs) into `next-federation-types/<remote>/`, and
 writes `next-federation-types/index.d.ts`, which fills `RemoteProps`:
 `createRemoteComponent<RemoteProps<'shop', './Cart'>>({ expose: './Cart' })`. Exits 1 when a remote
-fails (it keeps its previous types). Guide: [Types](../../docs/guides/remote-components.md#types).
+fails (it keeps its previous types); a remote whose current (verified) build publishes no types
+loses its previous ones and its `index.d.ts` entry. Guide: [Types](../../docs/guides/remote-components.md#types).
 
 ## API
 
