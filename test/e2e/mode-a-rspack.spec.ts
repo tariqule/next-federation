@@ -162,3 +162,43 @@ for (const host of HOSTS) {
     })
   })
 }
+
+// Mixed-router host: an App Router route and a Pages Router route of one
+// Next server process (two Reacts). The Rspack build bundles its own Module
+// Federation runtime: each layer's copy gets its own registry, so both
+// layers server-render it on their own React, in either order.
+for (const host of HOSTS.filter(
+  (h) => h.url === HOST_APP || h.url === HOST_APP_CC
+)) {
+  test(`mixed router (${host.name}): an Rspack remote server-renders in both routers, each on its own React`, async ({
+    page,
+  }) => {
+    const routes = [
+      { path: '/mode-a/rspack', value: 'from-app-host' },
+      { path: '/mode-a-mixed?remote=rspack', value: 'from-mixed-host' },
+    ]
+    for (const route of [...routes, ...[...routes].reverse()]) {
+      const { status, body } = await html(`${host.url}${route.path}`)
+      expect(status).toBe(200)
+      expectServerMarkup(body, `host=${route.value} build=rs1`)
+      expect(body).not.toContain('data-nf-browser-only')
+      expect(body).toMatch(/data-testid="react-probe"[^>]*>true</)
+    }
+    for (const route of routes) {
+      const { bad, all } = watch(page)
+      await page.goto(`${host.url}${route.path}`)
+      await expect(page.getByTestId('counter-text')).toHaveText(
+        `host=${route.value} build=rs1`
+      )
+      await expect(page.getByTestId('react-probe')).toHaveAttribute(
+        'data-client',
+        'true'
+      )
+      await page.getByTestId('counter-btn').click()
+      await expect(page.getByTestId('counter-btn')).toHaveText('count 2')
+      expect(bad, all.join('\n')).toEqual([])
+      page.removeAllListeners('console')
+      page.removeAllListeners('pageerror')
+    }
+  })
+}

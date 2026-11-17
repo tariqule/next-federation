@@ -7,6 +7,7 @@ import {
   COMPONENTS_DESCRIPTOR_PATH,
   componentDescriptorDigest,
   componentTrustRegistry,
+  isNeverFallback,
   parseComponentDescriptorFile,
   parseComponentTypesIndex,
   sha384Integrity,
@@ -278,6 +279,12 @@ describe('shared modules (version negotiation)', () => {
       'next/link',
       'next/navigation',
       'next/router',
+      // Every React and Next.js module, not only the listed ones.
+      'react-dom/server',
+      'react/jsx-dev-runtime',
+      'next',
+      'next/head',
+      'next/font/google',
     ].map((name) => [
       `a fallback copy of ${name} (always the host's)`,
       withShared({ [name]: { requiredVersion: false, fallback: true } }),
@@ -417,4 +424,42 @@ describe('type declarations index (@mf-types/index.json)', () => {
   ])('rejects %s', (_name, value) => {
     expect(parseComponentTypesIndex(value)).toBeNull()
   })
+})
+
+test('isNeverFallback: react, react-dom and next with every subpath, nothing else', () => {
+  for (const name of [
+    'react',
+    'react/jsx-runtime',
+    'react/jsx-dev-runtime',
+    'react-dom',
+    'react-dom/server',
+    'react-dom/client',
+    'next',
+    'next/head',
+    'next/link',
+  ]) {
+    expect(isNeverFallback(name)).toBe(true)
+  }
+  for (const name of [
+    'react-is',
+    'react-dom-x',
+    'next-intl',
+    'nextjs-toploader',
+    '@acme/react',
+    'preact',
+  ]) {
+    expect(isNeverFallback(name)).toBe(false)
+  }
+})
+
+test('a fallback copy of a module that only starts like React or Next.js is accepted', () => {
+  for (const name of ['react-is', 'next-intl']) {
+    expect(
+      parseComponentDescriptorFile({
+        ...payload,
+        shared: { [name]: { requiredVersion: false, fallback: true } },
+        digest: 'd',
+      })
+    ).not.toBeNull()
+  }
 })

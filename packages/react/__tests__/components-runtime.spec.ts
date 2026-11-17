@@ -1,6 +1,8 @@
-import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
-import { createComponentRuntime } from '../src/components/runtime.ts'
+import {
+  MAX_SCOPES,
+  createComponentRuntime,
+} from '../src/components/runtime.ts'
 import type {
   FederationInstance,
   RuntimeDeps,
@@ -60,8 +62,16 @@ function fakeInstance(): Fake {
   return fake
 }
 
+type Scope = {
+  id: string
+  layer: string
+  globals: Record<string, unknown>
+  blocked: Map<string, unknown>
+}
+
 function setup(overrides: Partial<RuntimeDeps> = {}) {
   const instance = fakeInstance()
+  const scopes: Scope[] = []
   let clock = 0
   const sleeps: number[] = []
   const events: unknown[] = []
@@ -74,7 +84,10 @@ function setup(overrides: Partial<RuntimeDeps> = {}) {
       instance.shared.push(options.shared)
       return instance
     },
-    serverPlugin: () => ({ name: 'test-server-plugin' }),
+    serverPlugin: (_integrityFor, scope) => {
+      scopes.push(scope)
+      return { name: 'test-server-plugin' }
+    },
     canLoadServerCode: () => true,
     isTrusted: () => true,
     now: () => clock,
@@ -90,7 +103,17 @@ function setup(overrides: Partial<RuntimeDeps> = {}) {
     sleeps,
     events,
     tick: (ms: number) => (clock += ms),
+    /** Server: the runtime's current MF scope (its latest instance's). */
+    scope: () => scopes[scopes.length - 1]!,
+    scopes,
   }
+}
+
+/** A server runtime whose MF scope exists (one load done). */
+async function loaded(overrides: Partial<RuntimeDeps> = {}) {
+  const ctx = setup(overrides)
+  await ctx.runtime.load(descriptor('c0'), './Counter')
+  return ctx
 }
 
 const settle = (p: Promise<unknown>) =>
@@ -101,8 +124,6 @@ const settle = (p: Promise<unknown>) =>
 
 afterEach(() => {
   delete (globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__
-  // Server runtimes record their React process-wide (one-React check).
-  delete (componentTrustRegistry() as { reacts?: unknown }).reacts
   rs.restoreAllMocks()
 })
 
@@ -287,9 +308,9 @@ test('server: the verified integrity of each loaded build is what the loader che
   ).toBeUndefined()
 })
 
-test('serverBlock: unverified builds, Node without getBuiltinModule, and a second React', () => {
+test('serverBlock: unverified builds, Node without getBuiltinModule, and a second React', async () => {
   const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
-  const { runtime } = setup()
+  const { runtime, scope } = await loaded()
   expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
   expect(runtime.serverBlock(descriptor('c1', { ssr: null }))).toBe(
     'unverified'
@@ -299,15 +320,19 @@ test('serverBlock: unverified builds, Node without getBuiltinModule, and a secon
   expect(old.serverBlock(descriptor('c1'))).toBe('node')
   expect(old.serverBlock(descriptor('c2'))).toBe('node')
 
-  // MF's process-wide share cache is first-writer-wins: another layer's React got there first.
+  // MF vite's process-wide share cache (first writer wins) holds another
+  // layer's React: this runtime never reads it.
   ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+    share: { react: { useState: () => 'other' } },
+  }
+  expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
+  // Its own cache (its scope) with another React: browser-only.
+  scope().globals.__mf_module_cache__ = {
     share: { react: { useState: () => 'other' } },
   }
   expect(runtime.serverBlock(descriptor('c1'))).toBe('react')
   expect(runtime.serverBlock(descriptor('c2'))).toBe('react')
-  ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
-    share: { react: fakeReact },
-  }
+  scope().globals.__mf_module_cache__ = { share: { react: fakeReact } }
   expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
   // Warned once per reason, not per render.
   const lines = warn.mock.calls.map((c) => c.join(' '))
@@ -319,19 +344,26 @@ test('serverBlock: unverified builds, Node without getBuiltinModule, and a secon
   )
 })
 
-test('serverBlock: a host module that is stale in the share cache (dev server reload) blocks SSR', () => {
+test("serverBlock: a host module that is stale in the runtime's share cache blocks SSR", async () => {
   const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
   const context = { HostContext: {} }
-  const { runtime } = setup()
+  const { runtime, scope } = await loaded()
   runtime.registerShared({
     'components-context': { version: '1.0.0', module: context },
   })
-  ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+  // A module registered late: the runtime starts over in a new scope.
+  await runtime.load(descriptor('c1'), './Counter')
+  scope().globals.__mf_module_cache__ = {
     share: { 'default:components-context': context, react: fakeReact },
   }
   expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
-  // The cache kept an older instance of the same module (first writer wins).
+  // The process-wide cache is never read on the server.
   ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+    share: { 'components-context': { HostContext: {} } },
+  }
+  expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
+  // Its own cache kept an older instance of the same module (first writer wins).
+  scope().globals.__mf_module_cache__ = {
     share: { 'components-context': { HostContext: {} } },
   }
   expect(runtime.serverBlock(descriptor('c1'))).toBe('stale')
@@ -411,16 +443,26 @@ describe('fix round 1', () => {
     expect(instances).toHaveLength(2)
   })
 
-  test('R2: the share cache is checked again after the load (overlapping first loads of two layers)', async () => {
+  test("R2: another layer's React in the process-wide cache meanwhile does not block (overlapping first loads)", async () => {
     const otherReact = { useState: () => 'other', version: '19.3.1' }
     const { runtime } = setup()
     const load = runtime.serverLoad(descriptor('c1'), './Counter')
-    // Another layer's React won the first-writer-wins cache meanwhile.
     ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
       share: { react: otherReact },
     }
+    expect(await load).not.toBeNull()
+  })
+
+  test("R2: the runtime's own share cache is checked again after the load", async () => {
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    const { runtime, instance, scope } = setup()
+    instance.loadRemote = async () => {
+      // A copy of another React reached this runtime's cache meanwhile.
+      scope().globals.__mf_module_cache__ = { share: { react: otherReact } }
+      return { default: () => null } as never
+    }
     rs.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(await load).toBeNull()
+    expect(await runtime.serverLoad(descriptor('c1'), './Counter')).toBeNull()
   })
 
   test('S1: a descriptor the server cannot trust never reaches the MF runtime', async () => {
@@ -771,7 +813,7 @@ describe('shared modules registered late, and fallback copies', () => {
 
   test("fallback: a satisfying host copy is what the build's own copy resolves to", async () => {
     const hostCopy = { copy: 'host' }
-    const { runtime } = setup()
+    const { runtime, scope } = setup()
     runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
     const d = descriptor('c1', {
       shared: {
@@ -784,37 +826,51 @@ describe('shared modules registered late, and fallback copies', () => {
     })
     await runtime.load(d, './Counter')
     const share = (
-      globalThis as {
+      scope().globals as {
         __mf_module_cache__?: { share: Record<string, unknown> }
       }
     ).__mf_module_cache__?.share
     expect(share?.['default:lib@2.0.0']).toBe(hostCopy)
+    // Server: in the runtime's own cache, never the process-wide one.
+    expect(
+      (globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__
+    ).toBeUndefined()
   })
 
   test("fallback: never for React or next/* (always the host's), even in a descriptor that says so", async () => {
-    const { runtime } = setup()
-    runtime.registerShared({
-      'next/link': { version: '16.4.6', module: {} },
-    })
+    const { runtime, scope } = setup()
+    // Every React, React DOM and Next.js module, subpaths included.
+    const names = [
+      'next/link',
+      'next/head',
+      'next',
+      'react',
+      'react-dom/server',
+      'react/jsx-dev-runtime',
+    ]
+    runtime.registerShared(
+      Object.fromEntries(
+        names.map((name) => [name, { version: '19.3.1', module: {} }])
+      )
+    )
     const d = descriptor('c1', {
-      shared: {
-        'next/link': {
-          requiredVersion: false,
-          fallback: true,
-          version: '16.4.6',
-        },
-        react: { requiredVersion: false, fallback: true, version: '19.3.1' },
-      },
+      shared: Object.fromEntries(
+        names.map((name) => [
+          name,
+          { requiredVersion: false, fallback: true, version: '19.3.1' },
+        ])
+      ),
     })
     await runtime.load(d, './Counter')
     const share =
       (
-        globalThis as {
+        scope().globals as {
           __mf_module_cache__?: { share: Record<string, unknown> }
         }
       ).__mf_module_cache__?.share ?? {}
-    expect(share['default:next/link@16.4.6']).toBeUndefined()
-    expect(share['default:react@19.3.1']).toBeUndefined()
+    for (const name of names) {
+      expect(share[`default:${name}@19.3.1`]).toBeUndefined()
+    }
   })
 
   const fallbackDescriptor = () =>
@@ -823,41 +879,50 @@ describe('shared modules registered late, and fallback copies', () => {
         lib: { requiredVersion: '^2.0.0', fallback: true, version: '2.0.0' },
       },
     })
-  const cachedLib = () =>
+  const cachedLib = (holder: object = globalThis) =>
     (
-      globalThis as {
+      holder as {
         __mf_module_cache__?: { share: Record<string, unknown> }
       }
     ).__mf_module_cache__?.share?.['default:lib@2.0.0']
 
-  test('server: a process with two Reacts (two router layers) never seeds a fallback copy', async () => {
+  test('server: a process with two Reacts (two router layers) seeds each layer its own copy', async () => {
     const otherReact = { useState: () => 'other', version: '19.3.1' }
     // The other layer's runtime (an App Router and a Pages Router route).
-    setup({
+    const other = setup({
       react: otherReact,
       hostShared: { react: { version: '19.3.1', module: otherReact } },
     })
-    const { runtime } = setup()
-    runtime.registerShared({ lib: { version: '2.1.0', module: {} } })
+    const otherCopy = { layer: 'other' }
+    other.runtime.registerShared({
+      lib: { version: '2.1.0', module: otherCopy },
+    })
+    await other.runtime.load(fallbackDescriptor(), './Counter')
+    const ownCopy = { layer: 'own' }
+    const { runtime, scope } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: ownCopy } })
     await runtime.load(fallbackDescriptor(), './Counter')
+    expect(cachedLib(other.scope().globals)).toBe(otherCopy)
+    expect(cachedLib(scope().globals)).toBe(ownCopy)
     expect(cachedLib()).toBeUndefined()
   })
 
-  test('server: a build that needs a seeded copy it cannot get renders browser-only (no hydration mismatch)', async () => {
-    rs.spyOn(console, 'warn').mockImplementation(() => {})
+  test("server: another layer's React does not stop a build that needs a seeded copy from server-rendering", async () => {
     const otherReact = { useState: () => 'other', version: '19.3.1' }
     setup({
       react: otherReact,
       hostShared: { react: { version: '19.3.1', module: otherReact } },
     })
-    const { runtime, instance } = setup()
-    runtime.registerShared({ lib: { version: '2.1.0', module: {} } })
-    // The browser seeds the host's copy, so the server must not render the
-    // bundled one: it leaves this component to the browser.
+    const hostCopy = { copy: 'host' }
+    const { runtime, instance, scope } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
+    // Each layer seeds its own scope, so the server renders the host's copy,
+    // the same one the browser seeds: no hydration mismatch.
     expect(
       await runtime.serverLoad(fallbackDescriptor(), './Counter')
-    ).toBeNull()
-    expect(instance.loads).toEqual([])
+    ).not.toBeNull()
+    expect(instance.loads).toHaveLength(1)
+    expect(cachedLib(scope().globals)).toBe(hostCopy)
     // An unsatisfying host copy means the bundled copy on both sides: SSR.
     const unsatisfied = setup()
     unsatisfied.runtime.registerShared({
@@ -866,19 +931,165 @@ describe('shared modules registered late, and fallback copies', () => {
     expect(
       await unsatisfied.runtime.serverLoad(fallbackDescriptor(), './Counter')
     ).not.toBeNull()
+    expect(cachedLib(unsatisfied.scope().globals)).toBeUndefined()
   })
 
-  test('server: a stale share cache (another instance of a host module) never seeds a fallback copy', async () => {
-    ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
-      share: { 'default:ctx': { other: true } },
-    }
-    const { runtime } = setup()
-    runtime.registerShared({
-      lib: { version: '2.1.0', module: {} },
+  /** A server runtime providing lib 2.1.0 and ctx, with its scope created. */
+  async function withLib(lib: object = {}) {
+    const ctx = setup()
+    ctx.runtime.registerShared({
+      lib: { version: '2.1.0', module: lib },
       ctx: { version: '1.0.0', module: {} },
     })
+    await ctx.runtime.load(descriptor('c0'), './Counter')
+    return ctx
+  }
+
+  test('server: a stale share cache (another instance of a host module) never seeds a fallback copy', async () => {
+    const { runtime, scope } = await withLib()
+    scope().globals.__mf_module_cache__ = {
+      share: { 'default:ctx': { other: true } },
+    }
     await runtime.load(fallbackDescriptor(), './Counter')
-    expect(cachedLib()).toBeUndefined()
+    expect(cachedLib(scope().globals)).toBeUndefined()
+  })
+
+  test('server: a build needing a copy a stale own cache cannot seed renders browser-only (no hydration mismatch)', async () => {
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const { runtime, instance, scope } = await withLib()
+    const loadsBefore = instance.loads.length
+    scope().globals.__mf_module_cache__ = {
+      share: { 'default:ctx': { other: true } },
+    }
+    // The browser seeds the host's copy, so the server must not render the
+    // bundled one: it leaves the component to the browser, loading nothing.
+    expect(
+      await runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).toBeNull()
+    expect(instance.loads).toHaveLength(loadsBefore)
+    expect(cachedLib(scope().globals)).toBeUndefined()
+  })
+
+  test('server: a module registered late starts a new scope, so a bundled copy cached earlier never shadows the host copy', async () => {
+    const { runtime, scopes } = setup()
+    runtime.registerShared({ ctx: { version: '1.0.0', module: {} } })
+    await runtime.load(descriptor('c0'), './Counter')
+    // The build's own copy evaluated first (the host had no lib yet).
+    const bundled = { copy: 'bundled' }
+    scopes[0]!.globals.__mf_module_cache__ = {
+      share: { 'default:lib@2.0.0': bundled },
+    }
+    const hostCopy = { copy: 'host' }
+    runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
+    expect(
+      await runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).not.toBeNull()
+    // A new scope, seeded with the host copy the browser seeds too.
+    expect(scopes).toHaveLength(2)
+    expect(scopes[1]!.id).not.toBe(scopes[0]!.id)
+    expect(scopes[1]!.layer).toBe(scopes[0]!.layer)
+    expect(cachedLib(scopes[1]!.globals)).toBe(hostCopy)
+    expect(cachedLib(scopes[0]!.globals)).toBe(bundled)
+  })
+
+  test('server: a cached copy of a fallback module that is not the host copy blocks SSR', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const first = { copy: 'first' }
+    const { runtime, scope } = await withLib(first)
+    await runtime.load(fallbackDescriptor(), './Counter')
+    expect(cachedLib(scope().globals)).toBe(first)
+    expect(runtime.serverBlock(fallbackDescriptor())).toBeNull()
+    // Registered again with another object (not a new name: no restart).
+    runtime.registerShared({ lib: { version: '2.1.0', module: { copy: 2 } } })
+    expect(runtime.serverBlock(fallbackDescriptor())).toBe('stale')
+    // A build whose range the host copy does not satisfy keeps its own copy:
+    // not stale.
+    const narrow = descriptor('c2', {
+      shared: {
+        lib: { requiredVersion: '^3.0.0', fallback: true, version: '2.0.0' },
+      },
+    })
+    expect(runtime.serverBlock(narrow)).toBeNull()
+    expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(
+      /NF-028.*"lib"/
+    )
+  })
+
+  test('server: each stale fallback copy gets a new scope, at most MAX_SCOPES, then browser-only (warned once)', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const forgotten: Array<[unknown, Scope | undefined]> = []
+    const hostCopy = { copy: 'host' }
+    const { runtime, scope, scopes, tick } = setup({
+      forget: (instance, s) => forgotten.push([instance, s as Scope]),
+    })
+    runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
+    await runtime.load(descriptor('c0'), './Counter')
+    const stale = () => {
+      scope().globals.__mf_module_cache__ = {
+        share: { 'default:lib@2.0.0': { copy: 'bundled' } },
+      }
+    }
+    for (let n = 1; n < MAX_SCOPES; n++) {
+      stale()
+      tick(5_000)
+      expect(
+        await runtime.serverLoad(fallbackDescriptor(), './Counter')
+      ).not.toBeNull()
+      expect(scopes).toHaveLength(n + 1)
+      expect(cachedLib(scope().globals)).toBe(hostCopy)
+    }
+    // Each replaced scope was dropped with its instance.
+    expect(forgotten.map(([, s]) => s?.id)).toEqual(
+      scopes.slice(0, -1).map((s) => s.id)
+    )
+    stale()
+    tick(5_000)
+    expect(
+      await runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).toBeNull()
+    tick(5_000)
+    expect(
+      await runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).toBeNull()
+    expect(scopes).toHaveLength(MAX_SCOPES)
+    expect(runtime.serverBlock(fallbackDescriptor())).toBe('scopes')
+    expect(
+      warn.mock.calls
+        .map((c) => c.join(' '))
+        .filter((l) => /NF-028.*stale fallback copy again/.test(l))
+    ).toHaveLength(1)
+  })
+
+  test('server: the post-load check reads the scope the module was loaded in', async () => {
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const { runtime, instance, scope, scopes, tick } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: {} } })
+    await runtime.load(descriptor('c0'), './Counter')
+    let release!: () => void
+    const original = instance.loadRemote.bind(instance)
+    instance.loadRemote = async (id) => {
+      await new Promise<void>((r) => (release = r))
+      return original(id)
+    }
+    // Loading in the first scope...
+    const pending = runtime.serverLoad(descriptor('c1'), './Counter')
+    await new Promise((r) => setTimeout(r, 0))
+    const first = scopes[0]!
+    instance.loadRemote = original
+    // ...while a stale fallback copy moves the runtime to a new scope.
+    scope().globals.__mf_module_cache__ = {
+      share: { 'default:lib@2.0.0': { copy: 'bundled' } },
+    }
+    tick(5_000)
+    const renewed = runtime.serverLoad(fallbackDescriptor(), './Counter')
+    // Another React reaches the first scope's cache meanwhile.
+    first.globals.__mf_module_cache__ = {
+      share: { react: { useState: () => 'other' } },
+    }
+    release()
+    expect(await pending).toBeNull()
+    expect(await renewed).not.toBeNull()
+    expect(scopes).toHaveLength(2)
   })
 
   test('browser: one React per page, so a satisfying host copy is seeded', async () => {
@@ -893,15 +1104,16 @@ describe('shared modules registered late, and fallback copies', () => {
 
   test('fallback: an unsatisfying host copy, another expose, or a copy already in use is left alone', async () => {
     const bundled = { copy: 'bundled' }
-    ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
-      share: { 'default:used@1.0.0': bundled },
-    }
-    const { runtime } = setup()
+    const { runtime, scope } = setup()
     runtime.registerShared({
       lib: { version: '1.4.0', module: {} },
       other: { version: '2.0.0', module: {} },
       used: { version: '1.0.0', module: {} },
     })
+    await runtime.load(descriptor('c0'), './Counter')
+    scope().globals.__mf_module_cache__ = {
+      share: { 'default:used@1.0.0': bundled },
+    }
     const fallback = (version: string, exposes?: string[]) => ({
       requiredVersion: '^1.0.0',
       fallback: true,
@@ -920,7 +1132,7 @@ describe('shared modules registered late, and fallback copies', () => {
     })
     await runtime.load(d, './Counter')
     const share = (
-      globalThis as unknown as {
+      scope().globals as unknown as {
         __mf_module_cache__: { share: Record<string, unknown> }
       }
     ).__mf_module_cache__.share
@@ -931,17 +1143,21 @@ describe('shared modules registered late, and fallback copies', () => {
 })
 
 describe('next/* modules', () => {
-  test("the identity guard names another router's copy for next/*, not a dev reload", () => {
+  test("the identity guard names the module: another router's next/* in the process-wide cache is never read", async () => {
     const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
-    const { runtime } = setup()
+    const { runtime, scope } = await loaded()
     runtime.registerShared({ 'next/link': { version: '16.4.6', module: {} } })
+    await runtime.load(descriptor('c1'), './Counter')
     ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+      share: { 'default:next/link': { other: true }, react: fakeReact },
+    }
+    expect(runtime.serverBlock(descriptor('c1'))).toBeNull()
+    scope().globals.__mf_module_cache__ = {
       share: { 'default:next/link': { other: true }, react: fakeReact },
     }
     expect(runtime.serverBlock(descriptor('c1'))).toBe('stale')
     const line = warn.mock.calls.map((c) => c.join(' ')).join('\n')
-    expect(line).toMatch(/NF-028.*other router.s copy of "next\/link"/)
-    expect(line).not.toMatch(/dev server reloaded/)
+    expect(line).toMatch(/NF-028.*"next\/link"/)
   })
 
   test('a canary or prerelease Next host satisfies a next/* range on its release numbers', async () => {

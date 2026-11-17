@@ -129,12 +129,12 @@ test('require allow-list: any bare specifier but @module-federation/runtime is N
 })
 
 test('the MF plugin verifies the manifest in its fetch hook', async () => {
-  files['mf-manifest.json'] = '{"id":"components"}'
+  files['mf-manifest.json'] = '{"id":"components","remotes":[]}'
   const plugin = createServerEntryPlugin(options())
   const res = await plugin.fetch(`${base}mf-manifest.json`)!
-  expect(await res.json()).toEqual({ id: 'components' })
+  expect(await res.json()).toEqual({ id: 'components', remotes: [] })
   const integrity = options().integrityFor(base)!.integrity
-  files['mf-manifest.json'] = '{"id":"evil"}'
+  files['mf-manifest.json'] = '{"id":"evil","remotes":[]}'
   await expect(
     createServerEntryPlugin(options(integrity)).fetch(`${base}mf-manifest.json`)
   ).rejects.toMatchObject({ code: 'NF-027' })
