@@ -44,9 +44,9 @@ island's hydration has committed, so the island is interactive from that point.
 however many islands use it, and keeps it. A server render emits the links ahead of the island
 HTML, so the island never paints unstyled; in the browser React adds them to `<head>`.
 
-## Client components (`@next-federation/react/components`)
+## Remote components (`@next-federation/react/components`)
 
-Mode A: a remote's client component, loaded through the Module Federation runtime and rendered in
+A remote's client component, loaded through the Module Federation runtime and rendered in
 the host's React tree on the host's React (server-rendered by Next hosts for verified builds).
 
 ```tsx
@@ -62,13 +62,14 @@ export const Cart = createRemoteComponent<{ items: number }>({
 // fetchDescriptorInBrowser() in an SPA)
 ```
 
-| Export                                       | Purpose                                                                     |
-| -------------------------------------------- | --------------------------------------------------------------------------- |
-| `createRemoteComponent(options)`             | Binds an exposed component; renders `ErrorBoundary > Suspense > component`. |
-| `loadRemoteModule(descriptor, expose)`       | The exposed module itself (cached per build).                               |
-| `preloadRemoteComponent(descriptor, expose)` | Starts loading ahead of rendering (never rejects).                          |
-| `fetchDescriptorInBrowser(url, options?)`    | SPA: the current build, browser-only (`ssr: null`).                         |
-| `COMPONENT_EVENT`                            | `'nf:component'`, the `document` event of every load and failure.           |
+| Export                                       | Purpose                                                                       |
+| -------------------------------------------- | ----------------------------------------------------------------------------- |
+| `createRemoteComponent(options)`             | Binds an exposed component; renders `ErrorBoundary > Suspense > component`.   |
+| `loadRemoteModule(descriptor, expose)`       | The exposed module itself (cached per build).                                 |
+| `preloadRemoteComponent(descriptor, expose)` | Starts loading ahead of rendering (never rejects).                            |
+| `fetchDescriptorInBrowser(url, options?)`    | SPA: the current build, browser-only (`ssr: null`).                           |
+| `registerSharedModules(shared)`              | Provides modules to every remote component (`{ name: { version, module } }`). |
+| `COMPONENT_EVENT`                            | `'nf:component'`, the `document` event of every load and failure.             |
 
 The module is `'use client'` and imports `react`, `react-dom`, `react-dom/client` and
 `react/jsx-runtime` itself, so in Next each layer registers its own React for remotes. The server
@@ -81,10 +82,17 @@ per remote up to the descriptor's `maxBuilds` (oldest evicted); failures are cac
 retries after 1 s, the browser retries 3 times with backoff while keeping the server HTML), and
 one load attempt times out after 10 s. A host module that the process-wide share cache holds in
 another instance (two Reacts, or a dev server reload) makes the server render browser-only.
+Shared modules: `version` must be the module's real semver version. Before loading an exposed
+module, the host checks the descriptor's `shared` list for the modules that expose imports: one the
+host does not provide, or provides outside the remote's `requiredVersion`, renders the fallback
+(`NF-036`, never retried), unless the remote bundles a fallback copy. Next.js hosts import
+`createRemoteComponent` from `@next-federation/next/components` (App Router) or
+`@next-federation/next/pages/components` (Pages Router) instead, which also provide the host's
+`next/*` modules.
 Stylesheets listed in the descriptor are React stylesheet resources (`precedence="next-federation"`,
 one link per URL): rendered with a server-rendered component, inserted with `preinit` by one first
 mounted in the browser; a server render also modulepreloads the remote entry and chunks.
-Guide: [Client components](../../docs/guides/client-components.md).
+Guide: [Remote components](../../docs/guides/remote-components.md).
 
 **Trust.** The server never trusts a `descriptor` prop by itself: it evaluates a build only when
 `verifyComponentDescriptor` recorded the descriptor in this process, or it re-verifies the carried

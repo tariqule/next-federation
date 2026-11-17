@@ -204,7 +204,8 @@ export async function verifyComponentDescriptor(
   target: ComponentTarget,
   file: ComponentDescriptorFile
 ): Promise<VerifiedComponentDescriptor> {
-  const { v, name, buildId, base, manifest, ssr, iat, assets, jws } = file
+  const { v, name, buildId, base, manifest, ssr, iat, assets, shared, jws } =
+    file
   const payload: ComponentBuildDescriptor = {
     v,
     name,
@@ -214,7 +215,10 @@ export async function verifyComponentDescriptor(
     ssr,
     ...(iat === undefined ? {} : { iat }),
     ...(assets === undefined ? {} : { assets }),
+    ...(shared === undefined ? {} : { shared }),
   }
+  // `shared` is kept even for a refused file: it names no URL, and the host
+  // only uses it to refuse a load it could not satisfy (NF-036).
   const unstyled: RemoteComponentDescriptor = {
     remote: target.remote,
     name,
@@ -224,6 +228,7 @@ export async function verifyComponentDescriptor(
     ssr: null,
     maxBuilds: target.maxBuilds,
     ...(iat === undefined ? {} : { iat }),
+    ...(shared === undefined ? {} : { shared }),
   }
   // The browser renders an unverified build too, with its stylesheets.
   const browserOnly: RemoteComponentDescriptor =

@@ -98,6 +98,17 @@ export const createRemoteComponent: Bindings['createRemoteComponent'] =
   bindings.createRemoteComponent
 
 /**
+ * Registers modules this host provides to every remote component (besides
+ * React), as `createRemoteComponent({ shared })` does for one: call it at
+ * module scope of a `'use client'` module, before anything renders. The
+ * Next.js entries (`@next-federation/next/components`) use it for the
+ * host's own `next/*` modules.
+ */
+export function registerSharedModules(shared: SharedModules): void {
+  runtime.registerShared(shared)
+}
+
+/**
  * Fetches a remote's current build descriptor in the browser (SPA hosts):
  * no server rendering, so it is never trusted to run server code. null when
  * the remote cannot be reached.
@@ -122,6 +133,8 @@ export async function fetchDescriptorInBrowser(
       maxBuilds: Math.max(1, Math.floor(options.maxBuilds ?? 5) || 1),
       // Its stylesheets: the browser inserts them before the module loads.
       ...(file.assets === undefined ? {} : { assets: file.assets }),
+      // What the host's shared modules must satisfy (checked before loading).
+      ...(file.shared === undefined ? {} : { shared: file.shared }),
     }
   } catch {
     return null

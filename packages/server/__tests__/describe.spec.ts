@@ -581,3 +581,52 @@ test('verify: a client folder that is a symlink out of the build folder is NF-00
     message: /client/,
   })
 })
+
+describe('shared modules (version checks)', () => {
+  const shared = [
+    { name: 'react', singleton: true, requiredVersion: '^19.0.0', version: '' },
+    {
+      name: '@acme/ctx',
+      singleton: true,
+      requiredVersion: '^1.0.0',
+      version: '',
+    },
+  ]
+
+  async function sharedBuild() {
+    const build = await rspackBuild()
+    root = build.root
+    const path = join(build.dir, 'client', 'mf-manifest.json')
+    await writeFile(path, JSON.stringify({ ...(await readJson(path)), shared }))
+    return build
+  }
+
+  test("nf-describe lists the manifest's shared modules (no per-expose list: every expose is checked)", async () => {
+    const build = await sharedBuild()
+    const { file } = await describeComponentsBuild({
+      dir: build.dir,
+      ssrEntry: 'server/remoteEntry.js',
+      env: {},
+    })
+    expect(file.shared).toEqual({
+      '@acme/ctx': { requiredVersion: '^1.0.0', fallback: false },
+    })
+    expect(parseComponentDescriptorFile(file)?.shared).toEqual(file.shared)
+  })
+
+  test('verify: tampered shared requirements (recomputed digest) fail (NF-027)', async () => {
+    const build = await sharedBuild()
+    await describeComponentsBuild({
+      dir: build.dir,
+      ssrEntry: 'server/remoteEntry.js',
+      env: {},
+    })
+    await editPayload(build.dir, (p) => {
+      p.shared!['@acme/ctx'] = { requiredVersion: false, fallback: true }
+    })
+    await expect(verifyComponentsBuild(build.dir)).rejects.toMatchObject({
+      code: 'NF-027',
+      message: /shared/,
+    })
+  })
+})

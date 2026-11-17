@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { federation } from '@module-federation/vite'
@@ -8,17 +9,23 @@ import {
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import type { Plugin, PluginOption, UserConfig } from 'vite'
+import {
+  SHARED_USAGE_FILE,
+  readSharedUsage,
+  sharedFromManifest,
+} from '@next-federation/server/node'
 import type { ComponentsBuildInfo } from '@next-federation/server/node'
 import {
   collectBrowserAssets,
   collectServerIntegrity,
   createDescriptorFile,
 } from './descriptor.ts'
-import { resolveComponentsOptions } from './options.ts'
+import { HOST_REACT, resolveComponentsOptions } from './options.ts'
 import type {
   ComponentsRemoteOptions,
   ResolvedComponentsOptions,
 } from './options.ts'
+import { collectSharedUsage, mfSharedConfig } from './shared.ts'
 import {
   assertModuleFederationViteVersion,
   installedModuleFederationViteVersion,
@@ -31,16 +38,6 @@ const VIRTUAL_ENTRY = 'virtual:next-federation/components-entry'
 const RESOLVED_ENTRY = `\0${VIRTUAL_ENTRY}`
 // Fast Refresh registration calls: a host page has no Vite preamble for them.
 const FAST_REFRESH_MARKER = /\$RefreshReg\$|\$RefreshSig\$/
-
-function mfShared(resolved: ResolvedComponentsOptions) {
-  return Object.fromEntries(
-    Object.entries(resolved.shared).map(([name, { requiredVersion }]) => [
-      name,
-      // `import: false`: never bundled, always the host's copy.
-      { singleton: true, requiredVersion, import: false as const },
-    ])
-  )
-}
 
 function viteConfig(resolved: ResolvedComponentsOptions): UserConfig {
   const client = `${resolved.outDir}/client`
@@ -117,7 +114,7 @@ export function nextFederationComponents(
     publicPath: resolved.publicBase,
     dts: false,
     exposes: resolved.exposes,
-    shared: mfShared(resolved),
+    shared: mfSharedConfig(resolved),
   })
   const mf = Array.isArray(mfPlugins) ? mfPlugins : [mfPlugins]
 
@@ -211,6 +208,15 @@ export function nextFederationComponents(
           // Signed too: the only stylesheet and modulepreload URLs hosts render.
           assets: await collectBrowserAssets(client, resolved.publicBase),
         }
+        // Signed too: what the host's shared modules must satisfy (NF-036).
+        // The usage file stays next to the build: nf-describe reads it too.
+        const shared = sharedFromManifest(
+          JSON.parse(
+            await readFile(join(client, 'mf-manifest.json'), 'utf8')
+          ) as unknown,
+          await readSharedUsage(outDir)
+        )
+        if (shared) payload.shared = shared
         const file = await createDescriptorFile(payload, process.env)
         const info: ComponentsBuildInfo = {
           kind: 'components',
@@ -230,6 +236,55 @@ export function nextFederationComponents(
           `${JSON.stringify(info, null, 2)}\n`
         )
       },
+    },
+  }
+
+  // Module id -> the shared specifiers it imports (browser build).
+  const sharedImports = new Map<string, Set<string>>()
+  const usagePlugin: Plugin = {
+    name: 'nf:components-shared-usage',
+    enforce: 'pre',
+    apply: 'build',
+    resolveId: {
+      // Before Module Federation turns the import into its share proxy.
+      order: 'pre',
+      handler(source, importer) {
+        if (!importer || this.environment.name !== 'client') return null
+        const name = sharedNameOf(source, resolved.shared)
+        if (name === null || HOST_REACT.includes(name)) return null
+        const id = importer.split('?')[0]!
+        let names = sharedImports.get(id)
+        if (!names) sharedImports.set(id, (names = new Set()))
+        names.add(name)
+        return null
+      },
+    },
+    generateBundle() {
+      if (this.environment.name !== 'client') return
+      const root = this.environment.config.root
+      const usage = collectSharedUsage(
+        Object.fromEntries(
+          Object.entries(resolved.exposes).map(([key, file]) => [
+            key,
+            resolve(root, file),
+          ])
+        ),
+        (id) => this.getModuleInfo(id),
+        sharedImports
+      )
+      // Read once every environment is built (each environment may get its
+      // own plugin instance), so it goes through a file next to the build.
+      const outDir = resolve(root, resolved.outDir)
+      mkdirSync(outDir, { recursive: true })
+      writeFileSync(
+        join(outDir, SHARED_USAGE_FILE),
+        JSON.stringify(
+          usage &&
+            Object.fromEntries(
+              [...usage].map(([expose, names]) => [expose, [...names]])
+            )
+        )
+      )
     },
   }
 
@@ -254,7 +309,25 @@ export function nextFederationComponents(
     },
   }
 
-  return [nfPlugin, ...mf, refreshGuard]
+  return [nfPlugin, usagePlugin, ...mf, refreshGuard]
+}
+
+/** The `shared` key an import specifier names (itself or a subpath), or null. */
+function sharedNameOf(
+  source: string,
+  shared: ResolvedComponentsOptions['shared']
+): string | null {
+  if (source in shared) return source
+  let best: string | null = null
+  for (const name of Object.keys(shared)) {
+    if (
+      source.startsWith(`${name}/`) &&
+      (best === null || name.length > best.length)
+    ) {
+      best = name
+    }
+  }
+  return best
 }
 
 /** `vite build` (CLI) or NF_VITE_COMMAND; anything else is the dev server. */

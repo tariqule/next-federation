@@ -34,3 +34,19 @@ test('carries the build assets, never ssr', async () => {
   expect(d?.ssr).toBeNull()
   expect(d?.assets).toEqual(file.assets)
 })
+
+test('carries the shared requirements (the browser checks them, NF-036)', async () => {
+  const shared = {
+    'next/link': { requiredVersion: false, fallback: false },
+    lib: { requiredVersion: '^2.0.0', fallback: true, exposes: ['./Counter'] },
+  }
+  rs.stubGlobal(
+    'fetch',
+    async () =>
+      new Response(JSON.stringify({ ...file, shared }), { status: 200 })
+  )
+  const d = await fetchDescriptorInBrowser(
+    'https://remote.example/_nf/components.json'
+  )
+  expect(d?.shared).toEqual(shared)
+})

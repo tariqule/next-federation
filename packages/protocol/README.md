@@ -25,16 +25,18 @@ pnpm add @next-federation/protocol
 
 ## API
 
-| Export                                                                         | Purpose                                                                                  |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `parseEnvelope(json)`                                                          | Validate an envelope (`NF-003`, `NF-004`).                                               |
-| `assertEnvelopeUrls(envelope, origins)`                                        | Require `bootstrap` and `css` on an allowed origin (`NF-005`).                           |
-| `encodeIslandRequest`, `decodeIslandRequest`                                   | Request codec for `GET` island requests.                                                 |
-| `canonicalJson`, `applyIdPrefix`                                               | Deterministic props encoding and per-mount id prefixing.                                 |
-| `PROTOCOL_VERSION`, `ISLAND_PATH`, ...                                         | Protocol constants.                                                                      |
-| `IslandBootstrapModule` and related types                                      | The browser bootstrap contract.                                                          |
-| `parseComponentDescriptorFile`, `componentDescriptorDigest`, `sha384Integrity` | Mode A build descriptor (`/_nf/components.json`): validation, pinned digest, SRI hashes. |
-| `RemoteComponentDescriptor` and related types                                  | What a host passes to `RemoteComponent`.                                                 |
+| Export                                                                         | Purpose                                                                                                      |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `parseEnvelope(json)`                                                          | Validate an envelope (`NF-003`, `NF-004`).                                                                   |
+| `assertEnvelopeUrls(envelope, origins)`                                        | Require `bootstrap` and `css` on an allowed origin (`NF-005`).                                               |
+| `encodeIslandRequest`, `decodeIslandRequest`                                   | Request codec for `GET` island requests.                                                                     |
+| `canonicalJson`, `applyIdPrefix`                                               | Deterministic props encoding and per-mount id prefixing.                                                     |
+| `PROTOCOL_VERSION`, `ISLAND_PATH`, ...                                         | Protocol constants.                                                                                          |
+| `IslandBootstrapModule` and related types                                      | The browser bootstrap contract.                                                                              |
+| `parseComponentDescriptorFile`, `componentDescriptorDigest`, `sha384Integrity` | Remote components build descriptor (`/_nf/components.json`): validation, pinned digest, SRI hashes.          |
+| `RemoteComponentDescriptor` and related types                                  | What a host passes to `RemoteComponent`.                                                                     |
+| `ComponentSharedModule`                                                        | One entry of a descriptor's signed `shared` list: `requiredVersion`, `fallback`, the exposes that import it. |
+| `satisfies`, `isSemverVersion`, `isSemverRange`                                | The npm semver subset shared-module negotiation uses (no dependencies).                                      |
 
 License: MIT
 

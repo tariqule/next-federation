@@ -35,6 +35,7 @@ export {
   COMPONENTS_DESCRIPTOR_FILE,
   COMPONENTS_DESCRIPTOR_PATH,
   COMPONENTS_JWS_TYPE,
+  NEVER_FALLBACK,
   componentDescriptorBytes,
   componentDescriptorCanonical,
   componentDescriptorDigest,
@@ -50,6 +51,7 @@ export type {
   ComponentBuildDescriptor,
   ComponentDescriptorFile,
   ComponentExposeAssets,
+  ComponentSharedModule,
   ComponentTrustKind,
   ComponentTrustPolicy,
   ComponentTrustRegistry,
@@ -63,3 +65,4 @@ export {
   redactUrl,
 } from './secure-url.ts'
 export type { InsecureHttpOptions } from './secure-url.ts'
+export { isSemverRange, isSemverVersion, satisfies } from './semver.ts'

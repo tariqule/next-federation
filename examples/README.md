@@ -5,7 +5,7 @@ Small apps you can copy. Two remotes serve UI, three hosts embed it:
 | Folder                                    | What it is                                                         | Port               |
 | ----------------------------------------- | ------------------------------------------------------------------ | ------------------ |
 | [`vite-remote`](vite-remote/)             | Island remote (Vite): `ProductPanel`, `Links`, private `MyOrders`  | 3300 (`127.0.0.1`) |
-| [`components-remote`](components-remote/) | Client-components remote (Mode A, Vite): `CartButton`              | 3304 (`127.0.0.1`) |
+| [`components-remote`](components-remote/) | Components remote (remote components, Vite): `CartButton`          | 3304 (`127.0.0.1`) |
 | [`next-app-router`](next-app-router/)     | Next.js App Router host                                            | 3301 (`localhost`) |
 | [`next-pages-router`](next-pages-router/) | Next.js Pages Router host, `basePath: '/shop'`, English and French | 3302 (`localhost`) |
 | [`react-spa`](react-spa/)                 | Client-only React host (Vite)                                      | 3303 (`localhost`) |
@@ -61,7 +61,7 @@ components from a build only.
   signed with.
 
 Never commit them. In production, keep each private key in a secret store (see
-[Identity](../docs/guides/identity.md) and [Client components](../docs/guides/client-components.md)).
+[Identity](../docs/guides/identity.md) and [Remote components](../docs/guides/remote-components.md)).
 `pnpm examples:keys --force` replaces them.
 
 ## Checks

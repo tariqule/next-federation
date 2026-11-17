@@ -5,6 +5,22 @@ only. To build the remote, see [Writing an island remote](writing-an-island-remo
 
 Supported: Next.js 16 (`>=16.0.0 <17`), React 19, Turbopack or webpack, Node 20.9 or newer.
 
+## Choosing between remote components and islands
+
+This guide sets up islands. A remote can also ship remote components, and a host can use both.
+
+| | Remote components | Islands |
+| --- | --- | --- |
+| What the remote ships | A client component module | Server-rendered HTML from its own server |
+| React | The host's | The remote's own |
+| Host context and router | Readable; `next/link` and the router come from the host | Do not cross in; pass data as props |
+| Props | Anything a client component takes | Plain JSON |
+| Server rendering | On the host, for signed or pinned builds | Always, on the remote |
+| Remote code on the host's server | Yes, for verified builds | Never |
+| Choose it for | Interactive pieces that must feel native: menus, carts, widgets in a client-heavy app | Server-rendered content the remote owns: product pages, data the remote fetches with its secrets |
+
+Remote components: see [Remote components](remote-components.md).
+
 ## 1. Install
 
 ```sh
@@ -93,6 +109,6 @@ in development or on a React pre-release. See [Limits](limits.md) for what it sa
 
 - Add each remote origin to `script-src`, `connect-src` and `style-src` ([CSP](csp.md)).
 - Island HTML is stored about three times in the page. React context does not cross into an island.
-- Mode A (client components, with SSR): see [Client components](client-components.md).
+- Remote components (client components, with SSR): see [Remote components](remote-components.md).
 
 Related: [Caching](caching.md), [Deployment](deployment.md), [Limits](limits.md).

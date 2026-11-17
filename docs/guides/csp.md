@@ -21,10 +21,10 @@ If a remote serves assets from another origin (a CDN), add that origin too, and 
 `assetOrigins` for that remote in the host's `defineFederation` config. Without it the host refuses
 the envelope (`NF-005`).
 
-Client components (Mode A) need the remote origin in `script-src` (its `remoteEntry.js` and chunks
+Remote components need the remote origin in `script-src` (its `remoteEntry.js` and chunks
 are ES modules, also `modulepreload`ed by a server render), `style-src` (the stylesheets of its
 exposed modules) and `connect-src` (the browser fetches `mf-manifest.json`; an SPA also fetches
-`/_nf/components.json`). See [Client components](client-components.md).
+`/_nf/components.json`). See [Remote components](remote-components.md).
 
 ## `'strict-dynamic'`
 

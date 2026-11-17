@@ -350,6 +350,8 @@ export function isTrustedDescriptor(d: RemoteComponentDescriptor): boolean {
     ...(d.iat === undefined ? {} : { iat: d.iat }),
     // Signed with the rest: the stylesheet and modulepreload URLs a host renders.
     ...(d.assets === undefined ? {} : { assets: d.assets }),
+    // Signed too: what the host's shared modules must satisfy.
+    ...(d.shared === undefined ? {} : { shared: d.shared }),
   })
   const crypto = builtin<Crypto>('node:crypto')
   const digest = `sha384-${crypto.createHash('sha384').update(canonical).digest('base64')}`

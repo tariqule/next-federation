@@ -10,12 +10,12 @@ concepts, then walks a Pages Router app on Next 14 or 15 to Next 16.
 
 | nextjs-mf | next-federation |
 | --- | --- |
-| A remote's exposed **client component** (`exposes: { './Cart': … }`, `dynamic(() => import('shop/Cart'))`) | A **client component (Mode A)**: the remote builds it with `nextFederationComponents`, the host renders it with `createRemoteComponent`. It runs on the host's React, reads host context, takes any props. Server-rendered for verified builds. [Client components](client-components.md) |
+| A remote's exposed **client component** (`exposes: { './Cart': … }`, `dynamic(() => import('shop/Cart'))`) | A **remote component**: the remote builds it with `nextFederationComponents`, the host renders it with `createRemoteComponent`. It runs on the host's React, reads host context, takes any props. Server-rendered for verified builds. [Remote components](remote-components.md) |
 | An exposed component that renders **server data** (its own `getServerSideProps`, a whole exposed page, data the remote fetches with its secrets) | An **island**: the remote renders it on its own server (real Server Components) and the host embeds the HTML. [Writing an island remote](writing-an-island-remote.md) |
 | `NextFederationPlugin` in `next.config.js` (`name`, `remotes`, `filename`, `extraOptions`) | `withNextFederation()` around `next.config` (no bundler plugin) + `defineFederation({ remotes })` in a server-only module |
 | `remotes: { shop: 'shop@https://shop.example.com/_next/static/chunks/remoteEntry.js' }` | `remotes: { shop: { origin: 'https://shop.example.com', components: { … } } }`: the host reads the remote's build descriptor (`/_nf/components.json`) and loads the build it names |
 | `exposes` in the remote's Next config | A Vite remote: `nextFederationComponents({ exposes })` (client components) and/or `nextFederationIslands` (islands) |
-| `shared: { react: { singleton: true } }`, automatic sharing of `next/*` | React (`react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`) is always the host's; other modules are shared only when the remote lists them and the host passes them ([Sharing modules](client-components.md#sharing-modules)). `next/*` is never shared |
+| `shared: { react: { singleton: true } }`, automatic sharing of `next/*` | React (`react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`) is always the host's; other modules are shared only when the remote lists them and the host passes them ([Sharing modules](remote-components.md#sharing-modules)), with an optional `requiredVersion` and a bundled `fallback` copy. `next/link`, `next/navigation` and `next/router` come from the host's router; no other `next/*` is shared |
 | `FlushedChunks` / `flushChunks()` in `_document` for SSR chunk preloading | Automatic: a server-rendered component emits its stylesheets and `modulepreload` links |
 | `revalidate()` from `@module-federation/nextjs-mf/utils` to pick up new remote builds | Automatic: the descriptor is re-read within `revalidate` seconds; the browser loads exactly the build the server rendered |
 | A Next app as a remote | Not supported. Move the shared code into a Vite remote: [Sharing components from a Next app](sharing-components-from-a-next-app.md) |
@@ -30,11 +30,15 @@ the shop fetches) from a Next app `shop`.
 List every `exposes` entry of every remote and every `import('remote/…')` in the hosts. For each
 exposed module decide:
 
-- **Client component** (state, effects, event handlers; data comes in as props): Mode A.
+- **Client component** (state, effects, event handlers; data comes in as props): a remote component.
 - **Renders server data or needs the remote's secrets**: island.
-- **Uses `next/router`, `next/link`, `next/image` or `next/head`**: rewrite that part. In Mode A pass
-  what it needs as props (an `onNavigate` callback, a link component, an image URL builder). In an
-  island use `Link` from `@next-federation/island`.
+- **Uses `next/link`, `next/navigation` or `next/router`**: keep it in a remote component. List the
+  module in the remote's `shared`, and create the component in the host with
+  `@next-federation/next/components` (App Router) or `@next-federation/next/pages/components`
+  (Pages Router). The component then renders only in a host with that router.
+- **Uses `next/image` or `next/head`**: rewrite that part. In a remote component pass what it needs
+  as props (an image URL builder, a callback). In an island use `Link` from
+  `@next-federation/island`.
 
 ### 2. Build the remote with Vite
 
@@ -59,7 +63,7 @@ export default defineConfig({
 ```
 
 CSS imported by an exposed module works as is (`import './Cart.css'`, CSS Modules). Build with
-`NF_COMPONENTS_SIGNING_KEY` set so hosts can server-render it ([Key generation](client-components.md#key-generation)),
+`NF_COMPONENTS_SIGNING_KEY` set so hosts can server-render it ([Key generation](remote-components.md#key-generation)),
 and serve `dist/` with `nf-serve` or deploy it ([Deployment](deployment.md)). `Reviews` becomes an
 island entry of an island remote ([Writing an island remote](writing-an-island-remote.md)).
 
@@ -153,16 +157,18 @@ A remote that is down renders the fallback with status 200, as before. Replace `
 
 The same remote works in App Router pages: `getComponentDescriptor` from
 `@next-federation/next/server` in a Server Component, the `createRemoteComponent` module marked
-`'use client'` ([App Router](client-components.md#app-router)).
+`'use client'` ([App Router](remote-components.md#app-router)).
 
 ## What has no equivalent
 
 - **Next apps as remotes**, including exposed pages (`exposePages`) and exposing `app/` or `pages/`
   components. Move shared code into a Vite remote.
-- **Sharing `next/*`** (nextjs-mf shared Next's router and head modules automatically). Pass
-  callbacks or components as props instead.
-- **Version negotiation**: `requiredVersion`, `strictVersion`, `eager` and fallback copies of a
-  shared module. The host provides each shared module; React is always the host's.
+- **Sharing all of `next/*`** (nextjs-mf shared Next's modules automatically). Only `next/link`,
+  `next/navigation` and `next/router` are shared, from the host's router. Pass anything else as
+  props.
+- **`strictVersion`, `eager` and `singleton` per module.** A remote sets `requiredVersion` and
+  `fallback` only; the host checks the range before loading (`NF-036`), and React is always the
+  host's.
 - **Static `import 'shop/Cart'`** in host code (a host import loader is planned after v1).
 - **Rspack or webpack remotes**: untested. Remotes build with `@module-federation/vite`.
 - **Type generation from the remote** (the MF `dts` plugin is off). Type the props in

@@ -52,10 +52,10 @@ add(
   'docs/guides/migrating-from-nextjs-mf.md',
   'guides/migrating-from-nextjs-mf'
 )
-add('docs/guides/client-components.md', 'client-components/overview')
+add('docs/guides/remote-components.md', 'remote-components/overview')
 add(
   'docs/guides/sharing-components-from-a-next-app.md',
-  'client-components/sharing-from-a-next-app'
+  'remote-components/sharing-from-a-next-app'
 )
 add('docs/guides/deployment.md', 'deployment/overview')
 add('docs/guides/self-hosted-skew.md', 'deployment/self-hosted-skew')
@@ -218,7 +218,7 @@ writeFileSync(
       pages: [
         'getting-started',
         'guides',
-        'client-components',
+        'remote-components',
         'deployment',
         'errors',
         'protocol',
@@ -242,7 +242,7 @@ meta('guides', 'Guides', [
   'limits',
   'migrating-from-nextjs-mf',
 ])
-meta('client-components', 'Client components (Mode A)', [
+meta('remote-components', 'Remote components', [
   'overview',
   'sharing-from-a-next-app',
 ])

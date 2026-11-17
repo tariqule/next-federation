@@ -39,7 +39,7 @@ it parses every signing key and warms the cache, so a malformed key throws `NF-0
 than on the first per-user request. It throws `NF-013` when `identity` is not configured, so only
 call it on hosts that use identity.
 
-## Client components (Mode A)
+## Remote components
 
 A remote with a `components` key serves Module Federation client components:
 
@@ -76,14 +76,14 @@ pnpm add @next-federation/core
 
 ## API
 
-| Export                                                  | Entry                              | Purpose                                                           |
-| ------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------- |
-| `defineFederation(config)`                              | `@next-federation/core`            | Validate the host config and return a `Federation`.               |
-| `fetchIsland(federation, request)`                      | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.    |
-| `islandTags`, `eventFor`                                | `@next-federation/core`            | Cache tags and event helpers for adapters.                        |
-| `generateSigningKey`, `publicJwks`, `validateIdentity`  | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).        |
-| `mintIslandToken`, `identityKey`                        | `@next-federation/core/identity`   | Mint a per-remote island token and derive its cache identity key. |
-| `fetchComponentDescriptor`, `verifyComponentDescriptor` | `@next-federation/core/components` | Mode A: fetch and verify a components remote's build descriptor.  |
+| Export                                                  | Entry                              | Purpose                                                                     |
+| ------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `defineFederation(config)`                              | `@next-federation/core`            | Validate the host config and return a `Federation`.                         |
+| `fetchIsland(federation, request)`                      | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
+| `islandTags`, `eventFor`                                | `@next-federation/core`            | Cache tags and event helpers for adapters.                                  |
+| `generateSigningKey`, `publicJwks`, `validateIdentity`  | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).                  |
+| `mintIslandToken`, `identityKey`                        | `@next-federation/core/identity`   | Mint a per-remote island token and derive its cache identity key.           |
+| `fetchComponentDescriptor`, `verifyComponentDescriptor` | `@next-federation/core/components` | Remote components: fetch and verify a components remote's build descriptor. |
 
 The wire format is specified in [`docs/protocol/v1.md`](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md).
 

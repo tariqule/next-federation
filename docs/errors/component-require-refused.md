@@ -9,7 +9,7 @@ only.
 
 ## Why
 
-Mode A components run on the host's React. A remote that bundles or requires its own copy of
+Remote components run on the host's React. A remote that bundles or requires its own copy of
 React (or any package the host should provide) would run a second React in the host process and
 fail with "Invalid hook call", or pick up arbitrary packages from the host's `node_modules`.
 
@@ -22,5 +22,6 @@ integrity check (signed or pinned builds, `NF-027`) is the security boundary.
 
 Build the remote with `nextFederationComponents`: React, `react-dom` and `react/jsx-runtime` are
 host-provided. List every other package the host owns (a context module, a design system) in the
-remote's `shared` option and in the host's `createRemoteComponent({ shared })`. Packages the remote
-uses only itself are bundled into its chunks and never required.
+remote's `shared` option and in the host's `createRemoteComponent({ shared })` (or
+`registerSharedModules`). A shared package with `fallback: true` is bundled into the remote's chunks
+as well. Packages the remote uses only itself are bundled into its chunks and never required.

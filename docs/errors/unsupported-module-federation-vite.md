@@ -6,7 +6,7 @@ The `@module-federation/vite` that `@next-federation/vite` resolved is not the v
 
 ## Why
 
-`nextFederationComponents` (Mode A remotes) relies on how `@module-federation/vite` builds the
+`nextFederationComponents` (remote components) relies on how `@module-federation/vite` builds the
 server copy of a remote: the CommonJS `remoteEntry.ssr.js` it emits next to the browser build, the
 `ssrRemoteEntry` it writes into `mf-manifest.json`, and the share-cache code in that entry. None of
 this is a documented option, so the plugin is pinned to exactly one version: **1.24.0**.

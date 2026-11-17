@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import type { NextConfig } from 'next'
 import { NFError } from '@next-federation/sdk'
 
@@ -29,6 +30,25 @@ function assertNotExternal(config: NextConfig): void {
         .join(', ')}): they must be bundled so the island cache alias applies.`
     )
   }
+}
+
+/** The installed Next.js version (the host's); NF-002 when unreadable. */
+function nextVersion(): string {
+  let version: unknown
+  try {
+    version = (
+      createRequire(import.meta.url)('next/package.json') as {
+        version?: unknown
+      }
+    ).version
+  } catch {
+    version = undefined
+  }
+  if (typeof version === 'string' && version !== '') return version
+  throw new NFError(
+    'NF-002',
+    "withNextFederation could not read the installed Next.js version (next/package.json): remote components check remotes' next/* ranges against it. Install `next` where @next-federation/next can resolve it."
+  )
 }
 
 function wrap(config: NextConfig): NextConfig {
@@ -64,6 +84,9 @@ function wrap(config: NextConfig): NextConfig {
       ...config.env,
       NF_CACHE_MODEL: model,
       NF_BASE_PATH: config.basePath ?? '',
+      // The version of next/link, next/navigation and next/router that
+      // remote components get (@next-federation/next/components).
+      NF_NEXT_VERSION: nextVersion(),
     },
     transpilePackages: transpile.includes(PACKAGE)
       ? [...transpile]
@@ -83,8 +106,8 @@ function wrap(config: NextConfig): NextConfig {
  * Required in every Next host's `next.config`. Selects the island cache
  * implementation for the host's caching model at build time (`'use cache'`
  * only compiles when `cacheComponents` is on) and passes the model and
- * `basePath` to the adapter through `env`. Every other key is kept, and an
- * existing `webpack` function runs first.
+ * `basePath` (and the installed Next version) to the adapter through `env`.
+ * Every other key is kept, and an existing `webpack` function runs first.
  */
 export function withNextFederation(config: NextConfig): NextConfig
 export function withNextFederation<Ctx>(

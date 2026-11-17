@@ -1,6 +1,12 @@
 // Mode A host runtime: one Module Federation instance per environment (the
 // SSR layer and the browser), which loads remote builds' exposed modules on
 // the host's own React. Framework-free; the 'use client' entry wires it.
+import {
+  NEVER_FALLBACK,
+  componentTrustRegistry,
+  isSemverVersion,
+  satisfies,
+} from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
@@ -15,7 +21,11 @@ export type Thenable<T> = Promise<T> & {
   failedAt?: number
 }
 
-/** Modules the host provides to remotes: `{ [specifier]: { version, module } }`. */
+/**
+ * Modules the host provides to remotes: `{ [specifier]: { version, module } }`.
+ * `version` is the module's real semver version (its package.json): a
+ * remote's `requiredVersion` is checked against it (NF-036).
+ */
 export type SharedModules = Record<string, { version: string; module: unknown }>
 
 type MfShared = Record<
@@ -175,6 +185,125 @@ function staleSharedModule(
   return null
 }
 
+/** Modules only a Next.js host provides (`@next-federation/next/components`). */
+const NEXT_MODULES = new Set(['next/link', 'next/navigation', 'next/router'])
+
+/** `16.5.0-canary.3` -> `16.5.0` (build metadata dropped too). */
+const releaseOf = (version: string): string => version.replace(/[-+].*$/, '')
+
+function notProvidedHint(name: string): string {
+  return NEXT_MODULES.has(name)
+    ? 'next/link, next/navigation and next/router come only from a Next.js host that creates its remote components with @next-federation/next/components (App Router: next/link, next/navigation) or @next-federation/next/pages/components (Pages Router: next/link, next/router).'
+    : 'Provide it with createRemoteComponent({ shared }), or let the remote bundle a copy (`fallback: true` in its `shared`).'
+}
+
+/**
+ * The first shared module this expose needs that the host cannot satisfy:
+ * not provided, or a version outside the remote's `requiredVersion`. A
+ * module with `fallback` is never refused here: the build carries its own
+ * copy, used unless the host's satisfies (provideFallbackCopies).
+ */
+function unmetShared(
+  d: RemoteComponentDescriptor,
+  expose: string,
+  versions: Map<string, string>
+): NFError | null {
+  for (const [name, need] of Object.entries(d.shared ?? {})) {
+    if (need.fallback) continue
+    if (need.exposes && !need.exposes.includes(expose)) continue
+    const version = versions.get(name)
+    const who = `${d.remote}:${expose} (build ${d.buildId})`
+    if (version === undefined) {
+      return new NFError(
+        'NF-036',
+        `${who} needs "${name}" from the host, which does not provide it. ${notProvidedHint(name)}`
+      )
+    }
+    if (
+      need.requiredVersion !== false &&
+      !satisfies(
+        // A canary or prerelease Next host counts by its release numbers.
+        NEXT_MODULES.has(name) ? releaseOf(version) : version,
+        need.requiredVersion
+      )
+    ) {
+      return new NFError(
+        'NF-036',
+        `${who} needs "${name}" ${need.requiredVersion}, but the host provides ${version}. Upgrade the host's copy, widen the remote's requiredVersion, or let the remote bundle a copy (\`fallback: true\`).`
+      )
+    }
+  }
+  return null
+}
+
+type ModuleCache = { share?: Record<string, unknown>; remote?: unknown }
+
+/**
+ * The `fallback` modules of this expose that the host's copy satisfies: the
+ * ones a browser seeds (see provideFallbackCopies).
+ */
+function seedableFallbacks(
+  d: RemoteComponentDescriptor,
+  expose: string,
+  versions: Map<string, string>
+): Array<{ name: string; key: string }> {
+  const out: Array<{ name: string; key: string }> = []
+  for (const [name, need] of Object.entries(d.shared ?? {})) {
+    if (!need.fallback || need.version === undefined) continue
+    // React and the router are always the host's (the parser refuses such
+    // an entry too; never trust that alone before a global write).
+    if (NEVER_FALLBACK.includes(name)) continue
+    if (need.exposes && !need.exposes.includes(expose)) continue
+    const version = versions.get(name)
+    if (version === undefined) continue
+    if (
+      need.requiredVersion !== false &&
+      !satisfies(version, need.requiredVersion)
+    ) {
+      continue
+    }
+    out.push({ name, key: `${name}@${need.version}` })
+  }
+  return out
+}
+
+/**
+ * `fallback` modules: a build's own copy is not a singleton, and its
+ * `@module-federation/vite` share proxy resolves `default:<name>@<its
+ * version>` in the process-wide module cache (`globalThis.__mf_module_cache__`,
+ * the layout of the pinned 1.24.0) before falling back to the bundled copy;
+ * it never asks the share scope. When the host's copy satisfies the range,
+ * put it there, so the build uses the host's copy. A key already set (a copy
+ * already evaluated) is left alone.
+ */
+function provideFallbackCopies(
+  d: RemoteComponentDescriptor,
+  expose: string,
+  versions: Map<string, string>,
+  modules: Map<string, unknown>
+): void {
+  for (const { name, key } of seedableFallbacks(d, expose, versions)) {
+    const g = globalThis as { __mf_module_cache__?: ModuleCache }
+    const cache = (g.__mf_module_cache__ ??= { share: {}, remote: {} })
+    const share = (cache.share ??= {})
+    if (share[`default:${key}`] !== undefined || share[key] !== undefined) {
+      continue
+    }
+    share[`default:${key}`] = modules.get(name)
+  }
+}
+
+function assertVersions(shared: SharedModules): void {
+  for (const [name, { version }] of Object.entries(shared)) {
+    if (typeof version !== 'string' || !isSemverVersion(version)) {
+      throw new NFError(
+        'NF-002',
+        `The shared module "${name}" needs its real version (a semver version such as "1.2.0", from its package.json), got ${JSON.stringify(version)}: remotes' requiredVersion ranges are checked against it.`
+      )
+    }
+  }
+}
+
 const TIMED_OUT = Symbol('nf-timed-out')
 
 function withTimeout<T>(
@@ -231,7 +360,30 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const provided = new Map<string, unknown>(
     Object.entries(deps.hostShared).map(([name, { module }]) => [name, module])
   )
+  // The version of every module this runtime provides (NF-036 checks).
+  const versions = new Map<string, string>(
+    Object.entries(deps.hostShared).map(([name, { version }]) => [
+      name,
+      version,
+    ])
+  )
   let instance: FederationInstance | null = null
+  // Server: the Reacts of every runtime in this process (fallback copies are
+  // seeded into the process-wide module cache only with exactly one).
+  const reacts = deps.isServer
+    ? (componentTrustRegistry().reacts ??= new Set())
+    : null
+  reacts?.add(deps.react)
+  /**
+   * May a satisfying host copy be seeded for a fallback module? A browser
+   * page has one React. A server process qualifies only while it hosts one
+   * React and the share cache holds no other instance of a host module: a
+   * seeded key is process-wide, and another layer would read this layer's
+   * copy. Otherwise the build uses its bundled copy.
+   */
+  const maySeedFallbacks = (): boolean =>
+    !deps.isServer ||
+    (reacts!.size === 1 && staleSharedModule(deps.react, provided) === null)
 
   // Browser: the retry number of each build's entry (base -> n).
   const entryRetries = new Map<string, number>()
@@ -341,8 +493,13 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     retry: boolean
   ): Promise<RemoteModule> {
     const started = now()
-    const tries = deps.isServer ? 1 : 1 + delays.length
-    let last: unknown
+    // Checked once: a module the host does not provide cannot appear on a retry.
+    const unmet = unmetShared(d, expose, versions)
+    if (!unmet && maySeedFallbacks()) {
+      provideFallbackCopies(d, expose, versions, provided)
+    }
+    const tries = unmet ? 0 : deps.isServer ? 1 : 1 + delays.length
+    let last: unknown = unmet
     for (let i = 0; i < tries; i++) {
       if (i > 0) await sleep(delays[i - 1]!)
       try {
@@ -461,11 +618,25 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
 
   return {
     registerShared(shared) {
-      for (const [name, { module }] of Object.entries(shared)) {
+      assertVersions(shared)
+      const added = Object.keys(shared).some((name) => !provided.has(name))
+      for (const [name, { version, module }] of Object.entries(shared)) {
         provided.set(name, module)
+        versions.set(name, version)
       }
       extraShared.push(shared)
-      if (instance) instance.registerShared(toMfShared(shared))
+      if (!instance) return
+      if (added) {
+        // A container initialised its share scope once, before this module
+        // existed (for example a page that loaded another remote component
+        // first, then a client navigation): it would never see it. Start
+        // over: the next load gets a new instance with every module, and
+        // registers its remote again (as after a timed-out load).
+        instance = null
+        registered.clear()
+      } else {
+        instance.registerShared(toMfShared(shared))
+      }
     },
 
     load(d, expose) {
@@ -544,7 +715,9 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       if (stale) {
         warnOnce(
           `stale:${stale}`,
-          `The Module Federation share cache of this process holds another instance of "${stale}" (a dev server reloaded the host's modules, or two copies are installed): remote components render in the browser only until the server restarts.`
+          NEXT_MODULES.has(stale)
+            ? `The Module Federation share cache of this process holds the other router's copy of "${stale}" (an App Router and a Pages Router route in one host share one cache, and the first to load a remote component wins): remote components render in the browser only here.`
+            : `The Module Federation share cache of this process holds another instance of "${stale}" (a dev server reloaded the host's modules, or two copies are installed): remote components render in the browser only until the server restarts.`
         )
         return 'stale'
       }
@@ -569,6 +742,18 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       }
       let result: Thenable<RemoteModule | null>
       if (this.serverBlock(d)) {
+        result = resolved(null)
+      } else if (
+        !maySeedFallbacks() &&
+        seedableFallbacks(d, expose, versions).length > 0
+      ) {
+        // The browser uses the host's copy of a fallback module, which this
+        // process cannot seed (two Reacts, or a stale share cache): the
+        // server would render the bundled copy and fail hydration.
+        warnOnce(
+          `fallback:${d.base}`,
+          `Build "${d.buildId}" of "${d.remote}" uses this host's copy of a shared module with a fallback, which a server process with more than one React (or a stale Module Federation share cache) cannot hand it: ${expose} renders in the browser only here.`
+        )
         result = resolved(null)
       } else {
         const load = this.load(d, expose)

@@ -1,0 +1,47 @@
+# NF-036: Host does not provide a shared module version the remote component accepts
+
+## What happened
+
+A remote component imports a module that its remote lists in `shared` as host-provided (no
+`fallback`). The host does not provide that module, or it provides a version outside the remote's
+`requiredVersion`. The host does not load the component. It renders the component's fallback, and
+the page still answers 200. The log line names the remote, the exposed module, the shared module,
+the range the remote needs and the version the host has.
+
+## Why
+
+- **A Next.js module in a host without it.** `next/link`, `next/navigation` and `next/router` come
+  only from a Next.js host, and only the modules of the host's router:
+  - App Router hosts provide `next/link` and `next/navigation` through
+    `@next-federation/next/components`.
+  - Pages Router hosts provide `next/link` and `next/router` through
+    `@next-federation/next/pages/components`.
+
+  A client-only (SPA) host provides none of them. A host that imports `createRemoteComponent` from
+  `@next-federation/react/components` instead of the Next.js entry provides none of them either.
+- **A module the host does not pass.** The remote shares a module (a context package, a design
+  system) that the host does not list in `createRemoteComponent({ shared })` or
+  `registerSharedModules`.
+- **A version outside the range.** The host's `version` for the module does not satisfy the
+  remote's `shared: { name: { requiredVersion } }`.
+
+Only the exposed modules that import the shared module are refused. Other components of the same
+remote still load. The check runs before any remote code is fetched, and a refused load is never
+retried, because a retry cannot succeed.
+
+## How to fix
+
+- Create Next.js hosts' remote components with the entry for the host's router:
+  `@next-federation/next/components` (App Router) or `@next-federation/next/pages/components`
+  (Pages Router). Wrap `next.config` with `withNextFederation`, which records the host's Next.js
+  version.
+- A component meant for every kind of host should not import `next/*`. Pass a link component, an
+  `href` builder or callbacks as props instead.
+- Pass every other shared module from the host with its real version, for example
+  `shared: { '@acme/ui': { version: '2.4.0', module: AcmeUi } }`. The version comes from the
+  package's `package.json`.
+- If the remote can run with its own copy, set `fallback: true` on that entry in the remote's
+  `shared` option. The remote then bundles a copy and uses it when the host's copy is missing or
+  does not satisfy the range. React and `next/*` never fall back: they are always the host's.
+
+See [Remote components: sharing modules](../guides/remote-components.md#sharing-modules).

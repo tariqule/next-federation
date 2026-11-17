@@ -79,8 +79,12 @@ test('a build gets an immutable /b/<buildId>/ base and its own folder', () => {
   ])
   expect(resolved.shared['components-context']).toEqual({
     requiredVersion: false,
+    fallback: false,
   })
-  expect(resolved.shared.react).toEqual({ requiredVersion: '^19.0.0' })
+  expect(resolved.shared.react).toEqual({
+    requiredVersion: '^19.0.0',
+    fallback: false,
+  })
 })
 
 test('buildId defaults to NF_BUILD_ID, then the build time', () => {
@@ -101,6 +105,17 @@ test.each([
   ['an expose key without ./', { ...base, exposes: { Counter: './a.tsx' } }],
   ['a bad buildId', { ...base, buildId: '..' }],
   ['a shared React entry', { ...base, shared: ['react'] }],
+  ['next itself', { ...base, shared: ['next'] }],
+  ['another next/* module', { ...base, shared: ['next/head'] }],
+  [
+    'a fallback for next/link',
+    { ...base, shared: { 'next/link': { fallback: true } } },
+  ],
+  [
+    'an invalid range',
+    { ...base, shared: { lib: { requiredVersion: 'latest' } } },
+  ],
+  ['a non-boolean fallback', { ...base, shared: { lib: { fallback: 'yes' } } }],
 ])('rejects %s', (_label, options) => {
   const code = codeOf(() => resolveComponentsOptions(options as never, ctx))
   expect(code === 'NF-002' || code === 'NF-020').toBe(true)

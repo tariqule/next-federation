@@ -2,8 +2,8 @@
 import { createContext, createElement, useContext, useState } from 'react'
 
 // The hosts' cart state, as a React context. Hosts render <CartProvider>;
-// the client-components remote reads it with useCart(). The remote declares
-// this package host-provided (`shared` in its vite.config.ts), so it never
+// the components remote (remote components) reads it with useCart(). The
+// remote declares this package host-provided (`shared` in its vite.config.ts), so it never
 // bundles a copy: it gets the host's module and therefore the host's context.
 const CartContext = createContext(null)
 

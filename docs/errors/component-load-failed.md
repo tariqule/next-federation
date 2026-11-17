@@ -2,7 +2,7 @@
 
 ## What happened
 
-A Mode A remote component could not be loaded: its build descriptor could not be fetched (HTTP
+A remote component could not be loaded: its build descriptor could not be fetched (HTTP
 error, timeout, not JSON or not a v1 descriptor), or its module failed to load in the server or the
 browser. The component's fallback renders; the page still answers 200.
 

@@ -7,6 +7,7 @@ import { Inert } from './routes/Inert.tsx'
 import { Inject } from './routes/Inject.tsx'
 import { Islands } from './routes/Islands.tsx'
 import { ModeA } from './routes/ModeA.tsx'
+import { ModeANext } from './routes/ModeANext.tsx'
 import { Retired } from './routes/Retired.tsx'
 import { Shared } from './routes/Shared.tsx'
 import { Skew } from './routes/Skew.tsx'
@@ -29,6 +30,7 @@ const routes: Record<string, () => ReactNode> = {
   '/retired': Retired,
   '/shared': Shared,
   '/mode-a': ModeA,
+  '/mode-a-next': ModeANext,
 }
 const Page =
   routes[location.pathname] ?? (() => <p>next-federation SPA host</p>)

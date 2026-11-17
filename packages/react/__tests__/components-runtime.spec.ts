@@ -1,3 +1,4 @@
+import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { createComponentRuntime } from '../src/components/runtime.ts'
 import type {
@@ -100,6 +101,8 @@ const settle = (p: Promise<unknown>) =>
 
 afterEach(() => {
   delete (globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__
+  // Server runtimes record their React process-wide (one-React check).
+  delete (componentTrustRegistry() as { reacts?: unknown }).reacts
   rs.restoreAllMocks()
 })
 
@@ -625,5 +628,338 @@ describe('fix round 2', () => {
     const again = runtime.serverLoad(d, './Counter')
     expect(again).not.toBe(first)
     expect(await again).toMatchObject({ entry: d.manifest })
+  })
+})
+
+describe('shared modules: version negotiation (NF-036)', () => {
+  const codeOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 'ok',
+      (e: { code?: string; message?: string }) => e.code ?? e.message
+    )
+  const shared = (
+    entries: RemoteComponentDescriptor['shared']
+  ): Partial<RemoteComponentDescriptor> => ({ shared: entries })
+
+  test('a module the host does not provide (no fallback) refuses the load before MF runs', async () => {
+    const { runtime, instance, events, sleeps } = setup({ isServer: false })
+    const d = descriptor(
+      'c1',
+      shared({ 'next/link': { requiredVersion: false, fallback: false } })
+    )
+    const p = runtime.load(d, './NavLink')
+    expect(await codeOf(p)).toBe('NF-036')
+    await expect(p).rejects.toThrow(/"next\/link".*does not provide/)
+    expect(instance.loads).toEqual([])
+    expect(sleeps).toEqual([]) // never retried: it cannot succeed
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'component:error', code: 'NF-036' })
+    )
+  })
+
+  test("the host's version must satisfy requiredVersion (no fallback)", async () => {
+    const { runtime, instance } = setup()
+    runtime.registerShared({ lib: { version: '1.4.0', module: {} } })
+    const d = descriptor(
+      'c1',
+      shared({ lib: { requiredVersion: '^2.0.0', fallback: false } })
+    )
+    const p = runtime.load(d, './Counter')
+    expect(await codeOf(p)).toBe('NF-036')
+    await expect(p).rejects.toThrow(/"lib" \^2\.0\.0.*1\.4\.0/)
+    expect(instance.loads).toEqual([])
+  })
+
+  test('a satisfying host version, or requiredVersion false, loads', async () => {
+    const { runtime } = setup()
+    runtime.registerShared({ lib: { version: '2.3.0', module: {} } })
+    runtime.registerShared({ other: { version: '0.1.0', module: {} } })
+    const d = descriptor(
+      'c1',
+      shared({
+        lib: { requiredVersion: '^2.0.0', fallback: false },
+        other: { requiredVersion: false, fallback: false },
+      })
+    )
+    expect(await settle(runtime.load(d, './Counter'))).toBe('ok')
+  })
+
+  test('fallback: a missing or unsatisfying host copy is left to the build (its own copy)', async () => {
+    const { runtime } = setup()
+    runtime.registerShared({ lib: { version: '1.0.0', module: {} } })
+    const d = descriptor(
+      'c1',
+      shared({
+        lib: { requiredVersion: '^2.0.0', fallback: true },
+        absent: { requiredVersion: '^1.0.0', fallback: true },
+      })
+    )
+    expect(await settle(runtime.load(d, './Counter'))).toBe('ok')
+  })
+
+  test('only the exposes that import a module need it', async () => {
+    const { runtime } = setup({ isServer: false })
+    const d = descriptor(
+      'c1',
+      shared({
+        'next/router': {
+          requiredVersion: false,
+          fallback: false,
+          exposes: ['./PagesNavLink'],
+        },
+      })
+    )
+    expect(await settle(runtime.load(d, './Counter'))).toBe('ok')
+    expect(await codeOf(runtime.load(d, './PagesNavLink'))).toBe('NF-036')
+  })
+
+  test('a host module version must be a semver version (NF-002)', () => {
+    const { runtime } = setup()
+    let code: string | undefined
+    try {
+      runtime.registerShared({ lib: { version: 'latest', module: {} } })
+    } catch (e) {
+      code = (e as { code?: string }).code
+    }
+    expect(code).toBe('NF-002')
+  })
+
+  test('the server renders a refused build in the browser only (null), no MF load', async () => {
+    const { runtime, instance } = setup()
+    const d = descriptor(
+      'c1',
+      shared({ lib: { requiredVersion: false, fallback: false } })
+    )
+    expect(await runtime.serverLoad(d, './Counter')).toBeNull()
+    expect(instance.loads).toEqual([])
+  })
+})
+
+describe('shared modules registered late, and fallback copies', () => {
+  afterEach(() => {
+    delete (globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__
+  })
+
+  test('a module registered after a container loaded reaches the next load (a new MF instance)', async () => {
+    let created = 0
+    const { runtime, instance } = setup({
+      createInstance: (options) => {
+        created++
+        instance.shared.push(options.shared)
+        return instance
+      },
+    })
+    await runtime.load(descriptor('c1'), './NavLink')
+    expect(created).toBe(1)
+    // Registering creates nothing by itself.
+    runtime.registerShared({ ctx: { version: '1.0.0', module: {} } })
+    expect(created).toBe(1)
+    await runtime.load(descriptor('c1'), './Counter')
+    // An initialised container never sees modules registered after its
+    // init: the new module made the runtime start over, and re-register.
+    expect(created).toBe(2)
+    expect(Object.keys(instance.shared.at(-1)!)).toContain('ctx')
+    expect(instance.registrations.at(-1)).toEqual({
+      entry: descriptor('c1').manifest,
+      force: true,
+    })
+    // A module it already provides (another version): no new instance.
+    runtime.registerShared({ ctx: { version: '1.1.0', module: {} } })
+    await runtime.load(descriptor('c1'), './Other')
+    expect(created).toBe(2)
+  })
+
+  test("fallback: a satisfying host copy is what the build's own copy resolves to", async () => {
+    const hostCopy = { copy: 'host' }
+    const { runtime } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
+    const d = descriptor('c1', {
+      shared: {
+        lib: {
+          requiredVersion: '^2.0.0',
+          fallback: true,
+          version: '2.0.0',
+        },
+      },
+    })
+    await runtime.load(d, './Counter')
+    const share = (
+      globalThis as {
+        __mf_module_cache__?: { share: Record<string, unknown> }
+      }
+    ).__mf_module_cache__?.share
+    expect(share?.['default:lib@2.0.0']).toBe(hostCopy)
+  })
+
+  test("fallback: never for React or next/* (always the host's), even in a descriptor that says so", async () => {
+    const { runtime } = setup()
+    runtime.registerShared({
+      'next/link': { version: '16.4.6', module: {} },
+    })
+    const d = descriptor('c1', {
+      shared: {
+        'next/link': {
+          requiredVersion: false,
+          fallback: true,
+          version: '16.4.6',
+        },
+        react: { requiredVersion: false, fallback: true, version: '19.3.1' },
+      },
+    })
+    await runtime.load(d, './Counter')
+    const share =
+      (
+        globalThis as {
+          __mf_module_cache__?: { share: Record<string, unknown> }
+        }
+      ).__mf_module_cache__?.share ?? {}
+    expect(share['default:next/link@16.4.6']).toBeUndefined()
+    expect(share['default:react@19.3.1']).toBeUndefined()
+  })
+
+  const fallbackDescriptor = () =>
+    descriptor('c1', {
+      shared: {
+        lib: { requiredVersion: '^2.0.0', fallback: true, version: '2.0.0' },
+      },
+    })
+  const cachedLib = () =>
+    (
+      globalThis as {
+        __mf_module_cache__?: { share: Record<string, unknown> }
+      }
+    ).__mf_module_cache__?.share?.['default:lib@2.0.0']
+
+  test('server: a process with two Reacts (two router layers) never seeds a fallback copy', async () => {
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    // The other layer's runtime (an App Router and a Pages Router route).
+    setup({
+      react: otherReact,
+      hostShared: { react: { version: '19.3.1', module: otherReact } },
+    })
+    const { runtime } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: {} } })
+    await runtime.load(fallbackDescriptor(), './Counter')
+    expect(cachedLib()).toBeUndefined()
+  })
+
+  test('server: a build that needs a seeded copy it cannot get renders browser-only (no hydration mismatch)', async () => {
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    setup({
+      react: otherReact,
+      hostShared: { react: { version: '19.3.1', module: otherReact } },
+    })
+    const { runtime, instance } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: {} } })
+    // The browser seeds the host's copy, so the server must not render the
+    // bundled one: it leaves this component to the browser.
+    expect(
+      await runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).toBeNull()
+    expect(instance.loads).toEqual([])
+    // An unsatisfying host copy means the bundled copy on both sides: SSR.
+    const unsatisfied = setup()
+    unsatisfied.runtime.registerShared({
+      lib: { version: '1.0.0', module: {} },
+    })
+    expect(
+      await unsatisfied.runtime.serverLoad(fallbackDescriptor(), './Counter')
+    ).not.toBeNull()
+  })
+
+  test('server: a stale share cache (another instance of a host module) never seeds a fallback copy', async () => {
+    ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+      share: { 'default:ctx': { other: true } },
+    }
+    const { runtime } = setup()
+    runtime.registerShared({
+      lib: { version: '2.1.0', module: {} },
+      ctx: { version: '1.0.0', module: {} },
+    })
+    await runtime.load(fallbackDescriptor(), './Counter')
+    expect(cachedLib()).toBeUndefined()
+  })
+
+  test('browser: one React per page, so a satisfying host copy is seeded', async () => {
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    setup({ isServer: false, react: otherReact })
+    const hostCopy = {}
+    const { runtime } = setup({ isServer: false })
+    runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
+    await runtime.load(fallbackDescriptor(), './Counter')
+    expect(cachedLib()).toBe(hostCopy)
+  })
+
+  test('fallback: an unsatisfying host copy, another expose, or a copy already in use is left alone', async () => {
+    const bundled = { copy: 'bundled' }
+    ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+      share: { 'default:used@1.0.0': bundled },
+    }
+    const { runtime } = setup()
+    runtime.registerShared({
+      lib: { version: '1.4.0', module: {} },
+      other: { version: '2.0.0', module: {} },
+      used: { version: '1.0.0', module: {} },
+    })
+    const fallback = (version: string, exposes?: string[]) => ({
+      requiredVersion: '^1.0.0',
+      fallback: true,
+      version,
+      ...(exposes ? { exposes } : {}),
+    })
+    const d = descriptor('c1', {
+      shared: {
+        lib: { ...fallback('2.0.0'), requiredVersion: '^2.0.0' },
+        other: {
+          ...fallback('2.0.0', ['./Elsewhere']),
+          requiredVersion: '^2.0.0',
+        },
+        used: fallback('1.0.0'),
+      },
+    })
+    await runtime.load(d, './Counter')
+    const share = (
+      globalThis as unknown as {
+        __mf_module_cache__: { share: Record<string, unknown> }
+      }
+    ).__mf_module_cache__.share
+    expect(share['default:lib@2.0.0']).toBeUndefined()
+    expect(share['default:other@2.0.0']).toBeUndefined()
+    expect(share['default:used@1.0.0']).toBe(bundled)
+  })
+})
+
+describe('next/* modules', () => {
+  test("the identity guard names another router's copy for next/*, not a dev reload", () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const { runtime } = setup()
+    runtime.registerShared({ 'next/link': { version: '16.4.6', module: {} } })
+    ;(globalThis as { __mf_module_cache__?: unknown }).__mf_module_cache__ = {
+      share: { 'default:next/link': { other: true }, react: fakeReact },
+    }
+    expect(runtime.serverBlock(descriptor('c1'))).toBe('stale')
+    const line = warn.mock.calls.map((c) => c.join(' ')).join('\n')
+    expect(line).toMatch(/NF-028.*other router.s copy of "next\/link"/)
+    expect(line).not.toMatch(/dev server reloaded/)
+  })
+
+  test('a canary or prerelease Next host satisfies a next/* range on its release numbers', async () => {
+    const { runtime } = setup()
+    runtime.registerShared({
+      'next/link': { version: '16.5.0-canary.3', module: {} },
+      lib: { version: '2.0.0-beta.1', module: {} },
+    })
+    const d = descriptor('c1', {
+      shared: {
+        'next/link': { requiredVersion: '^16.0.0', fallback: false },
+      },
+    })
+    expect(await settle(runtime.load(d, './NavLink'))).toBe('ok')
+    // Only next/*: other modules keep npm's prerelease rule.
+    const strict = descriptor('c2', {
+      shared: { lib: { requiredVersion: '^2.0.0', fallback: false } },
+    })
+    expect(await settle(runtime.load(strict, './Counter'))).toBe('failed')
   })
 })

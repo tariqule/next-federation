@@ -35,7 +35,10 @@ export type RemoteComponentOptions = {
   fallback?: ReactNode
   /**
    * Modules this host provides to remotes, besides React: the remote lists
-   * them in its `shared` (host-provided, never bundled).
+   * them in its `shared`. `version` is the real version of the host's copy
+   * (from its package.json): a remote whose `requiredVersion` it does not
+   * satisfy renders its fallback (NF-036), unless the remote bundles its own
+   * copy (`fallback: true`).
    */
   shared?: SharedModules
 }

@@ -25,4 +25,4 @@ READMEs), then `pnpm --filter example-next-app-router dev` (or `build` and `star
 remotes the page still answers, with the fallbacks.
 
 Guides: [App Router host](../../docs/guides/getting-started-app-router.md),
-[Identity](../../docs/guides/identity.md), [Client components](../../docs/guides/client-components.md).
+[Identity](../../docs/guides/identity.md), [Remote components](../../docs/guides/remote-components.md).

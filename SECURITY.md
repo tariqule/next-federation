@@ -26,7 +26,7 @@ have a security report, with no details, and a maintainer will arrange a private
 - Identity tokens: minting, verification, key handling, and anything that could leak a token into
   HTML, prerendered output, Next's RSC payload, `__NEXT_DATA__` or browser storage.
 - Island envelope trust: how a host fetches, validates and renders a remote's island envelope.
-- Mode A (client components) remote-code evaluation: descriptor signing and pinning, sha384 integrity
+- Remote components: remote-code evaluation: descriptor signing and pinning, sha384 integrity
   checks, and the conditions under which a host evaluates a remote's server build.
 - `nf-serve`, the static build server shipped in `@next-federation/server`.
 
