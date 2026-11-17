@@ -124,7 +124,11 @@ not per island.
   Keep `throw` for bugs.
 - `404 NF-031`: the action id is unknown to the build that served the request (usually a page
   rendered by one build calling another). See [action-not-found](../errors/action-not-found.md).
-- `400 NF-032`: the request is malformed: wrong header, content type or body.
+- `400 NF-032`: the request is malformed: wrong header, content type or body. A `413` (the body is
+  larger than the remote accepts) is reported as `NF-032` too.
+- `NF-038`: the response is not a Server Action response and carries no NF code: a 5xx from the
+  remote or a proxy, any other response that is not a Server Action response, or one with no body.
+  See [action-request-failed](../errors/action-request-failed.md).
 - Each call is reported to the host as an `island:action` event (`ok`, `status`, `code`, `ms`,
   `retried`; never arguments, results or tokens), on `onEvent` and the bubbling `nf:island` DOM
   event.

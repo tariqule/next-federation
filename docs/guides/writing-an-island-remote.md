@@ -19,19 +19,19 @@ app and a remote is not. These are the edits that made the scaffold work (checke
 3. **Replace `vite.config.ts`** with the config in step 2 below, and put your islands in
    `src/islands/`.
 4. **Change the build script** from `tsc -b && vite build` to `vite build`, and add
-   `"start": "nf-serve --dir dist --port 4100"`. If you keep `tsc -b` as a type check, delete
-   `src/main.tsx` first: with `index.html` gone it is the file that no longer type-checks. `vite
-   preview` does not serve a remote: use `nf-serve`.
+   `"start": "nf-serve --dir dist --port 4100"`. If you keep `tsc -b` as a type check, make sure
+   step 2 removed `src/main.tsx` too: it imports `App.tsx` and `index.css`, which step 2 deletes, so
+   it no longer type-checks. `vite preview` does not serve a remote: use `nf-serve`.
 5. **Pin React** ([React versions](../../README.md)). The scaffold installs a caret range and
    `react-server-dom-webpack` is not in it: add it at the same exact version as `react`.
 6. **oxlint** (the scaffold's `lint` script and `.oxlintrc.json`) is independent of the build. Keep
    it or delete it; nothing in next-federation reads it. Its `react/only-export-components` rule
    protects Fast Refresh, which a remote does not have, so you can turn it off.
-7. **TypeScript:** create-vite currently installs TypeScript 7. A components remote with
-   `types: true` ([Remote components](remote-components.md#types)) needs TypeScript 5 or 6 for now
-   (`@next-federation/vite`'s peer range is `>=5.0.0 <7`): with 7 the build still succeeds but
-   publishes no types and warns `NF-002`, naming `npm install -D typescript@6`. An island remote does
-   not use `types`, so any version works.
+7. **TypeScript:** any version installs, and an island remote works with any (it does not use
+   `types`). A components remote with `types: true`
+   ([Remote components](remote-components.md#types)) needs TypeScript 5 or 6: with TypeScript 7,
+   which create-vite currently installs, the build still succeeds, warns `NF-002` naming
+   `npm install -D typescript@6`, and publishes no types.
 
 ## 1. Install
 
@@ -132,6 +132,25 @@ export default async function ProductPanel({ sku }: { sku: string }) {
 }
 ```
 
+```ts
+// src/data.ts
+const products: Record<string, { name: string; price: number }> = {
+  A1: { name: 'Desk lamp', price: 39 },
+}
+
+export async function getProduct(sku: string) {
+  return products[sku] ?? { name: `Unknown product ${sku}`, price: 0 }
+}
+```
+
+```css
+/* src/islands/ProductPanel.css */
+.product-panel {
+  border: 1px solid #ddd;
+  padding: 1rem;
+}
+```
+
 ```tsx
 // src/islands/Counter.tsx
 'use client'
@@ -197,9 +216,10 @@ dev server on that port). The loop is manual:
 
 - **Edit, then reload the host page.** Nothing refreshes by itself: there is no Fast Refresh, and
   the host does not know the remote changed.
-- **A static public island stays stale for `revalidate` seconds**, even in `next dev`, because the
-  host caches the envelope (60 seconds by default). Use `dynamic` on the island while you work on it
-  (see [Caching](caching.md)):
+- **A static public island can show an older version.** The host caches its envelope (60 seconds by
+  default), so a reload may serve the cached envelope until it revalidates, in `next dev` too. With
+  `dynamic`, the island is fetched fresh on every request. Use it while you work on the island (see
+  [Caching](caching.md)):
 
   ```tsx
   <RemoteIsland remote="shop" island="ProductPanel" dynamic fallback={<p>loading…</p>} />
@@ -210,7 +230,8 @@ dev server on that port). The loop is manual:
 - The first host load against a remote with a cold Vite cache hydrates with one React: the plugin
   pre-bundles React and never pre-bundles `@next-federation/island`. If a package your own island
   client components import still triggers `optimized dependencies changed`, add it to
-  `optimizeDeps.include` in the remote's Vite config.
+  `optimizeDeps.include` in the remote's Vite config, but not a package with `'use client'`
+  components of its own.
 - To test the real server build, use `vite build` and `nf-serve`.
 
 ## Rules and limits
@@ -221,7 +242,8 @@ dev server on that port). The loop is manual:
 - Island metadata (`<title>`, `<meta>`, `<link>`) never reaches the host `<head>`. The server strips
   it from the island HTML. In development, `NF-018` names anything it stripped.
 - No Fast Refresh. `@vitejs/plugin-react` and `@vitejs/plugin-react-swc` are rejected (`NF-002`), and
-  islands inside a host reload instead of hot-refreshing.
+  islands inside a host do not refresh on their own: reload the host page after an edit
+  ([Develop against a host](#develop-against-a-host)).
 - Server Actions reach client components only as props from a Server Component (`NF-034` for a
   client import), and forms use `<Form>` from `@next-federation/island` (`NF-035` for a plain
   `<form action>`).

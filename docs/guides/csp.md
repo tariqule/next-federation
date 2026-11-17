@@ -92,6 +92,9 @@ What next-federation does under a nonce policy, from the code:
 - The island bootstrap and remote component chunks are loaded from the remote's origin. With
   `'strict-dynamic'` they are trusted through the nonce'd script that loads them (see above);
   without it, the remote origin stays in `script-src`.
+- With `'strict-dynamic'`, the `<link rel="modulepreload">` tags the server renders for a remote
+  component's entry and chunks carry no nonce, so the browser blocks them. Only the preload is lost:
+  the nonce'd script still loads the chunks.
 
 **Not validated.** The validation of this guide ran the `'unsafe-inline'` policy above only. A
 nonce-based policy has no test in this repository, so try it in a preview deployment and watch the
