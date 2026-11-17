@@ -184,7 +184,13 @@ remotes on React 19.3.1, gzip:
   appears once**. This holds for the App Router (with and without `cacheComponents`) and the Pages
   Router. Keep islands small. The host warns in development above 100 KB per envelope (`NF-024`)
   and refuses a response body above 5 MiB (`islands.maxBytes`, or a remote's `maxBytes`): the
-  island fails with `NF-007` and renders its fallback.
+  island fails with `NF-007` and renders its fallback, and the request is aborted at the limit.
+  **Without `cacheComponents`, Next's fetch cache can read the whole body first**: public islands
+  are fetched with `next: { revalidate, tags }`, and while Next prerenders or revalidates a page it
+  buffers the full response (to store it) before the island fetch sees any of it. The body is still
+  refused, but only after it was downloaded. With `cacheComponents`, and for private islands, the
+  limit applies as the body arrives. To bound what the host downloads in every case, cap response
+  sizes at the remote or at a proxy in front of it.
 - **Each island costs a host-to-remote server hop.** Use caching, `preloadIsland` and co-locate the
   regions of host and remote.
 

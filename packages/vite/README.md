@@ -122,9 +122,23 @@ only (a `NODE_ENV` other than `production` bundles React's development copies, w
   island handler fills.
 - **Dev CORS.** Vite's own CORS middleware is off; module assets get CORS for `hosts` only, and
   `/_nf/` requests are answered by the island handler, CORS included, as in production.
-- **No Fast Refresh.** `@vitejs/plugin-react` and `@vitejs/plugin-react-swc` are rejected with `NF-002`; Vite's built-in oxc compiles
+- **No Fast Refresh, no live reload in hosts.** `@vitejs/plugin-react` and `@vitejs/plugin-react-swc` are rejected with `NF-002`; Vite's built-in oxc compiles
   JSX. Fast Refresh code needs a preamble that only Vite-served pages have, so it cannot run inside
-  a host. Known DX gap: islands rendered inside a host reload instead of hot-refreshing.
+  a host. A host page is not connected to the remote's dev server either: after you edit an island,
+  nothing changes until you reload the host page. A public island the host caches keeps its cached
+  envelope for its `revalidate` (60 s by default) under `next dev` too: wait, call
+  `revalidateIsland`, or give it a short `revalidate` in development.
+- **Dev pre-bundling.** React (`react`, `react/jsx-runtime`, `react/jsx-dev-runtime`, `react-dom`,
+  `react-dom/client`) is pre-bundled when the dev server starts, and `@next-federation/island` is
+  never pre-bundled (`optimizeDeps.exclude`: its `Form` and `Link` are loaded as files, and a
+  pre-bundled copy would be a second instance). So the first host load against a cold optimizer
+  cache does not make Vite re-optimize (Vite would ask the page to reload, which a host page never
+  hears, and the island would load a second React). A package your islands' client components
+  import that Vite discovers on that first load can still re-optimize: list it in
+  `optimizeDeps.include` (but not a package with `'use client'` components of its own).
+- **Browser console forwarding off.** Vite 8 can print browser console output in the dev server's
+  terminal; for a remote that would be every host page's console, so the plugin sets
+  `server.forwardConsole: false` unless your config sets it.
 - **Server Actions reach client components as props.** A `'use server'` file imported by a client
   module (browser or SSR build) fails with `NF-034`; pass the action from a Server Component
   instead. A plain `<form action={action}>`, or a `formAction={action}` outside a `<Form>`, warns
@@ -180,9 +194,11 @@ Programmatic builds set `NF_VITE_COMMAND=build` (the plugin reads the command be
 sha384, and signs that index in the descriptor, for hosts' `nf-types`. The declarations of the
 exposed modules and the local files they import become public, **including the literal values of
 constants, `as const` objects and enums** (also ones inlined from outside the root): don't expose
-a module whose type graph reaches a secret. Without `typescript`, when TypeScript cannot emit
-them, or when a declaration names an absolute path or a path above the root, the build warns and
-publishes no types.
+a module whose type graph reaches a secret. It uses the remote project's own TypeScript compiler
+API: TypeScript 5 or 6 (TypeScript 7, the native compiler, has no compiler API: pin
+`typescript@6` in the remote project). Without `typescript`, with TypeScript 7, when TypeScript cannot emit
+them, or when a declaration names an absolute path or a path above the root, the build warns
+(`NF-002`) and publishes no types.
 Guide: [Remote components](../../docs/guides/remote-components.md).
 
 ## API

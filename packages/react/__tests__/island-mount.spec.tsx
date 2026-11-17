@@ -594,6 +594,83 @@ describe('IslandMount', () => {
     expect(getLiveIslandCount()).toBe(0)
   })
 
+  test('a rejected bootstrap import renders errorFallback when there is one (NF-011)', async () => {
+    const boot = fakeBootstrap()
+    const events: IslandClientEvent[] = []
+    render(
+      mount({
+        boot,
+        onEvent: (e) => events.push(e),
+        errorFallback: <p>island unavailable</p>,
+      })
+    )
+    const failure = new TypeError('Failed to fetch dynamically imported module')
+    await act(async () => {
+      boot.loads[0]!.d.reject(failure)
+      await Promise.resolve()
+    })
+    await tick()
+    expect(container.querySelector('[data-nf-root]')).toBeNull()
+    expect(container.textContent).toBe('island unavailable')
+    expect(events).toMatchObject([
+      { type: 'island:error', kind: 'bootstrap', code: 'NF-011' },
+    ])
+  })
+
+  test('inertOnLoadFailure keeps the server html of an island whose bootstrap cannot load', async () => {
+    const boot = fakeBootstrap()
+    render(
+      <IslandMount
+        envelope={envelope()}
+        loadBootstrap={boot.loadBootstrap}
+        errorFallback={<p>island unavailable</p>}
+        inertOnLoadFailure
+      />
+    )
+    const el = islandEl()
+    const html = el.innerHTML
+    await act(async () => {
+      boot.loads[0]!.d.reject(new TypeError('Failed to fetch'))
+      await Promise.resolve()
+    })
+    await tick()
+    expect(el.dataset.nfState).toBe('inert')
+    expect(el.innerHTML).toBe(html)
+    expect(container.textContent).not.toContain('island unavailable')
+  })
+
+  test('island code that fails to load during hydration is NF-011, not NF-012, and renders errorFallback', async () => {
+    const boot = fakeBootstrap()
+    const events: IslandClientEvent[] = []
+    render(
+      mount({
+        boot,
+        onEvent: (e) => events.push(e),
+        errorFallback: <p>island unavailable</p>,
+      })
+    )
+    await boot.resolveAll()
+    const { onError } = boot.mounts[0]!.options
+    // What the bootstrap's client-reference loader rejects with (create-bootstrap).
+    const failure = new NFError(
+      'NF-011',
+      'Island code "/src/x.tsx" failed to load.'
+    )
+    await act(async () => {
+      onError!(failure, 'uncaught')
+      await Promise.resolve()
+    })
+    expect(container.textContent).toBe('island unavailable')
+    expect(events.filter((e) => e.type === 'island:error')).toMatchObject([
+      { type: 'island:error', kind: 'uncaught', code: 'NF-011' },
+    ])
+    expect(logger.error).toHaveBeenCalledWith(
+      'NF-011',
+      expect.any(String),
+      failure
+    )
+  })
+
   test('mountIsland throwing NF-006 marks inert and reports NF-006', async () => {
     const boot = fakeBootstrap()
     const events: IslandClientEvent[] = []

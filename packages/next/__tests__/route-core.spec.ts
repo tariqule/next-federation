@@ -117,14 +117,14 @@ test('missing aud is 400', async () => {
   expect(r.status).toBe(400)
 })
 
-test('POST token without a session is 401', async () => {
+test('POST token without a session is 200 with a null token (anonymous, not an error)', async () => {
   const r = await handleFederationRoute(
     await fed(),
     req({ identity: async () => null })
   )
-  expect(r.status).toBe(401)
+  expect(r.status).toBe(200)
   expect(r.headers['Cache-Control']).toBe('no-store')
-  expect(r.body).toBeUndefined()
+  expect(r.body).toEqual({ token: null })
 })
 
 test('cross-site POST (Sec-Fetch-Site: cross-site) is 403 and identity() is not called', async () => {

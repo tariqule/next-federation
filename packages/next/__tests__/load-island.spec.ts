@@ -226,6 +226,87 @@ test('private island: Bearer token on the request, no-store, and no token anywhe
   )
 })
 
+describe('private island clock (partialPrefetching: Date.now() is flagged before uncached I/O)', () => {
+  const realNow = Date.now.bind(Date)
+  const realPerf = performance.now.bind(performance)
+  const claims = (auth: string) =>
+    JSON.parse(
+      Buffer.from(auth.slice(7).split('.')[1]!, 'base64url').toString()
+    )
+
+  /** Records every Date.now() call made before the remote request returned. */
+  function watchClock() {
+    let fetched = false
+    let early = 0
+    rs.spyOn(Date, 'now').mockImplementation(() => {
+      if (!fetched) early++
+      return realNow()
+    })
+    const inner = globalThis.fetch
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      const response = await inner(url, init)
+      fetched = true
+      return response
+    }) as typeof fetch
+    return {
+      early: () => early,
+      reset: () => {
+        fetched = false
+        early = 0
+      },
+    }
+  }
+
+  test('the token is minted without Date.now(), at the current time', async () => {
+    const clock = watchClock()
+    await loadIsland(
+      federation(),
+      { getIdentity: () => ({ sub: 'user-1' }) },
+      { remote: 'a', island: 'MyOrders', private: true }
+    )
+    expect(clock.early()).toBe(0)
+    const { iat, exp } = claims(seen.headers.authorization!)
+    expect(Math.abs(iat - realNow() / 1000)).toBeLessThan(5)
+    expect(exp).toBeGreaterThan(iat)
+  })
+
+  test('a monotonic clock that fell behind (host asleep) is corrected after the first request, and its rejected token is replaced once', async () => {
+    const clock = watchClock()
+    // performance.now() does not advance while the machine sleeps.
+    rs.spyOn(performance, 'now').mockImplementation(
+      () => realPerf() - 3_600_000
+    )
+    // The remote refuses a token issued an hour ago (expired).
+    respond = () => {
+      const { exp } = claims(seen.headers.authorization!)
+      return exp < realNow() / 1000
+        ? new Response(JSON.stringify({ error: 'NF-014' }), { status: 401 })
+        : new Response(JSON.stringify(envelope))
+    }
+    const r = await loadIsland(
+      federation(),
+      { getIdentity: () => ({ sub: 'user-1' }) },
+      { remote: 'a', island: 'MyOrders', private: true }
+    )
+    expect(r).toMatchObject({ kind: 'ok' })
+    expect(requests).toBe(2)
+    expect(clock.early()).toBe(0)
+    // The next render is right first time.
+    clock.reset()
+    requests = 0
+    await loadIsland(
+      federation(),
+      { getIdentity: () => ({ sub: 'user-2' }) },
+      { remote: 'a', island: 'MyOrders', private: true }
+    )
+    expect(requests).toBe(1)
+    expect(clock.early()).toBe(0)
+    expect(
+      Math.abs(claims(seen.headers.authorization!).iat - realNow() / 1000)
+    ).toBeLessThan(5)
+  })
+})
+
 test('host cookies are never forwarded to the remote', async () => {
   await loadIsland(
     federation(),

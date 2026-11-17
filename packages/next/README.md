@@ -68,7 +68,9 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(f
   browser carry only the token endpoint. Requires `getIdentity` and `identity` in `defineFederation()`
   (`NF-013`). An anonymous visitor makes no remote request and sees `errorFallback`.
 - `errorFallback` (default: `fallback`) is shown when the remote fails, times out or returns an invalid
-  envelope, for an anonymous visitor on a private island, and after an uncaught island error.
+  envelope, for an anonymous visitor on a private island, and after an uncaught island error. When the
+  island's code cannot load in the browser (`NF-011`: remote down, build retired), an `errorFallback`
+  you passed replaces the island; without one, the server HTML stays, not interactive.
 - A `RemoteIsland` inside your own `'use cache'` scope (with `cacheComponents`): a failed island also
   applies the short failure profile to that enclosing scope (`cacheLife()` keeps the shortest call in a
   scope, even against an explicit long `cacheLife` there), so the failure is not cached for the scope's
@@ -168,7 +170,9 @@ export default createFederationApiHandler(federation, {
 ```
 
 The token endpoint authenticates with your own same-origin session through `getIdentity`; the library never
-reads or sets a cookie. No session: `401`. `aud` not a configured remote or missing: `400`. A request whose
+reads or sets a cookie. No session (an anonymous visitor): `200 {"token":null}`, so the island sends its
+requests without `Authorization` (hosts before this release answered `401`, which the island client still
+accepts). `aud` not a configured remote or missing: `400`. A request whose
 `Sec-Fetch-Site` header is present and not `same-origin`: `403` (`getIdentity` is not called).
 
 Startup validation: creating the routes calls `validateIdentity(federation)`, so a malformed signing key

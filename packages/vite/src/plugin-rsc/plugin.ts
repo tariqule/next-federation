@@ -225,7 +225,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
         // Checked again, as Vite resolves them, when the client build starts.
         readVersion: packageVersionReader(resolve(user.root ?? process.cwd())),
       })
-      return remoteViteConfig(resolved)
+      return remoteViteConfig(resolved, user)
     },
     configResolved(config) {
       viteConfig = config

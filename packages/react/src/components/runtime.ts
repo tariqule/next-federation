@@ -410,6 +410,32 @@ const sameIntegrity = (
   )
 }
 
+/**
+ * Drops an MF instance a runtime replaced from MF's page- or process-wide
+ * registry: its entry in `__FEDERATION__.__INSTANCES__` and the share scopes
+ * it registered in `__SHARE__`. MF registers those under an instance's id or
+ * name once per key, so the next instance of that name registers its own.
+ */
+export function dropInstance(instance: FederationInstance): void {
+  const fed = (
+    globalThis as {
+      __FEDERATION__?: {
+        __INSTANCES__?: unknown[]
+        __SHARE__?: Record<string, unknown>
+      }
+    }
+  ).__FEDERATION__
+  const list = fed?.__INSTANCES__
+  const at = list?.indexOf(instance) ?? -1
+  if (at !== -1) list!.splice(at, 1)
+  const own = (instance as { shareScopeMap?: unknown }).shareScopeMap
+  const share = fed?.__SHARE__
+  if (own === undefined || !share) return
+  for (const key of Object.keys(share)) {
+    if (share[key] === own) delete share[key]
+  }
+}
+
 export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const now = deps.now ?? (() => performance.now())
   const sleep =
@@ -486,13 +512,15 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
    * The next load gets a new MF instance and registers its remote again
    * (after a timed-out load, or a module registered late). The scope and its
    * tag stay: an entry load still running is reused, never started again.
-   * The replaced instance leaves the process-wide registry.
+   * The replaced instance leaves MF's registry (process- or page-wide).
    */
   const startOver = (): void => {
     const old = instance
     instance = null
     registered.clear()
-    if (old && scope) deps.forget?.(old)
+    if (!old) return
+    if (scope) deps.forget?.(old)
+    else dropInstance(old)
   }
   /**
    * Server: a new scope (a clean share cache, its own tag: the remote's
@@ -937,15 +965,21 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
           `Build "${d.buildId}" of "${d.remote}" found a stale fallback copy again after ${MAX_SCOPES} fresh scopes in this server layer: it renders in the browser only here.`
         )
       }
+      const ready = (state: 'loaded' | 'refused') =>
+        (componentTrustRegistry().serverReady ??= new Map()).set(d.base, state)
       if (this.serverBlock(d)) {
         result = resolved(null)
+        ready('refused')
       } else {
         const load = this.load(d, expose)
         // Checked again once loaded, against the scope the module was loaded
         // in: another instance of a host module may have reached it.
         const from = loadScopes.get(load) ?? scope
-        const after = (mod: RemoteModule): RemoteModule | null =>
-          serverBlockIn(d, from) ? null : mod
+        const after = (mod: RemoteModule): RemoteModule | null => {
+          const blockedNow = serverBlockIn(d, from) !== null
+          ready(blockedNow ? 'refused' : 'loaded')
+          return blockedNow ? null : mod
+        }
         if (load.status === 'fulfilled') {
           result = resolved(after(load.value!))
         } else if (load.status === 'rejected') {

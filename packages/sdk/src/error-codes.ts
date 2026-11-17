@@ -39,6 +39,7 @@ export type NFErrorCode =
   | 'NF-035'
   | 'NF-036'
   | 'NF-037'
+  | 'NF-038'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
   {
@@ -170,6 +171,10 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
     'NF-037': {
       slug: 'dev-debug-info',
       title: 'Under `next dev`, private island values may reach the browser',
+    },
+    'NF-038': {
+      slug: 'action-request-failed',
+      title: 'Server Action request failed',
     },
   }
 

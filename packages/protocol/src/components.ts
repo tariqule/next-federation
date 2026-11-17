@@ -161,6 +161,7 @@ export type ComponentTrustKind = 'signature' | 'pinned' | 'unsafe-dev'
 /** One container `init` in the process-wide lock chain (server loader). */
 export type ComponentInitLock = {
   settled: Promise<void>
+  /** When the init started running, in `performance.now()` ms. */
   started?: number
   done: boolean
   waitingFor?: ComponentInitLock
@@ -197,6 +198,14 @@ export type ComponentTrustRegistry = {
    * such build server-renders in that layer only.
    */
   unlistedLayer?: string
+  /**
+   * Per build base: the server loader of this process has loaded it
+   * ('loaded'), or will not server-render it here ('refused'). A static
+   * regeneration that renders before either (a fresh process) would bake the
+   * component's fallback into the page; App Router hosts with
+   * `cacheComponents` keep such a render out of the static shell instead.
+   */
+  serverReady?: Map<string, 'loaded' | 'refused'>
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')

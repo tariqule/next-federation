@@ -6,6 +6,9 @@ import type {
 } from '@next-federation/core'
 import { fetchVerifiedComponentDescriptor } from '@next-federation/core/components'
 import type { VerifiedDescriptorResult } from '@next-federation/core/components'
+import { componentTrustRegistry } from '@next-federation/protocol'
+import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import { logger } from '@next-federation/sdk'
 import { cacheLife, cacheTag } from 'next/cache'
 import { unstable_rethrow } from 'next/navigation'
 import { markFresh } from './fresh-mark.ts'
@@ -95,4 +98,45 @@ export async function getDescriptorFile(
   const result = await fetchVerifiedComponentDescriptor(target)
   if (!result.ok) cacheLife(FAILURE_LIFE)
   return result
+}
+
+/**
+ * A short-lived cache entry: an App Router render that uses it is left out
+ * of the static shell (a dynamic hole, rendered per request) and the page
+ * is regenerated soon, as for a failed island.
+ */
+async function notServerReadyYet(base: string): Promise<string> {
+  'use cache'
+  cacheLife(FAILURE_LIFE)
+  return base
+}
+
+/**
+ * Remote components on a static page (`cacheComponents`, after
+ * `next start`): a regeneration in a process whose server loader has not
+ * loaded the build yet would render the component's fallback (Next ends the
+ * HTML prerender before the build has loaded) and keep it as the page for a
+ * whole revalidate window. Such a render is kept out of the static shell
+ * instead: the boundary renders per request (where the server waits for the
+ * build) until a regeneration finds the build loaded or refused. Not during
+ * `next build` (that would turn a static route dynamic) or `next dev`.
+ */
+export async function skipStaticShellUntilReady(
+  descriptor: RemoteComponentDescriptor | null
+): Promise<void> {
+  if (!descriptor?.ssr) return
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    process.env.NEXT_PHASE === 'phase-production-build'
+  ) {
+    return
+  }
+  if (componentTrustRegistry().serverReady?.has(descriptor.base)) return
+  logger.warnOnce(
+    'NF-028',
+    `not-loaded:${descriptor.base}`,
+    `Build "${descriptor.buildId}" of "${descriptor.remote}" is not loaded in this server process yet: this render leaves its remote components to request time (each request waits for the build) instead of keeping their fallback in the static page, and the page regenerates once it is loaded.`
+  )
+  shortenEnclosingCache()
+  await notServerReadyYet(descriptor.base)
 }

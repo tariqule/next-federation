@@ -82,7 +82,13 @@ export function createIslandBootstrap(
       const id = rawId.split('$$cache=')[0]!
       let mod = modules.get(id)
       if (!mod) {
-        mod = deps.loadClientReference(id)
+        // A module of the island that cannot load (the remote is down, or the
+        // build was retired) is a load failure, not an error of island code.
+        mod = deps.loadClientReference(id).catch((error: unknown) => {
+          throw new NFError('NF-011', `Island code "${id}" failed to load.`, {
+            cause: error,
+          })
+        })
         modules.set(id, mod)
       }
       return mod

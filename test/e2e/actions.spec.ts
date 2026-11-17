@@ -263,11 +263,22 @@ for (const host of HOSTS) {
     }) => {
       const out = await browser.newContext()
       const signedOut = await out.newPage()
+      // A signed-out visitor is not an error at the host's token endpoint:
+      // 200 { token: null }, never a 401 (which browsers log as an error).
+      const tokenStatuses: number[] = []
+      signedOut.on('response', (r) => {
+        if (new URL(r.url()).pathname.endsWith('/api/next-federation/token'))
+          tokenStatuses.push(r.status())
+      })
       await open(signedOut, host)
       await run(mount(signedOut, 'a1'), 'order')
       await expect(errorOf(mount(signedOut, 'a1'), 'order')).toContainText(
         'NF-014'
       )
+      if (host.next) {
+        expect(tokenStatuses.length).toBeGreaterThan(0)
+        expect(new Set(tokenStatuses)).toEqual(new Set([200]))
+      }
       await out.close()
       const inCtx = await browser.newContext()
       const signedIn = await inCtx.newPage()

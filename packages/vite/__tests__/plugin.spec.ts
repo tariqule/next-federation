@@ -105,7 +105,7 @@ test('the config hook resolves the options for the Vite command', () => {
   const built = setup('build').fragment
   expect(built.base).toBe('https://shop.example/b/v1/')
   expect(built.environments!.rsc!.build!.outDir).toBe('dist/v1/rsc')
-  expect(built.server).toEqual({ cors: false })
+  expect(built.server).toEqual({ cors: false, forwardConsole: false })
   const served = setup('serve').fragment
   expect(served.base).toBe('https://shop.example/')
   expect(served.environments!.client!.build!.outDir).toBe('dist/client')

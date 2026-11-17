@@ -6,6 +6,7 @@ import type {
 } from '@next-federation/core'
 import { fetchVerifiedComponentDescriptor } from '@next-federation/core/components'
 import type { VerifiedDescriptorResult } from '@next-federation/core/components'
+import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { markFresh } from './fresh-mark.ts'
 import type { MarkedIslandResult } from './fresh-mark.ts'
 
@@ -51,4 +52,15 @@ export function getDescriptorFile(
       next: { revalidate: target.revalidate, tags: islandTags(target.remote) },
     },
   })
+}
+
+/**
+ * Legacy model: a static render waits for every Suspense boundary, so a
+ * remote component whose server build is still loading is never left as its
+ * fallback. Nothing to do.
+ */
+export async function skipStaticShellUntilReady(
+  descriptor: RemoteComponentDescriptor | null
+): Promise<void> {
+  void descriptor
 }

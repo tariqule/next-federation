@@ -63,6 +63,9 @@ export function createIslands(
         host={{ basePath: hostBasePath(), locale: spec.locale ?? '' }}
         token={token}
         errorFallback={onError}
+        // Without its own errorFallback, an island whose code cannot load in
+        // the browser keeps its server HTML (inert) rather than `fallback`.
+        inertOnLoadFailure={errorFallback === undefined}
       />
     )
   }

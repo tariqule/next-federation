@@ -9,6 +9,10 @@ const lane = laneName()
 
 export default withNextFederation({
   cacheComponents: CC,
+  // create-next-app 16's default next to cacheComponents: renders flag
+  // `Date.now()` before the first uncached I/O (app-router.spec.ts checks
+  // the server log for it).
+  partialPrefetching: CC,
   // Both hosts (3100, 3102) run from this folder at the same time.
   distDir: `${CC ? '.next-cc' : '.next'}${lane ? `-${lane}` : ''}`,
   // `page.cc.tsx` routes use 'use cache', which compiles only with

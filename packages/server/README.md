@@ -181,8 +181,10 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
   it under a supervisor (Docker, systemd, Kubernetes) that restarts it.
 
 - Remote components builds (`nf-build.json` with `kind: "components"`, written by
-  `nextFederationComponents`) are static: no process; `/b/<build>/*` serves every file of the
-  build's `client/` folder (browser and server chunks, immutable, CORS `*`),
+  `nextFederationComponents`) are static: no process; `/b/<build>/*` serves the files of the
+  build's `client/` folder (browser and server chunks, immutable, CORS `*`), except build
+  bookkeeping: dot folders and files (`.vite/manifest.json`, `.vite/mf-preload.json`) and
+  `mf-stats.json` answer `404`;
   `/b/<build>/nf-components.json` its descriptor, `/_nf/components.json` the current build's
   descriptor (`no-store`), and `/_nf/health` answers itself. Retention and `410` apply unchanged.
 

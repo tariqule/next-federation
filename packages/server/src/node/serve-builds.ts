@@ -12,6 +12,7 @@ import {
   join,
   relative,
   resolve,
+  sep,
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -173,6 +174,17 @@ function exited(child: ChildProcess): Promise<void> {
   })
 }
 
+/**
+ * Files in a build's browser folder that no browser or host needs: dot
+ * folders and files (Vite's `.vite/manifest.json`, Module Federation's
+ * `.vite/mf-preload.json`) and Module Federation's `mf-stats.json`. They are
+ * build-time inputs for tools, and list source paths and shared versions.
+ */
+function isBuildBookkeeping(rel: string): boolean {
+  const parts = rel.split(sep)
+  return parts.some((part) => part.startsWith('.')) || rel === 'mf-stats.json'
+}
+
 export async function serveBuilds(
   opts: ServeBuildsOptions
 ): Promise<ServedBuilds> {
@@ -274,6 +286,7 @@ export async function serveBuilds(
       if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
         return plain(res, 404)
       }
+      if (isBuildBookkeeping(rel)) return plain(res, 404)
       const info = await stat(file)
       if (!info.isFile()) return plain(res, 404)
       res.writeHead(200, {

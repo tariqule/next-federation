@@ -3,8 +3,9 @@
  *
  * Tokens are bound to the user's session on the host: they live in module
  * memory only (never in storage, cookies, logs, errors or events), are dropped
- * on a 401, on an identity change, on `clearIslandTokens()` and at their TTL,
- * and are requested from the host's own endpoint with same-origin credentials.
+ * on a `{ token: null }` answer (anonymous) or a 401 (older hosts), on an
+ * identity change, on `clearIslandTokens()` and at their TTL, and are requested
+ * from the host's own endpoint with same-origin credentials.
  * The cache is keyed by endpoint, which carries the remote (`aud`), and each
  * entry records the identity it was issued for.
  */
@@ -89,6 +90,8 @@ export function createTokenClient(opts: {
         method: 'POST',
         credentials: 'same-origin',
       })
+      // `{ token: null }` (an anonymous visitor), and a 401 from hosts before
+      // that answer, both mean no token: requests go without Authorization.
       if (response.ok) entry = parse(await response.json())
     } catch {
       entry = null

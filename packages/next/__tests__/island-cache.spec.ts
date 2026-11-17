@@ -1,13 +1,18 @@
 import type { IslandTarget } from '@next-federation/core'
 import { cacheLife, cacheTag } from 'next/cache'
 import { notFound } from 'next/navigation'
+import { componentTrustRegistry } from '@next-federation/protocol'
+import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import { logger } from '@next-federation/sdk'
 import {
   getPublicEnvelope as legacyGet,
   shortenEnclosingCache as legacyShorten,
+  skipStaticShellUntilReady as legacySkip,
 } from '../src/server/island-cache.legacy.ts'
 import {
   getPublicEnvelope as ccGet,
   shortenEnclosingCache as ccShorten,
+  skipStaticShellUntilReady as ccSkip,
 } from '../src/server/island-cache.cc.ts'
 
 rs.mock('next/cache', () => ({ cacheLife: rs.fn(), cacheTag: rs.fn() }))
@@ -190,6 +195,69 @@ describe('shortenEnclosingCache', () => {
 
   test('legacy: does nothing', () => {
     legacyShorten()
+    expect(cacheLife).not.toHaveBeenCalled()
+  })
+})
+
+describe('skipStaticShellUntilReady (remote components on a static cacheComponents page)', () => {
+  const base = 'https://widgets.example.com/b/b1/'
+  const d = (ssr = true) =>
+    ({
+      remote: 'widgets',
+      name: 'widgets',
+      buildId: 'b1',
+      base,
+      manifest: `${base}mf-manifest.json`,
+      ssr: ssr ? { integrity: {} } : null,
+      maxBuilds: 5,
+    }) as unknown as RemoteComponentDescriptor
+  const env = { ...process.env }
+  const setEnv = (values: Record<string, string | undefined>) => {
+    for (const [k, v] of Object.entries(values)) {
+      if (v === undefined) delete (process.env as Record<string, string>)[k]
+      else (process.env as Record<string, string>)[k] = v
+    }
+  }
+  beforeEach(() => {
+    componentTrustRegistry().serverReady?.clear()
+    setEnv({ NODE_ENV: 'production', NEXT_PHASE: 'phase-production-server' })
+  })
+  afterEach(() => {
+    process.env = { ...env }
+    rs.restoreAllMocks()
+  })
+
+  test('cc, next start: a build the server has not loaded yet keeps this render out of the static shell, and says so', async () => {
+    const warn = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    await ccSkip(d())
+    expect(cacheLife).toHaveBeenCalledWith(FAILURE_LIFE)
+    expect(warn).toHaveBeenCalledWith(
+      'NF-028',
+      `not-loaded:${base}`,
+      expect.stringMatching(/not loaded in this server process yet/)
+    )
+  })
+
+  test('cc: a loaded or refused build, a browser-only descriptor, the build and dev do nothing', async () => {
+    rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    const registry = componentTrustRegistry()
+    registry.serverReady ??= new Map()
+    registry.serverReady.set(base, 'loaded')
+    await ccSkip(d())
+    registry.serverReady.set(base, 'refused')
+    await ccSkip(d())
+    registry.serverReady.clear()
+    await ccSkip(d(false))
+    await ccSkip(null)
+    setEnv({ NEXT_PHASE: 'phase-production-build' })
+    await ccSkip(d())
+    setEnv({ NODE_ENV: 'development', NEXT_PHASE: undefined })
+    await ccSkip(d())
+    expect(cacheLife).not.toHaveBeenCalled()
+  })
+
+  test('legacy: does nothing (a static render waits for every boundary)', async () => {
+    await legacySkip(d())
     expect(cacheLife).not.toHaveBeenCalled()
   })
 })

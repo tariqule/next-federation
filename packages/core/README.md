@@ -93,7 +93,7 @@ License: MIT
 ## Constraints
 
 - Remote names match `NAME_PATTERN` (`^[A-Za-z][A-Za-z0-9_-]*$`). A remote `origin` has no path, query or credentials.
-- `fetchIsland` reads at most `maxBytes` of a response body (5 MiB by default) and cancels the rest: a larger body is a failed fetch (`NF-007`, not retried) and the island renders its fallback.
+- `fetchIsland` reads at most `maxBytes` of a response body (5 MiB by default), then cancels the body and aborts the request: a larger body is a failed fetch (`NF-007`, not retried) and the island renders its fallback.
 - `fetchIsland` refuses redirects (`redirect: 'error'`); a redirect is a failed fetch. The host accepts envelope URLs only from the remote's origin and `assetOrigins`.
 - `identity.issuer` is kept exactly as written and compared literally with the token `iss`, so a trailing slash makes a different issuer. Use `https` outside local development.
 - Island props are plain JSON (`NF-009`).

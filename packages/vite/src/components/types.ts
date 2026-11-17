@@ -366,6 +366,15 @@ function failure(
   )
 }
 
+/** TypeScript 5 and 6 export the compiler API; TypeScript 7 exports only its version. */
+function hasCompilerApi(ts: TypeScriptApi): boolean {
+  return (
+    typeof ts.createProgram === 'function' &&
+    typeof ts.sys === 'object' &&
+    ts.sys !== null
+  )
+}
+
 export type BuildTypesOptions = EmitTypesOptions & {
   types: boolean
   /** The remote's `typescript` (`loadTypeScript`), or null without one. */
@@ -385,6 +394,13 @@ export async function emitBuildTypes(
   if (!options.ts) {
     warn(
       '`types: true` needs the `typescript` package installed in the remote project: this build publishes no types.'
+    )
+    return false
+  }
+  if (!hasCompilerApi(options.ts)) {
+    const version = String((options.ts as { version?: unknown }).version)
+    warn(
+      `\`types: true\` needs the TypeScript compiler API, and TypeScript ${version} has no compiler API (TypeScript 7 is the native compiler and ships none). Install TypeScript 6 in the remote project (\`npm install -D typescript@6\`): this build publishes no types.`
     )
     return false
   }

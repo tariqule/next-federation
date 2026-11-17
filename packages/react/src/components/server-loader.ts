@@ -290,7 +290,7 @@ const track = <T>(value: T): T => {
 /** An init that has run for `waitMs` without settling, or waits on one. */
 function isHung(lock: ComponentInitLock | undefined, waitMs: number): boolean {
   for (let l = lock; l && !l.done; l = l.waitingFor) {
-    if (l.started !== undefined) return Date.now() - l.started >= waitMs
+    if (l.started !== undefined) return performance.now() - l.started >= waitMs
   }
   return false
 }
@@ -345,7 +345,7 @@ export function serializedInit(
           })
         : Promise.resolve()
       const run = ready.then(() => {
-        lock.started = Date.now()
+        lock.started = performance.now()
         return init.apply(c, args)
       })
       // Released once this init settled, or (when it gave up waiting) once

@@ -160,7 +160,7 @@ test.each(noRetry)('no retry when %s', async (_n, getToken, code, status) => {
   const { callServer } = make({ getToken, invalidateToken })
   const error = await callServer('f.ts#x', []).catch((e: unknown) => e)
   expect(sent).toHaveLength(1)
-  expect(isNFError(error, code ?? 'NF-031')).toBe(true)
+  expect(isNFError(error, code ?? 'NF-038')).toBe(true)
   if (code !== 'NF-014') expect(invalidateToken).not.toHaveBeenCalled()
 })
 
@@ -177,10 +177,14 @@ test('a refreshed null token is not retried', async () => {
   expect(sent).toHaveLength(1)
 })
 
-test('non-200 or non-Flight responses reject with their code, else NF-031', async () => {
+test('non-200 or non-Flight responses reject with their code, else one that fits the status', async () => {
   replies.push(
     failure(404, 'NF-031'),
+    failure(404),
     failure(413),
+    failure(500),
+    failure(502),
+    failure(503),
     () =>
       new Response('<html>', {
         status: 200,
@@ -189,13 +193,28 @@ test('non-200 or non-Flight responses reject with their code, else NF-031', asyn
     failure(400, 'not-a-code')
   )
   const { callServer, reports } = make()
-  for (const code of ['NF-031', 'NF-031', 'NF-031', 'NF-031']) {
+  const expected: [string, RegExp][] = [
+    ['NF-031', /status 404/],
+    ['NF-031', /status 404/],
+    ['NF-032', /larger than the remote accepts \(413\)/],
+    ['NF-038', /server or network failure \(status 500\)/],
+    ['NF-038', /server or network failure \(status 502\)/],
+    ['NF-038', /server or network failure \(status 503\)/],
+    ['NF-038', /not a Server Action response \(status 200\)/],
+    ['NF-038', /not a Server Action response \(status 400\)/],
+  ]
+  for (const [code, message] of expected) {
     const error = await callServer('f.ts#x', []).catch((e: unknown) => e)
     expect(isNFError(error, code as 'NF-031')).toBe(true)
+    expect((error as Error).message).toMatch(message)
   }
   expect(reports.map((r) => [r.ok, r.status, r.code])).toEqual([
     [false, 404, 'NF-031'],
+    [false, 404, undefined],
     [false, 413, undefined],
+    [false, 500, undefined],
+    [false, 502, undefined],
+    [false, 503, undefined],
     [false, 200, undefined],
     [false, 400, undefined],
   ])

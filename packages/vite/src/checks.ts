@@ -141,9 +141,12 @@ const ISLAND_PACKAGE = '@next-federation/island'
 const isExpressionValue = (attr: JsxNode): boolean =>
   attr.value?.type === 'JSXExpressionContainer'
 
-/** `Form`, plus every local name the island's `Form` is imported under. */
+/**
+ * Every local name the island's `Form` is imported under. A `Form` defined in
+ * the file or imported from anywhere else is an ordinary component.
+ */
 function formNames(body: unknown[]): Set<string> {
-  const names = new Set(['Form'])
+  const names = new Set<string>()
   for (const statement of body as ImportNode[]) {
     if (
       statement.type !== 'ImportDeclaration' ||
@@ -168,15 +171,15 @@ function formNames(body: unknown[]): Set<string> {
 /**
  * 1-based lines of `<form action={...}>` and of `formAction={...}` (a Server
  * Action on a plain form: NF-035). A `formAction` inside a `<Form>` element
- * (the island's `Form`, under any local name) is safe: that form stays
- * disabled until hydration. String values, `<Form>` itself, member names
+ * (the island's `Form`, imported from `@next-federation/island` under any
+ * local name) is safe: that form stays disabled until hydration. String values, `<Form>` itself, member names
  * (`<x.form>`) and spreads are not reported. Code that does not parse returns [].
  */
 export function findRawFormActions(
   code: string,
   filename = 'module.tsx'
 ): number[] {
-  if (!code.includes('action')) return []
+  if (!/action/i.test(code)) return []
   const { program, errors } = parseSync(filename, code)
   if (errors.length > 0) return []
   const safeForms = formNames(program.body as unknown[])
