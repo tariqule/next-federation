@@ -118,11 +118,30 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
 Private islands work in `getServerSideProps` only. Calling `getIslandProps` with `private: true` from
 `getStaticProps` throws `NF-002` (there is no request to read the user from). See [Identity](identity.md).
 
-## Share the host's React (optional)
+## Share the host's React (recommended)
 
-In `pages/_app.tsx`, at module scope, call `provideHostReact()` from `@next-federation/react/share` so
-islands built on the same exact stable React version download no React of their own. It does nothing
-in development or on a React pre-release. See [Limits](limits.md) for what it saves.
+When the host and its island remotes run the identical React version (step 1 pins it), call
+`provideHostReact()` in `pages/_app.tsx`, at module scope. Without it, the page downloads a second
+copy of React for the islands (about 80 KB gzip for the first remote), next to the host's own.
+
+```tsx
+// pages/_app.tsx
+import type { AppProps } from 'next/app'
+import { provideHostReact } from '@next-federation/react/share'
+
+provideHostReact()
+
+export default function App({ Component, pageProps }: AppProps) {
+  return <Component {...pageProps} />
+}
+```
+
+Islands built on the host's exact version then use the host's React and download none of their own
+(about 12 KB per remote instead). It is safe to call in every Pages Router host: it does nothing in
+development, on a React pre-release, or for an island on another React version (that island keeps
+its own copy). In a host with App Router and Pages Router routes, call it in `pages/_app.tsx` too: it
+covers the Pages Router pages (App Router pages never provide React). See [Limits](limits.md#cost)
+for what it saves.
 
 ## What to know
 

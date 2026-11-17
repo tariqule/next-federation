@@ -429,7 +429,9 @@ nested remotes would load through the Module Federation runtime's own Node loade
 server loader: unverified (no sha384 check) and on the real global object. So it renders in the
 browser only (`NF-028`, logged once). The same holds for a build without a manifest the server loader could
 check: a descriptor whose `manifest` is the remote entry itself, or one that does not answer JSON.
-The server loader checks every JSON response of the build, whatever its file name.
+The host decides this when it fetches the descriptor (it reads the build's manifest, checked against
+its sha384), so such a build never defers a static page or reaches the server loader. The server
+loader checks every JSON response of the build again, whatever its file name.
 
 What this costs and changes:
 

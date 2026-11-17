@@ -2,7 +2,8 @@
 
 ## What happened
 
-The remote did not answer within the configured timeout.
+The remote did not answer within the configured timeout. The log line names the island URL
+(origin and path, never the query or the token).
 
 ## Why
 

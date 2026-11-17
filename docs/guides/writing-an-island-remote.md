@@ -237,7 +237,9 @@ dev server on that port). The loop is manual:
 ## Rules and limits
 
 - Props are plain JSON. React context does not cross into an island.
-- Islands cannot be nested inside other islands.
+- Do not nest islands. An island that renders another remote's island works, silently, but the inner
+  island gets no identity and is outside the host's cache and skew handling, with an extra server hop
+  ([Limits](limits.md#what-an-island-cannot-do)). Embed both islands from the host instead.
 - No CSS isolation. Scope your own class names; there is no Shadow DOM.
 - Island metadata (`<title>`, `<meta>`, `<link>`) never reaches the host `<head>`. The server strips
   it from the island HTML. In development, `NF-018` names anything it stripped.

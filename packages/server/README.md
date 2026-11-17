@@ -181,6 +181,12 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
 - Retention: the current build (`--current`, or the newest) is always live; so are the newest
   `--max-builds` (3) and any build younger than `--min-age-hours` (24). Others are retired and answer
   `410 {"error":"NF-023"}` (with `Access-Control-Allow-Origin: *`).
+- Compression: text files of at least 1 KB (`.js`, `.mjs`, `.cjs`, `.css`, `.json`, `.svg`, `.html`,
+  `.map`, `.txt`), descriptors and public JSON envelopes are sent brotli- or gzip-encoded per
+  `Accept-Encoding` (q-values honoured), with `Vary: Accept-Encoding`; cache and CORS headers are
+  unchanged. Compressed files are cached in memory per path, mtime and size (`compressionCacheBytes`,
+  default 64 MiB). Range and `HEAD` requests, images and fonts, bodies the build encoded itself,
+  Server Action results and envelopes of requests that carried a token are sent as they are.
 - Fail fast: if a build process dies after startup, the failure is logged (NF-012) and `serveBuilds`
   calls its `onExit({ buildId, code, signal })` option. The `nf-serve` CLI then exits non-zero, so run
   it under a supervisor (Docker, systemd, Kubernetes) that restarts it.

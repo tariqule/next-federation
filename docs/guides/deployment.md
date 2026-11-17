@@ -57,8 +57,38 @@ folder before rebuilding into it.
 **Supervision.** If a build process dies after startup, `nf-serve` logs it (`NF-012`) and exits
 non-zero. Run it under Docker, systemd or Kubernetes so it restarts.
 
+**Compression.** `nf-serve` compresses what it serves, so you do not need a proxy for it (see
+[Compression](#compression)).
+
 Details: [Self-hosted build retention](self-hosted-skew.md) and the
 [`@next-federation/server` README](../../packages/server/README.md).
+
+## Compression
+
+Island remotes ship mostly JavaScript, and the sizes in [Limits](limits.md#cost) are gzip sizes:
+served uncompressed, the same code is about three times larger.
+
+`nf-serve` compresses by itself, with Node's `zlib`:
+
+- **What**: `.js`, `.mjs`, `.cjs`, `.css`, `.json`, `.svg`, `.html`, `.map` and `.txt` files of at least
+  1 KB, the components descriptor, and public JSON island envelopes from a build. Images, fonts and
+  other already-compressed formats are sent as they are.
+- **How**: brotli when the request's `Accept-Encoding` accepts it, otherwise gzip, otherwise none
+  (q-values are honoured: `br;q=0`, `identity` and `*;q=0` all work as specified). Responses carry
+  `Content-Encoding` and `Vary: Accept-Encoding`, and keep their `Cache-Control` (`immutable` for build
+  assets) and CORS headers. A build file is compressed once per version (path, modification time and
+  size) and kept in memory, up to 64 MiB (`compressionCacheBytes`); a file over 8 MiB is compressed
+  as it streams instead.
+- **What is left alone**: range requests (sent whole and unencoded), `HEAD` (no body; the same
+  headers as `GET`), a response the build encoded itself (never encoded twice), Server Action
+  results (streamed), and the envelope of a request that carried an identity token. That last one
+  holds per-user data next to props the page chose, and the length of a compressed body would let
+  an observer learn about that data (BREACH); per-user envelopes are small and fetched
+  server to server.
+
+**On any other host, turn compression on.** On Vercel, a CDN, nginx, a cloud bucket or your own
+server in front of `createIslandHandler`, enable gzip or brotli for JavaScript, CSS and JSON. Most
+CDNs do this by default for those types; a plain object store or a bare Node server does not.
 
 ## Other servers
 

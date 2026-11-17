@@ -647,6 +647,7 @@ export function createServerEntryPlugin(opts: ServerLoaderOptions): {
     error?: unknown
   }) => Promise<void>
   createScript: (args: { url?: string }) => never
+  preflight: (manifestUrl: string) => Promise<void>
 } {
   const scope = opts.scope
   // Every build whose manifest this plugin checked (its scope keeps them for
@@ -684,6 +685,54 @@ export function createServerEntryPlugin(opts: ServerLoaderOptions): {
     throw new NFError('NF-028', detail)
   }
 
+  /**
+   * Fetches and verifies one JSON file of a build and, when it is a manifest,
+   * applies the checks below (refusing the build in this layer, warned once).
+   */
+  const checkJson = async (plain: string): Promise<Uint8Array> => {
+    const base = opts.integrityFor(plain)?.base
+    const body = await fetchVerified(plain, opts)
+    // Every JSON response of the build is checked, whatever its URL,
+    // before any server code is fetched or hashed.
+    const manifest = readManifest(body)
+    if (manifest && base !== undefined) {
+      if (manifest.remotes === 'nested') {
+        refuse(
+          base,
+          'nested-remotes',
+          `The build at ${base} lists remotes of its own: their code would load outside the server loader (unverified, on the real global), so it renders in the browser only.`
+        )
+      }
+      if (manifest.remotes === 'unknown') {
+        refuse(
+          base,
+          'unchecked',
+          `The manifest of the build at ${base} has no remotes list, so nested remotes cannot be ruled out: it renders in the browser only.`
+        )
+      }
+      const { pluginVersion } = manifest
+      const listed = ISOLATED_SERVER_BUILDS.find(
+        (b) => b.pluginVersion === pluginVersion
+      )
+      const info: ServerBuildInfo = {
+        ...(pluginVersion === undefined ? {} : { pluginVersion }),
+        ...(listed ? { bundlesRuntime: listed.bundlesRuntime } : {}),
+      }
+      checked.set(base, info)
+      scope?.builds.set(base, info)
+      if (!listed) {
+        refuseUnlisted(
+          base,
+          `the build at ${base} (Module Federation plugin version ${pluginVersion ?? 'unknown'})`
+        )
+      }
+    }
+    return body
+  }
+
+  // Manifests checked by `preflight`, handed to the MF runtime's fetch once.
+  const prechecked = new Map<string, Uint8Array>()
+
   return {
     name: SERVER_LOADER_MARKER,
     beforeRegisterRemote(args) {
@@ -700,47 +749,15 @@ export function createServerEntryPlugin(opts: ServerLoaderOptions): {
       const plain = untagged(String(url))
       const base = opts.integrityFor(plain)?.base
       return (async () => {
-        let body: Uint8Array
-        try {
-          body = await fetchVerified(plain, opts)
-        } catch (error) {
-          // MF wraps errors of this hook in its own: the runtime reads ours.
-          if (base !== undefined) scope?.failures.set(base, error)
-          throw error
-        }
-        // Every JSON response of the build is checked, whatever its URL,
-        // before any server code is fetched or hashed.
-        const manifest = readManifest(body)
-        if (manifest && base !== undefined) {
-          if (manifest.remotes === 'nested') {
-            refuse(
-              base,
-              'nested-remotes',
-              `The build at ${base} lists remotes of its own: their code would load outside the server loader (unverified, on the real global), so it renders in the browser only.`
-            )
-          }
-          if (manifest.remotes === 'unknown') {
-            refuse(
-              base,
-              'unchecked',
-              `The manifest of the build at ${base} has no remotes list, so nested remotes cannot be ruled out: it renders in the browser only.`
-            )
-          }
-          const { pluginVersion } = manifest
-          const listed = ISOLATED_SERVER_BUILDS.find(
-            (b) => b.pluginVersion === pluginVersion
-          )
-          const info: ServerBuildInfo = {
-            ...(pluginVersion === undefined ? {} : { pluginVersion }),
-            ...(listed ? { bundlesRuntime: listed.bundlesRuntime } : {}),
-          }
-          checked.set(base, info)
-          scope?.builds.set(base, info)
-          if (!listed) {
-            refuseUnlisted(
-              base,
-              `the build at ${base} (Module Federation plugin version ${pluginVersion ?? 'unknown'})`
-            )
+        let body = prechecked.get(plain)
+        prechecked.delete(plain)
+        if (body === undefined) {
+          try {
+            body = await checkJson(plain)
+          } catch (error) {
+            // MF wraps errors of this hook in its own: the runtime reads ours.
+            if (base !== undefined) scope?.failures.set(base, error)
+            throw error
           }
         }
         return new Response(body as Uint8Array<ArrayBuffer>, {
@@ -748,6 +765,19 @@ export function createServerEntryPlugin(opts: ServerLoaderOptions): {
           headers: { 'content-type': 'application/json' },
         })
       })()
+    },
+    /**
+     * Checks a build's manifest before the MF runtime is asked to load it,
+     * so a refusal (warned once, NF-028) or a failed fetch is thrown here,
+     * never inside the MF runtime (which would log it again, with a stack).
+     * The verified body is handed to the runtime's own fetch of it. A
+     * manifest URL that is not JSON (the entry itself) is left to the entry
+     * load, as the MF runtime does.
+     */
+    async preflight(manifestUrl) {
+      if (!manifestUrl.includes('.json')) return
+      const plain = untagged(manifestUrl)
+      prechecked.set(plain, await checkJson(plain))
     },
     async loadEntry({ remoteInfo }) {
       const entryUrl = untagged(remoteInfo.entry)

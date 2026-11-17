@@ -16,7 +16,11 @@ just has no server HTML for it. The message names the case:
 - **Nested remotes, or no checkable manifest**: the build's `mf-manifest.json` lists `remotes` of
   its own, lists no `remotes` array, or the descriptor's `manifest` is not a manifest the server
   loader could check (for example the remote entry itself). Its nested code would load outside the
-  sha384 check, so it never server-renders, in any host.
+  sha384 check, so it never server-renders, in any host. The host decides this when it fetches the
+  build's descriptor (it fetches the manifest and checks its sha384 then), before any render: one
+  `NF-028` line, the descriptor comes back browser-only, and no server code is fetched. If the
+  manifest could not be fetched then, the server loader refuses the build itself, with the same
+  single line.
 - **Build that cannot be kept apart per router layer**: in a host with App Router and Pages Router
   routes (two Reacts in one process), builds made with a Module Federation plugin version the server
   loader does not know how to isolate server-render in one layer per process only. The other layer

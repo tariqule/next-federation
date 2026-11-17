@@ -142,3 +142,55 @@ test('/_nf/health answers for a components current build', async () => {
   const res = await fetch(url('/_nf/health'))
   expect(res.status).toBe(200)
 })
+
+test('B3: a descriptor and server chunks are compressed when accepted', async () => {
+  const { request } = await import('node:http')
+  const { gunzipSync } = await import('node:zlib')
+  const big = JSON.stringify({
+    v: 1,
+    buildId: 'c1',
+    integrity: Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [
+        `assets/chunk-${i}.cjs`,
+        'x'.repeat(64),
+      ])
+    ),
+  })
+  writeFileSync(join(root, 'c1', 'nf-components.json'), big)
+  writeFileSync(
+    join(root, 'c1', 'client', 'assets', 'big.cjs'),
+    'exports.a = 1\n'.repeat(200)
+  )
+  const get = (path: string) =>
+    new Promise<{ headers: Record<string, unknown>; body: Buffer }>(
+      (resolve, reject) => {
+        const req = request(
+          {
+            host: '127.0.0.1',
+            port: served!.port,
+            path,
+            agent: false,
+            headers: { 'accept-encoding': 'gzip' },
+          },
+          (res) => {
+            const chunks: Buffer[] = []
+            res.on('data', (c: Buffer) => chunks.push(c))
+            res.on('end', () =>
+              resolve({ headers: res.headers, body: Buffer.concat(chunks) })
+            )
+          }
+        )
+        req.on('error', reject)
+        req.end()
+      }
+    )
+  const descriptor = await get('/b/c1/nf-components.json')
+  expect(descriptor.headers['content-encoding']).toBe('gzip')
+  expect(descriptor.headers['cache-control']).toBe(
+    'public, max-age=31536000, immutable'
+  )
+  expect(gunzipSync(descriptor.body).toString()).toBe(big)
+  const chunk = await get('/b/c1/assets/big.cjs')
+  expect(chunk.headers['content-encoding']).toBe('gzip')
+  expect(gunzipSync(chunk.body).toString()).toBe('exports.a = 1\n'.repeat(200))
+})

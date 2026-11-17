@@ -12,7 +12,10 @@ the declarations it had; the other remotes still sync.
 ## Why
 
 - The remote is down, or `/_nf/components.json` is not served (nf-serve serves it for builds made
-  by `nextFederationComponents`).
+  by `nextFederationComponents`). When the descriptor URL answers `404` or an HTML page, the message
+  adds a hint: the origin is probably not a components remote (a website, or a Next.js app, which
+  cannot be a remote; see
+  [Sharing components from a Next.js app](../guides/sharing-components-from-a-next-app.md)).
 - On the server, a remote file timed out (3 s per request) or is larger than 10 MB.
 - The descriptor is larger than 1 MiB (1,048,576 bytes). It is refused while it streams, never
   buffered whole (`nf-types` applies the same limit).

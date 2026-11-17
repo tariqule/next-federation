@@ -67,7 +67,14 @@ nothing else. `@next-federation/core/components`
 has `fetchComponentDescriptor(target, { init })` (never throws for remote failures: `NF-029`, or
 `NF-005` for a build on another origin) and `verifyComponentDescriptor(target, file)`, which keeps
 server rendering only for a descriptor signed by a configured key (ES256, any key: rotation) or
-matching a pinned digest. Events: `component:descriptor`, `component:error`.
+matching a pinned digest. `fetchVerifiedComponentDescriptor(target, { init })` does both and, for
+a build it would server-render, reads the build's manifest (checked against its sha384): a build
+that lists `remotes` of its own, has no remotes list or no JSON manifest comes back browser-only
+with `NF-028`. Events: `component:descriptor`, `component:error`.
+
+A failed `fetchIsland` result carries `url` (origin and path, never the query) and, when the origin
+answered HTML or a non-protocol `404`, `hint: 'not-an-island-remote'`; `islandFailureDetail(result)`
+formats both for a log line.
 
 ## Install
 
@@ -82,6 +89,7 @@ pnpm add @next-federation/core
 | `defineFederation(config)`                              | `@next-federation/core`            | Validate the host config and return a `Federation`.                         |
 | `fetchIsland(federation, request)`                      | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
 | `islandTags`, `eventFor`, `MAX_ENVELOPE_BYTES`          | `@next-federation/core`            | Cache tags, event helpers and the default island body limit.                |
+| `islandFailureDetail(result)`                           | `@next-federation/core`            | A failed island's URL, status and hint, for a log line.                     |
 | `generateSigningKey`, `publicJwks`, `validateIdentity`  | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).                  |
 | `mintIslandToken`, `identityKey`                        | `@next-federation/core/identity`   | Mint a per-remote island token and derive its cache identity key.           |
 | `fetchComponentDescriptor`, `verifyComponentDescriptor` | `@next-federation/core/components` | Remote components: fetch and verify a components remote's build descriptor. |
