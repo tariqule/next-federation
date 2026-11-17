@@ -1,9 +1,12 @@
 # Getting started: Next.js App Router host
 
-This guide embeds an island from a remote app in a Next.js 16 App Router page. It covers the host
-only. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
+This guide embeds an island from a remote app in a Next.js 16 or 15 App Router page. It covers the
+host only. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
 
-Supported: Next.js 16 (`>=16.0.0 <17`), React 19, Turbopack or webpack, Node 20.9 or newer.
+Supported: Next.js 16 or 15 (`>=15.5.28 <17`), React 19, Turbopack or webpack, Node 20.9 or newer.
+On Next 15 the adapter uses the legacy caching model (fetch `revalidate` and tags):
+`cacheComponents` needs Next 16 ([Limits](limits.md#nextjs-15)). Next 14 is not supported. Next 15
+uses webpack unless you pass `--turbopack`; both work.
 
 ## Choosing between remote components and islands
 

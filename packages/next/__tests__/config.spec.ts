@@ -1,6 +1,9 @@
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { NextConfig } from 'next'
 import { isNFError } from '@next-federation/sdk'
 import { withNextFederation } from '../src/config.ts'
+import { callerDir } from '../src/installed-next.ts'
 import { cacheModel, hostBasePath } from '../src/server/assert-wrapped.ts'
 
 type Wp = (config: Record<string, unknown>, options: unknown) => unknown
@@ -246,5 +249,111 @@ test('an unreadable Next version is NF-002 at config time (remote components nee
   const { withNextFederation: wrap } = await import('../src/config.ts')
   expectCode(() => wrap({}), 'NF-002')
   rs.doUnmock('node:module')
+  rs.resetModules()
+})
+
+describe('Next 15 (no stable cacheLife in next/cache)', () => {
+  // A Next 15 install: `next/cache` has `unstable_cacheLife` only, which is
+  // how the wrapper tells that cacheComponents is unavailable.
+  async function next15() {
+    rs.resetModules()
+    rs.doMock('node:module', () => ({
+      createRequire: () => (id: string) =>
+        id === 'next/package.json'
+          ? { version: '15.5.28' }
+          : { unstable_cacheLife: () => undefined },
+    }))
+    const mod = await import('../src/config.ts')
+    return mod.withNextFederation
+  }
+  afterEach(() => {
+    rs.doUnmock('node:module')
+    rs.resetModules()
+  })
+
+  test('the legacy model works, with the installed version', async () => {
+    const wrap = await next15()
+    const c = loose(wrap({ basePath: '/b' }))
+    expect(c.env).toEqual({
+      NF_CACHE_MODEL: 'legacy',
+      NF_BASE_PATH: '/b',
+      NF_NEXT_VERSION: '15.5.28',
+    })
+    expect(c.turbopack.resolveAlias[ALIAS]).toBe(LEGACY)
+    expect(runWebpack(c).resolve.alias[`${ALIAS}$`]).toBe(LEGACY)
+  })
+
+  test('cacheComponents is NF-002 (Next 16 only)', async () => {
+    const wrap = await next15()
+    expectCode(() => wrap({ cacheComponents: true }), 'NF-002')
+    let message = ''
+    try {
+      wrap({ cacheComponents: true })
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain('Next.js 16')
+    expect(message).toContain('15.5.28')
+    // false is the legacy model.
+    expect(loose(wrap({ cacheComponents: false })).env.NF_CACHE_MODEL).toBe(
+      'legacy'
+    )
+  })
+
+  test("Next 15's experimental cache-components flags are NF-002", async () => {
+    const wrap = await next15()
+    for (const flag of ['dynamicIO', 'cacheComponents']) {
+      expectCode(
+        () => wrap({ experimental: { [flag]: true } } as unknown as NextConfig),
+        'NF-002'
+      )
+    }
+    expect(() =>
+      wrap({ experimental: { dynamicIO: false } } as unknown as NextConfig)
+    ).not.toThrow()
+  })
+
+  test('a config function with cacheComponents rejects with NF-002', async () => {
+    const wrap = await next15()
+    const fn = wrap(() => ({ cacheComponents: true }))
+    const error = await Promise.resolve(fn('x', {})).catch((e: unknown) => e)
+    expect(isNFError(error)).toBe(true)
+    expect((error as { code: string }).code).toBe('NF-002')
+  })
+})
+
+test('Next 16 keeps experimental flags out of the check (Next validates them)', () => {
+  // The real install (next 16.4.6): cacheComponents works, and the wrapper
+  // never inspects `experimental`.
+  const c = loose(
+    withNextFederation({
+      cacheComponents: true,
+      experimental: { dynamicIO: true },
+    } as unknown as NextConfig)
+  )
+  expect(c.env.NF_CACHE_MODEL).toBe('cache-components')
+})
+
+test("the Next version is looked up from the calling next.config's folder (and cwd)", async () => {
+  rs.resetModules()
+  const seen: Array<string | null> = []
+  rs.doMock('../src/installed-next.ts', () => ({
+    nextProjectDir: (stack: string | undefined) => {
+      // The real parser, without the next.config check (this spec's folder
+      // has none).
+      return callerDir(stack)
+    },
+    installedNext: (projectDir: string | null) => {
+      seen.push(projectDir)
+      return { version: '15.5.28', path: 'x', cacheComponents: false }
+    },
+  }))
+  const { withNextFederation: wrap } = await import('../src/config.ts')
+  expect(loose(wrap({})).env.NF_NEXT_VERSION).toBe('15.5.28')
+  await wrap(() => ({}))('x', {})
+  // This spec file is the caller here, as a host's next.config is.
+  const here = dirname(fileURLToPath(import.meta.url))
+  expect(seen).toEqual([here, here])
+  rs.doUnmock('../src/installed-next.ts')
   rs.resetModules()
 })

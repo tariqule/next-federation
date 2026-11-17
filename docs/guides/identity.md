@@ -111,6 +111,11 @@ or `createIdentityVerifier`). It logs a warning once per process.
 - `aud` scopes a token to one remote's **server**. Island scripts run in the host origin, so any
   island on the page can ask the token endpoint for a token for any configured remote. `aud` is not
   isolation between remotes in the browser. Only configure remotes you would trust with that.
+- The token never appears in HTML, RSC payloads or page props, in production and in `next dev`
+  with Next's default dev source maps. The exception is a library linked from outside
+  `node_modules` (developing next-federation itself) under `next dev`: `NF-037`, which also warns
+  when `next dev` runs with source maps disabled
+  ([Limits](limits.md#next-dev-and-linked-installs)).
 
 ## Key rotation
 

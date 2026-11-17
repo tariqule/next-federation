@@ -3,10 +3,15 @@
 // Run modes (env read by this file):
 //   NF_MODE     dev | prod (default dev). prod builds every app first.
 //   NF_BUNDLER  turbopack | webpack (default turbopack); Next hosts only.
-//   NF_SUITE    default | skew (default default). skew: remote `a` serves two
-//               builds (v1 and v2) side by side; prod only. A second
+//               (Next 15 hosts: `--turbopack`, or their default webpack.)
+//   NF_SUITE    default | skew | installed (default default). skew: remote `a`
+//               serves two builds (v1 and v2) side by side; prod only. A second
 //               `nf-serve` of the same builds on 4103 keeps one build
 //               (`--max-builds 1 --min-age-hours 0`), so `v1` is retired there.
+//               installed: the installed-library hosts (3106 on Next 15, 3107 on
+//               Next 16, and 3108/3109 the same under `next dev
+//               --disable-source-maps`; installed-dev.spec.ts), which install
+//               the packed packages into a real node_modules first.
 //   NF_APPS     optional comma list of app keys (see APPS below) to start a
 //               subset, e.g. NF_APPS=issuer,remote-a,remote-b.
 //   NF_SHARE    '0': remotes build with `share: false` (no React sharing).
@@ -50,12 +55,15 @@ import { COMPONENTS_PORTS } from './fixtures/components-keys.ts'
 import { laneName, lanePort } from './lane.ts'
 
 export type Mode = 'dev' | 'prod'
-export type Suite = 'default' | 'skew'
+export type Suite = 'default' | 'skew' | 'installed'
 
 export const MODE: Mode = process.env.NF_MODE === 'prod' ? 'prod' : 'dev'
 export const BUNDLER: 'turbopack' | 'webpack' =
   process.env.NF_BUNDLER === 'webpack' ? 'webpack' : 'turbopack'
-export const SUITE: Suite = process.env.NF_SUITE === 'skew' ? 'skew' : 'default'
+export const SUITE: Suite =
+  process.env.NF_SUITE === 'skew' || process.env.NF_SUITE === 'installed'
+    ? process.env.NF_SUITE
+    : 'default'
 /** How long Playwright waits for each app to answer (builds included). */
 const WEB_SERVER_TIMEOUT_MS = 240_000
 
@@ -70,6 +78,12 @@ const BASE_PORTS = {
   hostPages: 3101,
   hostAppCc: 3102,
   hostPagesBase: 3103,
+  hostAppNext15: 3104,
+  hostPagesNext15: 3105,
+  hostInstalled15: 3106,
+  hostInstalled16: 3107,
+  hostInstalled15NoSourceMaps: 3108,
+  hostInstalled16NoSourceMaps: 3109,
   hostSpa: 4200,
 } as const
 
@@ -90,6 +104,41 @@ export const HOST_APP_CC = `http://localhost:${PORTS.hostAppCc}`
 export const HOST_PAGES = `http://localhost:${PORTS.hostPages}`
 export const HOST_PAGES_BASE = `http://localhost:${PORTS.hostPagesBase}`
 export const HOST_SPA = `http://localhost:${PORTS.hostSpa}`
+/** The Next 15 hosts (next15.spec.ts): host-app-next15, host-pages-next15. */
+export const HOST_APP_NEXT15 = `http://localhost:${PORTS.hostAppNext15}`
+export const HOST_PAGES_NEXT15 = `http://localhost:${PORTS.hostPagesNext15}`
+/**
+ * The installed-library hosts (NF_SUITE=installed, installed-dev.spec.ts):
+ * each Next major, with Next's default dev source maps and with
+ * `next dev --disable-source-maps`.
+ */
+export const INSTALLED_HOSTS = [
+  {
+    key: 'host-installed-15',
+    major: 15,
+    port: PORTS.hostInstalled15,
+    flags: '',
+  },
+  {
+    key: 'host-installed-16',
+    major: 16,
+    port: PORTS.hostInstalled16,
+    flags: '',
+  },
+  {
+    key: 'host-installed-15-no-source-maps',
+    major: 15,
+    port: PORTS.hostInstalled15NoSourceMaps,
+    flags: '--disable-source-maps',
+  },
+  {
+    key: 'host-installed-16-no-source-maps',
+    major: 16,
+    port: PORTS.hostInstalled16NoSourceMaps,
+    flags: '--disable-source-maps',
+  },
+] as const
+export const INSTALLED_NEXT = { 15: '15.5.28', 16: '16.4.6' } as const
 /**
  * Remote `c` (the previous React patch, for the sharing e2e) runs in prod
  * only: dev remotes never share React. It lives outside the pnpm workspace
@@ -148,6 +197,8 @@ type App = {
   skewOnly?: boolean
   /** Started only in prod (remote `c`, React sharing). */
   shareOnly?: boolean
+  /** Started only when NF_SUITE=installed. */
+  installedOnly?: boolean
 }
 
 /**
@@ -171,6 +222,27 @@ function nextCommand(app: string, port: number, distDir: string): string {
   if (MODE === 'dev') {
     return `rm -rf ${distDir}/dev/cache/fetch-cache && pnpm exec next dev -p ${port}${flag}`
   }
+  return nextProd(app, port, distDir, flag)
+}
+
+/**
+ * Next 15 hosts: webpack is the default there and `--turbopack` opts in;
+ * `next dev` keeps its fetch cache in `<distDir>/cache/fetch-cache`.
+ */
+function next15Command(app: string, port: number, distDir: string): string {
+  const flag = BUNDLER === 'turbopack' ? ' --turbopack' : ''
+  if (MODE === 'dev') {
+    return `rm -rf ${distDir}/cache/fetch-cache && pnpm exec next dev -p ${port}${flag}`
+  }
+  return nextProd(app, port, distDir, flag)
+}
+
+function nextProd(
+  app: string,
+  port: number,
+  distDir: string,
+  flag: string
+): string {
   const log = join(logs, `${app}-${port}.build.log`)
   return [
     `mkdir -p ${JSON.stringify(logs)}`,
@@ -340,6 +412,38 @@ export const APPS: App[] = [
     env: { ...hostEnv(PORTS.hostPagesBase), NF_BASE_PATH_FIXTURE: '/base' },
   },
   {
+    key: 'host-app-next15',
+    dir: 'host-app-next15',
+    url: `http://localhost:${PORTS.hostAppNext15}`,
+    command: next15Command(
+      'host-app-next15',
+      PORTS.hostAppNext15,
+      nextDist('.next')
+    ),
+    env: hostEnv(PORTS.hostAppNext15),
+  },
+  {
+    key: 'host-pages-next15',
+    dir: 'host-pages-next15',
+    url: `http://localhost:${PORTS.hostPagesNext15}`,
+    command: next15Command(
+      'host-pages-next15',
+      PORTS.hostPagesNext15,
+      nextDist('.next')
+    ),
+    env: hostEnv(PORTS.hostPagesNext15),
+  },
+  ...INSTALLED_HOSTS.map(
+    (host): App => ({
+      key: host.key,
+      dir: null,
+      url: `http://localhost:${host.port}`,
+      command: `node fixtures/installed-host.ts ${INSTALLED_NEXT[host.major]} ${host.port}${host.flags ? ` ${host.flags}` : ''}`,
+      env: { ...hostEnv(host.port), NF_REMOTE_A_ORIGIN: REMOTE_A },
+      installedOnly: true,
+    })
+  ),
+  {
     key: 'host-spa',
     dir: 'host-spa',
     url: `http://localhost:${PORTS.hostSpa}`,
@@ -357,6 +461,7 @@ const only = process.env.NF_APPS?.split(',').map((s) => s.trim())
 export function webServers() {
   return APPS.filter((app) => !app.skewOnly || SUITE === 'skew')
     .filter((app) => !app.shareOnly || WITH_REMOTE_C)
+    .filter((app) => !app.installedOnly || SUITE === 'installed')
     .filter((app) => !only || only.includes(app.key))
     .filter(
       (app) =>

@@ -7,8 +7,21 @@ import type {
 import { identityKey, mintIslandToken } from '@next-federation/core/identity'
 import type { HostIdentity } from '@next-federation/core/identity'
 import type { HostContext } from '@next-federation/protocol'
-import { NFError } from '@next-federation/sdk'
+import { NFError, logger } from '@next-federation/sdk'
 import { cookies, headers } from 'next/headers'
+import { devDebugInfoCause } from './dev-debug-info.ts'
+import type { DevDebugInfoCause } from './dev-debug-info.ts'
+
+const LIMITS =
+  'https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md#next-dev-and-linked-installs'
+
+const VALUES =
+  "the request's cookies and headers, your getIdentity result, the island token"
+
+const CAUSES: Record<DevDebugInfoCause, string> = {
+  linked: `@next-federation/next is loaded from outside node_modules (a workspace link or \`npm link\`), so \`next dev\` treats it as your own code: React's development debug info then carries what it awaits for private islands (${VALUES}) to the browser, in the HTML on Next.js 15 and over the dev server's websocket on Next.js 16. Installed from node_modules, and in production builds, this does not happen.`,
+  'source-maps-off': `\`next dev\` runs without Node's source maps (\`--disable-source-maps\`), so Next's dev tooling may not tell this library from your own code: React's development debug info could then carry what it awaits for private islands (${VALUES}) to the browser. Run \`next dev\` with source maps (the default); production builds are not affected.`,
+}
 
 /**
  * The host's session lookup for App Router. It receives the request's
@@ -30,7 +43,9 @@ export type PrivateEnvelope =
  * server for this one request: it goes only into the request's
  * `Authorization` header and is never returned. Host cookies are not
  * forwarded (`fetchIsland` sends `credentials: 'omit'`). An anonymous visitor
- * makes no remote request.
+ * makes no remote request. Under `next dev`, warns once (NF-037) when
+ * React's debug info may carry these values to the browser: this library
+ * linked from outside node_modules, or Node's source maps off.
  */
 export async function getPrivateEnvelope(
   federation: Federation,
@@ -42,6 +57,15 @@ export async function getPrivateEnvelope(
     throw new NFError(
       'NF-013',
       `Island "${request.island}" from remote "${target.remote}" is private: pass \`getIdentity\` to createIslands() and set \`identity\` in defineFederation().`
+    )
+  }
+  const cause =
+    process.env.NODE_ENV === 'development' ? devDebugInfoCause() : null
+  if (cause !== null) {
+    logger.warnOnce(
+      'NF-037',
+      cause,
+      `${CAUSES[cause]} Keep the dev server on your machine (\`next dev -H 127.0.0.1\`). See ${LIMITS}`
     )
   }
   const identity = await getIdentity({

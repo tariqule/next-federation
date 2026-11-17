@@ -10,7 +10,12 @@ const NAME = process.env.NF_REMOTE ?? 'a'
 // NF_LANE (see test/e2e/lane.ts): the lane's host ports and build folders.
 const LANE = laneName()
 const hostOrigin = (p: number) => `http://localhost:${lanePort(p)}`
-const HOSTS = [3100, 3101, 3102, 3103, 4200].map(hostOrigin)
+// 3104, 3105: the Next 15 hosts (next15.spec.ts); 3106-3109: the
+// installed-library hosts (installed-dev.spec.ts).
+const INSTALLED = [3106, 3107, 3108, 3109]
+const HOSTS = [3100, 3101, 3102, 3103, 3104, 3105, ...INSTALLED, 4200].map(
+  hostOrigin
+)
 const ROOT = import.meta.dirname
 // Vercel (vercel.json's buildCommand sets NF_VERCEL=1): the remote is served
 // from the project's production domain, never from a generated deployment
@@ -69,7 +74,7 @@ export function islandRemoteConfig(fixture: IslandRemoteFixture = {}) {
         issuers: VERCEL
           ? {}
           : Object.fromEntries([
-              ...[3100, 3102, 3101].map((p) => [
+              ...[3100, 3102, 3101, 3104, 3105, ...INSTALLED].map((p) => [
                 hostOrigin(p),
                 `${hostOrigin(p)}/api/next-federation/jwks`,
               ]),

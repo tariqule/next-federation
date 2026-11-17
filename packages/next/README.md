@@ -1,6 +1,6 @@
 # @next-federation/next
 
-Next.js adapter for `next-federation` (Next `>=16.0.0 <17`, React 19).
+Next.js adapter for `next-federation` (Next `>=15.5.28 <17`, React 19; `cacheComponents` needs Next 16).
 
 ## `withNextFederation(config)` (required)
 
@@ -265,7 +265,9 @@ fails (it keeps its previous types). Guide: [Types](../../docs/guides/remote-com
 
 ## Constraints
 
-- Next.js `>=16.0.0 <17`, React 19, Turbopack or webpack, Node 20.9 or newer.
+- Next.js `>=15.5.28 <17` (16 or 15), React 19, Turbopack or webpack, Node 20.9 or newer. On Next 15
+  the island cache is the legacy one; `cacheComponents` is Next 16 only (`NF-002` on Next 15).
+  Next 14 is not supported.
 - Private islands make an App Router route dynamic without `cacheComponents`; Pages Router private islands are `getServerSideProps` only (`NF-002`).
 - A `'use cache'` component around `RemoteIsland` must sit inside `<Suspense>`.
 - A Next app does not expose its `app/` folder: to share UI from one, publish an island remote.
