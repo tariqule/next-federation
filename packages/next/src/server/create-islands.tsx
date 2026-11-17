@@ -1,6 +1,7 @@
 import { islandTags } from '@next-federation/core'
 import { shortenEnclosingCache } from '@next-federation/next/island-cache'
 import type { Federation } from '@next-federation/core'
+import { NFError } from '@next-federation/sdk'
 import { revalidateTag } from 'next/cache'
 import { unstable_rethrow } from 'next/navigation'
 import { Suspense } from 'react'
@@ -28,6 +29,17 @@ export type RemoteIslandProps = IslandSpec & {
    * still showing `errorFallback` after an island error.
    */
   inertOnLoadFailure?: boolean
+  /**
+   * Private islands only (`NF-002` on a public one). Renders the island
+   * without its own `<Suspense>`, so its HTML is in the first flush, in
+   * place: no `fallback` is streamed and swapped. The page's response waits
+   * for the remote, up to the island timeout, and the route renders per
+   * request (no static shell: `ƒ` in `next build`). With `cacheComponents`
+   * the page must allow blocking with `export const instant = false`, or
+   * Next fails the build. A `loading.tsx` or `<Suspense>` above the island
+   * streams it again. Default: false.
+   */
+  blocking?: boolean
 }
 
 type LoaderProps = {
@@ -84,22 +96,37 @@ export function createIslands(
 
   return {
     /**
-     * Sync Server Component. It always renders its own `<Suspense>`: with
+     * Sync Server Component. It renders its own `<Suspense>`: with
      * `cacheComponents` a failed or private island becomes a dynamic hole
      * there, and a hydration error elsewhere in the host cannot client-render
-     * the island's DOM away.
+     * the island's DOM away. `blocking` (private islands only) leaves the
+     * boundary out, so the island renders in the shell: the nearest boundary
+     * above it is the page's own (`loading.tsx`, a `<Suspense>`), if any,
+     * which also takes the place of the island's for hydration errors.
      */
-    RemoteIsland({ fallback, errorFallback, inertOnLoadFailure, ...spec }) {
-      return (
-        <Suspense fallback={fallback}>
-          <IslandLoader
-            spec={spec}
-            fallback={fallback}
-            errorFallback={errorFallback}
-            inertOnLoadFailure={inertOnLoadFailure}
-          />
-        </Suspense>
+    RemoteIsland({
+      fallback,
+      errorFallback,
+      inertOnLoadFailure,
+      blocking,
+      ...spec
+    }) {
+      if (blocking && !spec.private) {
+        throw new NFError(
+          'NF-002',
+          `RemoteIsland "${spec.island}" from remote "${spec.remote}": \`blocking\` applies to private islands only. A public island is cached and already renders in place; remove \`blocking\` or add \`private\`.`
+        )
+      }
+      const loader = (
+        <IslandLoader
+          spec={spec}
+          fallback={fallback}
+          errorFallback={errorFallback}
+          inertOnLoadFailure={inertOnLoadFailure}
+        />
       )
+      if (blocking) return loader
+      return <Suspense fallback={fallback}>{loader}</Suspense>
     },
 
     /**

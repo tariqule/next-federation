@@ -20,7 +20,8 @@ The envelope comes from a `'use cache'` function, with the same tags.
 - A **failure is never frozen**. It switches the entry to a short cache lifetime (Next's `seconds`
   values), so a failed island becomes a dynamic hole inside its `<Suspense>` boundary (the route
   shows as `◐`) and is retried within about a second. A working island stays cached.
-- `RemoteIsland` always renders its own `<Suspense>`.
+- `RemoteIsland` renders its own `<Suspense>` (a private island with `blocking` does not, see
+  [Private islands](#private-islands)).
 - If you put your own `'use cache'` component around a `RemoteIsland`, that component **must be inside
   `<Suspense>`**. A failed island also shortens the enclosing cache, so the failure is not kept for
   the scope's lifetime. If the component is not inside `<Suspense>`, a build with the remote down
@@ -47,6 +48,29 @@ export default function Page() {
 Private islands are never cached. Without `cacheComponents`, a private island makes the route
 dynamic. With it, the island is a dynamic hole. The token never enters a cache key, the HTML or the
 RSC payload ([Identity](identity.md)).
+
+### `blocking`: the island in the first HTML
+
+`<RemoteIsland private blocking … />` renders without the island's own `<Suspense>`, so its HTML is
+in the first flush, in place, with no streamed `fallback` and no swap
+([Getting started](getting-started-app-router.md#private-content-in-the-first-html-blocking)). The
+caching consequences:
+
+| Host | Route config | `next build` marker | First byte |
+| --- | --- | --- | --- |
+| No `cacheComponents` (Next 16 or 15) | none (`instant` is refused) | `ƒ` (already dynamic) | after the island loads or fails |
+| `cacheComponents` | `export const instant = false` in the page | `ƒ`, not `◐` | after the island loads or fails |
+
+- The whole route becomes per-request. With `cacheComponents` it loses its static shell: every
+  layout above the island, the rest of the page and its public islands render on each request
+  (`ƒ` instead of `◐`). Keep `blocking` off pages that should be served from a static shell. `instant = false` does not make a route dynamic by itself; the island's `cookies()`
+  read outside `<Suspense>` does, and `instant = false` is how the route accepts it. Without
+  `instant = false`, `next build` fails with Next's "Next.js encountered uncached or runtime data
+  during prerendering" error, so the change is never silent.
+- The response waits for the remote, up to the island timeout (`timeoutMs`, 3 seconds by default).
+  A remote that fails or times out renders `errorFallback` in place and the page answers `200`.
+- Public islands on the same page are still cached (their envelopes), but they render within the
+  per-request page. `blocking` on a public island throws `NF-002`.
 
 ## Pages Router
 

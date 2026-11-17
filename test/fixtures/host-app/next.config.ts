@@ -15,9 +15,10 @@ export default withNextFederation({
   partialPrefetching: CC,
   // Both hosts (3100, 3102) run from this folder at the same time.
   distDir: `${CC ? '.next-cc' : '.next'}${lane ? `-${lane}` : ''}`,
-  // `page.cc.tsx` routes use 'use cache', which compiles only with
-  // cacheComponents: they exist on the cacheComponents host only.
-  pageExtensions: CC ? ['cc.tsx', 'tsx', 'ts'] : ['tsx', 'ts'],
+  // `page.cc.tsx` routes use 'use cache' or `instant`, which compile only
+  // with cacheComponents: they exist on the cacheComponents host only.
+  // `page.legacy.tsx`: the same route's page on the host without it.
+  pageExtensions: CC ? ['cc.tsx', 'tsx', 'ts'] : ['legacy.tsx', 'tsx', 'ts'],
   outputFileTracingRoot: root,
   turbopack: { root },
 })
