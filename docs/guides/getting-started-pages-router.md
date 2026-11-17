@@ -75,6 +75,26 @@ export const { getIslandProps } = createPagesIslands(federation)
 Environment variables the config reads come from `.env.local` under `next dev` and `next build`,
 but not under plain Node: see [Remote components](remote-components.md#types) for `nf-types`.
 
+### Timeout and retries
+
+Each island fetch has a total budget of `timeoutMs` (default `3000`), which covers every attempt.
+A network error or a `502`, `503` or `504` is retried `retries` times (default `1`) after a short
+pause, while the budget lasts; a timeout (`NF-008`), another status or an invalid envelope is not
+retried. Set them for all remotes or per remote:
+
+```ts
+export const federation = defineFederation({
+  islands: { timeoutMs: 5000, retries: 2 },
+  remotes: {
+    shop: { origin: 'https://shop.example.com' },
+    // A slow remote gets more time; a flaky one more retries.
+    reports: { origin: 'https://reports.example.com', timeoutMs: 8000, retries: 0 },
+  },
+})
+```
+
+A failed island renders `errorFallback` (default: `fallback`) and the page still answers `200`.
+
 ## 4. Render an island
 
 ```tsx

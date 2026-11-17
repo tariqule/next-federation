@@ -129,6 +129,20 @@ not per island.
 - `NF-038`: the response is not a Server Action response and carries no NF code: a 5xx from the
   remote or a proxy, any other response that is not a Server Action response, or one with no body.
   See [action-request-failed](../errors/action-request-failed.md).
+- Timeouts: by default an action call has **no client-side timeout**. The browser waits for the
+  remote as long as the connection stays open (a proxy or load balancer in front of the remote may
+  cut it, which surfaces as `NF-038`). Set `actions.timeoutMs` in the remote's
+  `nextFederationIslands` options to bound it:
+
+  ```ts
+  nextFederationIslands({ /* ... */ actions: { timeoutMs: 15_000 } })
+  ```
+
+  A call whose response has not started within that many milliseconds is aborted and rejects with
+  `NF-038` ("did not answer within 15000 ms"). The limit covers the wait for the response, not a
+  long streamed result. **The action may still have run** on the remote: aborting the request does
+  not stop it there, so retry only actions that are safe to run twice. The remote's own server
+  timeouts (`nf-serve`, your platform's function limit) are separate.
 - Each call is reported to the host as an `island:action` event (`ok`, `status`, `code`, `ms`,
   `retried`; never arguments, results or tokens), on `onEvent` and the bubbling `nf:island` DOM
   event.

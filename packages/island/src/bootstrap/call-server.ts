@@ -1,6 +1,6 @@
 import { ACTION_HEADER, actionEndpoint } from '@next-federation/protocol'
 import type { ActionReport } from '@next-federation/protocol'
-import { ERROR_CODES, NFError } from '@next-federation/sdk'
+import { ERROR_CODES, NFError, isNFError } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
 
 export type CallServer = (id: string, args: unknown[]) => Promise<unknown>
@@ -20,6 +20,12 @@ export type CallServerOptions = {
     options: { callServer: CallServer }
   ): PromiseLike<T>
   onAction?: (report: ActionReport) => void
+  /**
+   * Rejects with NF-038 (and aborts the request) when the remote has not
+   * started answering within this many ms. Default: no limit. The action may
+   * still have run on the remote.
+   */
+  timeoutMs?: number
 }
 
 const now = (): number =>
@@ -86,17 +92,33 @@ export function createCallServer(options: CallServerOptions): CallServer {
   const callServer: CallServer = async (id, args) => {
     const started = now()
     const body = await options.encodeReply(args)
-    const send = (token: string | null) => {
+    const { timeoutMs } = options
+    const send = async (token: string | null): Promise<Response> => {
       const headers: Record<string, string> = { [ACTION_HEADER]: id }
       if (token) headers.authorization = `Bearer ${token}`
-      return fetch(url, {
+      const init: RequestInit = {
         method: 'POST',
         headers,
         body,
         credentials: 'omit',
         // A redirect would resend the action elsewhere: refuse it.
         redirect: 'error',
-      })
+      }
+      if (timeoutMs === undefined) return fetch(url, init)
+      // Until the response starts: a long streamed result is not cut off.
+      const controller = new AbortController()
+      const timeout = new NFError(
+        'NF-038',
+        `Server Action "${id}" did not answer within ${timeoutMs} ms; it may or may not have run.`
+      )
+      const timer = setTimeout(() => controller.abort(timeout), timeoutMs)
+      try {
+        return await fetch(url, { ...init, signal: controller.signal })
+      } catch (error) {
+        throw controller.signal.aborted ? timeout : error
+      } finally {
+        clearTimeout(timer)
+      }
     }
     let retried = false
     let status = 0
@@ -128,6 +150,7 @@ export function createCallServer(options: CallServerOptions): CallServer {
         }
       }
     } catch (error) {
+      if (isNFError(error)) code = error.code
       done(false)
       throw error
     }

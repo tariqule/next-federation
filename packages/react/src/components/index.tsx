@@ -78,7 +78,7 @@ const runtime = createComponentRuntime({
   emit,
 })
 
-const bindings = createBindings({ runtime, isServer })
+const bindings = createBindings({ runtime, isServer, emit })
 
 /**
  * Loads an exposed module of one remote build (cached per build). On the

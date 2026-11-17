@@ -134,6 +134,20 @@ test('virtual:next-federation/config: full options on the server, public fields 
   })
 })
 
+test('virtual:next-federation/config: actions.timeoutMs reaches the browser config', () => {
+  const plugins = nextFederationIslands({
+    ...options,
+    actions: { timeoutMs: 15_000 },
+  })
+  const config = byName(plugins, 'nf:config')
+  handlerOf(config.config)({}, { command: 'build', mode: 'production' })
+  handlerOf(config.configResolved)({ root: '/app' })
+  const client = defaultExport(
+    load(config, 'virtual:next-federation/config', 'client')
+  ) as Record<string, unknown>
+  expect(client.actionTimeoutMs).toBe(15_000)
+})
+
 test('virtual:next-federation/islands: lazy imports of the absolute entries with their private flag', () => {
   const code = load(setup().config, 'virtual:next-federation/islands')
   expect(code).toContain(

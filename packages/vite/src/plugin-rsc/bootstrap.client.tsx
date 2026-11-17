@@ -33,6 +33,9 @@ const bootstrap: IslandBootstrapModule = createIslandBootstrap({
   loadClientReference,
   createFromReadableStream,
   encodeReply,
+  ...(config.actionTimeoutMs === null || config.actionTimeoutMs === undefined
+    ? {}
+    : { actionTimeoutMs: config.actionTimeoutMs }),
 })
 
 export const mountIsland: IslandBootstrapModule['mountIsland'] =

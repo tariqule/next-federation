@@ -35,9 +35,9 @@ test('cause is preserved', () => {
   expect(new NFError('NF-007', 'x').cause).toBeUndefined()
 })
 
-test('codes are contiguous NF-001..NF-039 with unique slugs', () => {
+test('codes are contiguous NF-001..NF-040 with unique slugs', () => {
   const expected = Array.from(
-    { length: 39 },
+    { length: 40 },
     (_, i) => `NF-${String(i + 1).padStart(3, '0')}`
   )
   expect(Object.keys(ERROR_CODES)).toEqual(expected)
@@ -58,5 +58,12 @@ test('a remote component deferred to request time has its own code', () => {
   expect(ERROR_CODES['NF-039']).toEqual({
     slug: 'component-deferred',
     title: 'Remote component deferred to request time',
+  })
+})
+
+test('a remote component render error has its own code', () => {
+  expect(ERROR_CODES['NF-040']).toEqual({
+    slug: 'component-render-failed',
+    title: 'Remote component threw while rendering',
   })
 })

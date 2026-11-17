@@ -14,6 +14,10 @@ Another: `withNextFederation()` got `cacheComponents` (or Next 15's `experimenta
 
 Another: an App Router `RemoteIsland` got `blocking` without `private`. `blocking` renders a private island in the first HTML instead of streaming it; a public island is cached and already renders in place.
 
+Another: `nextFederationIslands` (an island remote) cannot find `react-server-dom-webpack`. It is an optional peer dependency of `@next-federation/vite`, since components remotes never use it, so npm does not install it for you. The message names the install command for your React version.
+
+A warning, not an error: a components remote's dev server (`nextFederationComponents`) logs `NF-002` once when a browser opens a page of the Vite project. That project's React and `shared` modules are host-provided, so the page cannot run on its own.
+
 ## How to fix
 
-Fix the field named in the message. For `cacheComponents` on Next.js 15, remove the option or upgrade to Next.js 16. For `blocking`, remove it from the public island or add `private`. For a plain-`http` URL, switch it to `https`; set `allowInsecureHttp: true` only when the traffic is protected some other way (it logs a warning once per process). Configuration is validated at startup so a bad value never reaches production traffic.
+Fix the field named in the message. For `cacheComponents` on Next.js 15, remove the option or upgrade to Next.js 16. For `blocking`, remove it from the public island or add `private`. For `react-server-dom-webpack`, install it at exactly your React's version (`npm install --save-exact react-server-dom-webpack@<react version>`). For the components dev-page warning, keep the standalone app in its own Vite config ([Keeping a standalone app](../guides/remote-components.md#keeping-a-standalone-app)). For a plain-`http` URL, switch it to `https`; set `allowInsecureHttp: true` only when the traffic is protected some other way (it logs a warning once per process). Configuration is validated at startup so a bad value never reaches production traffic.

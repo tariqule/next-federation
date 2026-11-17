@@ -131,7 +131,8 @@ import { createRemoteComponent } from '@next-federation/react/components'
 export const Cart = createRemoteComponent<{ items: number }>({
   expose: './Cart',
   shared: { '@acme/host-context': { version: '1.0.0', module: HostContext } },
-  fallback: <p>Cart unavailable</p>,
+  fallback: <p>Loading the cart…</p>,
+  errorFallback: <p>Cart unavailable</p>,
 })
 ```
 

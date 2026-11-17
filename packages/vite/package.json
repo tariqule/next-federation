@@ -62,6 +62,9 @@
     "vite": "^8.0.0"
   },
   "peerDependenciesMeta": {
+    "react-server-dom-webpack": {
+      "optional": true
+    },
     "typescript": {
       "optional": true
     }
