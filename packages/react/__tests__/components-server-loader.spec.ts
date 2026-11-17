@@ -300,6 +300,28 @@ describe('fix round 1: server-side trust', () => {
     ).toBe(false)
   })
 
+  test('the type declarations are covered: a signed descriptor with types is trusted, a changed index hash is not', () => {
+    const types = {
+      index: `${d().base}@mf-types/index.json`,
+      integrity: `sha384-${'A'.repeat(64)}`,
+    }
+    const signed = { ...d(), types }
+    const digest = `sha384-${createHash('sha384')
+      .update(canonicalJson({ ...JSON.parse(canonicalOf(d())), types }))
+      .digest('base64')}`
+    componentTrustRegistry().verified.set(
+      verifiedKey('trusted-remote', digest),
+      'signature'
+    )
+    expect(isTrustedDescriptor(signed)).toBe(true)
+    expect(
+      isTrustedDescriptor({
+        ...signed,
+        types: { ...types, integrity: `sha384-${'B'.repeat(64)}` },
+      })
+    ).toBe(false)
+  })
+
   test('cache hit after a restart: re-verified from the carried jws against registered keys', () => {
     const { privateKey, pub } = keyPair()
     const signed = d({ iat: 100 })

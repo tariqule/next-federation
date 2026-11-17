@@ -50,6 +50,29 @@ export type ComponentSharedModule = {
   version?: string
 }
 
+/**
+ * The TypeScript declarations of a build's exposed modules, for hosts'
+ * prop types (downloaded, never run): one signed entry naming the build's
+ * declarations index, so the descriptor stays small.
+ */
+export type ComponentBuildTypes = {
+  /** Absolute URL of `@mf-types/index.json` under `base`. */
+  index: string
+  /** `sha384-<base64>` of the index file's bytes. */
+  integrity: string
+}
+
+/** The declarations index (`@mf-types/index.json`): what `types.integrity` covers. */
+export type ComponentTypesIndex = {
+  /** Expose key ('./Counter') -> its entry declaration file, a key of `files`. */
+  exposes: Record<string, string>
+  /** Every declaration file (path relative to `base`, ending `.d.ts`) -> its sha384. */
+  files: Record<string, string>
+}
+
+/** At most this many declaration files in one build's index. */
+export const MAX_TYPE_FILES = 2000
+
 /** What a build signs (or a host pins): everything a host trusts about it. */
 export type ComponentBuildDescriptor = {
   v: 1
@@ -72,6 +95,8 @@ export type ComponentBuildDescriptor = {
   assets?: ComponentBuildAssets
   /** Modules the build expects from its host, by specifier; absent in older builds. */
   shared?: Record<string, ComponentSharedModule>
+  /** The exposed modules' type declarations; absent when none were emitted. */
+  types?: ComponentBuildTypes
 }
 
 /** The published file: the payload, its digest and optionally its ES256 JWS. */
@@ -102,6 +127,8 @@ export type RemoteComponentDescriptor = {
   assets?: ComponentBuildAssets
   /** The modules the build expects from its host, as in its descriptor. */
   shared?: Record<string, ComponentSharedModule>
+  /** The build's type declarations, as in its descriptor (they are signed with it). */
+  types?: ComponentBuildTypes
   /**
    * The build's JWS, carried so a server can re-verify the descriptor
    * itself (a cached descriptor after a restart): `ssr` alone is never trusted.
@@ -307,6 +334,58 @@ function parseShared(
   return out
 }
 
+function parseTypes(value: unknown, base: string): ComponentBuildTypes | null {
+  if (!isRecord(value)) return null
+  const index = urlUnder(value.index, base)
+  if (!index || !index.endsWith('.json')) return null
+  const { integrity } = value
+  if (typeof integrity !== 'string' || !SHA384_PATTERN.test(integrity)) {
+    return null
+  }
+  return { index, integrity }
+}
+
+/** One path segment of a declaration file: no `%`, `:`, backslash or dot segments. */
+const TYPE_SEGMENT = /^[\w@+-][\w@.+-]*$/
+
+const isTypePath = (path: string): boolean =>
+  path.endsWith('.d.ts') &&
+  path.split('/').every((part) => TYPE_SEGMENT.test(part) && part !== '..')
+
+/** A build's declarations index, validated; null when invalid. */
+export function parseComponentTypesIndex(
+  value: unknown
+): ComponentTypesIndex | null {
+  if (!isRecord(value) || !isRecord(value.exposes) || !isRecord(value.files)) {
+    return null
+  }
+  const entries = Object.entries(value.files)
+  if (entries.length > MAX_TYPE_FILES) return null
+  const files: Record<string, string> = {}
+  for (const [path, hash] of entries) {
+    if (
+      !isTypePath(path) ||
+      typeof hash !== 'string' ||
+      !SHA384_PATTERN.test(hash)
+    ) {
+      return null
+    }
+    files[path] = hash
+  }
+  const exposes: Record<string, string> = {}
+  for (const [key, file] of Object.entries(value.exposes)) {
+    if (
+      !isExposeKey(key) ||
+      typeof file !== 'string' ||
+      !Object.hasOwn(files, file)
+    ) {
+      return null
+    }
+    exposes[key] = file
+  }
+  return { exposes, files }
+}
+
 /** The payload fields of a descriptor, validated; null when invalid. */
 export function parseComponentBuildDescriptor(
   value: unknown
@@ -343,6 +422,12 @@ export function parseComponentBuildDescriptor(
     if (!parsed) return null
     shared = parsed
   }
+  let types: ComponentBuildTypes | undefined
+  if (value.types !== undefined) {
+    const parsed = parseTypes(value.types, base)
+    if (!parsed) return null
+    types = parsed
+  }
   return {
     v: 1,
     name,
@@ -353,6 +438,7 @@ export function parseComponentBuildDescriptor(
     ...(iat === undefined ? {} : { iat: iat as number }),
     ...(assets === undefined ? {} : { assets }),
     ...(shared === undefined ? {} : { shared }),
+    ...(types === undefined ? {} : { types }),
   }
 }
 
@@ -396,7 +482,8 @@ export function componentDescriptorBytes(
 export function componentDescriptorCanonical(
   payload: ComponentBuildDescriptor
 ): string {
-  const { v, name, buildId, base, manifest, ssr, iat, assets, shared } = payload
+  const { v, name, buildId, base, manifest, ssr, iat, assets, shared, types } =
+    payload
   return canonicalJson({
     v,
     name,
@@ -407,6 +494,7 @@ export function componentDescriptorCanonical(
     iat,
     assets,
     shared,
+    types,
   })
 }
 

@@ -60,6 +60,33 @@ export type RemoteComponentType<P> = ((
   preload(descriptor: RemoteComponentDescriptor | null): Promise<void>
 }
 
+declare global {
+  /**
+   * The type declarations of remote components: remote -> expose -> module
+   * type. Empty until `nf-types` (@next-federation/next) writes
+   * `next-federation-types/index.d.ts`, which fills it from each remote
+   * build's signed declarations.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  interface NextFederationRemoteComponents {}
+}
+
+/**
+ * The props of an exposed remote component, from the declarations `nf-types`
+ * downloaded: `createRemoteComponent<RemoteProps<'components', './Counter'>>`.
+ * Type-only: the host never imports the remote's code to get them.
+ */
+export type RemoteProps<
+  R extends keyof NextFederationRemoteComponents,
+  E extends keyof NextFederationRemoteComponents[R],
+> = NextFederationRemoteComponents[R][E] extends { default: infer C }
+  ? C extends (props: infer P) => unknown
+    ? P
+    : C extends new (props: infer P) => unknown
+      ? P
+      : never
+  : never
+
 /** Marks, in the server HTML, a boundary the server left to the browser. */
 export const BROWSER_ONLY_ATTR = 'data-nf-browser-only'
 

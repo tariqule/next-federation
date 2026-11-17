@@ -233,6 +233,20 @@ does not provide (for example `next/router` in an App Router host) renders its f
 (`NF-036`). The version they report is the host's Next.js version, which `withNextFederation`
 records in `env.NF_NEXT_VERSION` (`NF-017` without the wrapper).
 
+## Remote component prop types: `nf-types`
+
+```sh
+nf-types --config lib/federation.mjs [--remote shop]... [--out next-federation-types]
+```
+
+Downloads the type declarations of each components remote's current build (only from a descriptor
+that verifies with the remote's `components.ssr` keys or pins, only from under its base, through
+the build's signed declarations index, each file's raw bytes checked against its sha384 and every
+body read with a size limit; nothing downloaded runs) into `next-federation-types/<remote>/`, and
+writes `next-federation-types/index.d.ts`, which fills `RemoteProps`:
+`createRemoteComponent<RemoteProps<'shop', './Cart'>>({ expose: './Cart' })`. Exits 1 when a remote
+fails (it keeps its previous types). Guide: [Types](../../docs/guides/remote-components.md#types).
+
 ## API
 
 | Export                                                    | Entry                                                                        | Purpose                                                           |

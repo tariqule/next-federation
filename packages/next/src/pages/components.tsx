@@ -42,5 +42,6 @@ export type {
   RemoteComponentProps,
   RemoteComponentType,
   RemoteModule,
+  RemoteProps,
   SharedModules,
 } from '@next-federation/react/components'

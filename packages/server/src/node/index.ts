@@ -5,11 +5,16 @@ export { serveBuilds } from './serve-builds.ts'
 export type { ServeBuildsOptions, ServedBuilds } from './serve-builds.ts'
 export {
   SHARED_USAGE_FILE,
+  TYPES_FOLDER,
+  TYPES_INDEX_FILE,
   collectBrowserAssets,
   collectServerIntegrity,
+  collectTypesIndex,
   createDescriptorFile,
   readSharedUsage,
   sharedFromManifest,
+  typesIndexBytes,
+  writeTypesIndex,
 } from './components-descriptor.ts'
 export type {
   ComponentsBuildInfo,

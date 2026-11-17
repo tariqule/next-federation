@@ -3,6 +3,7 @@
 // config once per environment, and every resolution must agree on the
 // default build id. Needs the workspace packages built (`pnpm build`).
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -56,6 +57,7 @@ test('vite build without NF_BUILD_ID writes one build with its manifest and desc
       entry: string
       exposes: Record<string, { css: string[]; js: string[] }>
     }
+    types?: { index: string; integrity: string }
   }
   expect(descriptor.buildId).toBe(builds[0])
   // The browser files, signed with the rest: Counter.css and its chunks.
@@ -73,6 +75,26 @@ test('vite build without NF_BUILD_ID writes one build with its manifest and desc
   }
   expect(descriptor.base).toMatch(new RegExp(`/b/${builds[0]}/$`))
   expect(Object.keys(descriptor.ssr.integrity)).toContain('remoteEntry.ssr.js')
+  // The declarations index, signed with the rest (hosts' prop types).
+  const sha = (bytes: Buffer) =>
+    `sha384-${createHash('sha384').update(bytes).digest('base64')}`
+  expect(descriptor.types?.index).toBe(`${descriptor.base}@mf-types/index.json`)
+  const indexBytes = await readFile(join(dir, 'client', '@mf-types/index.json'))
+  expect(sha(indexBytes)).toBe(descriptor.types?.integrity)
+  const index = JSON.parse(indexBytes.toString('utf8')) as {
+    exposes: Record<string, string>
+    files: Record<string, string>
+  }
+  expect(index.exposes['./Counter']).toBe('@mf-types/Counter.d.ts')
+  for (const [path, hash] of Object.entries(index.files)) {
+    expect(sha(await readFile(join(dir, 'client', path)))).toBe(hash)
+  }
+  const counterTypes = Object.keys(index.files).find((p) =>
+    p.endsWith('compiled-types/src/Counter.d.ts')
+  )
+  expect(await readFile(join(dir, 'client', counterTypes!), 'utf8')).toMatch(
+    /start\?: number/
+  )
 }, 120_000)
 
 test('a build in a test environment fails with NF-002, not a missing manifest', () => {

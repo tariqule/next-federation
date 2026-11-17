@@ -13,6 +13,7 @@ import {
   SHARED_USAGE_FILE,
   readSharedUsage,
   sharedFromManifest,
+  writeTypesIndex,
 } from '@next-federation/server/node'
 import type { ComponentsBuildInfo } from '@next-federation/server/node'
 import {
@@ -26,6 +27,7 @@ import type {
   ResolvedComponentsOptions,
 } from './options.ts'
 import { collectSharedUsage, mfSharedConfig } from './shared.ts'
+import { emitBuildTypes, loadTypeScript } from './types.ts'
 import {
   assertModuleFederationViteVersion,
   installedModuleFederationViteVersion,
@@ -194,6 +196,13 @@ export function nextFederationComponents(
         const client = join(outDir, 'client')
         await rm(join(outDir, '.ssr'), { recursive: true, force: true })
         await rm(join(client, 'index.html'), { force: true })
+        await emitBuildTypes({
+          types: resolved.types,
+          ts: resolved.types ? loadTypeScript(builder.config.root) : null,
+          root: builder.config.root,
+          exposes: resolved.exposes,
+          clientDir: client,
+        })
         const payload: ComponentBuildDescriptor = {
           v: 1,
           name: resolved.name,
@@ -217,6 +226,9 @@ export function nextFederationComponents(
           await readSharedUsage(outDir)
         )
         if (shared) payload.shared = shared
+        // Signed too: the declarations index (hosts' prop types).
+        const types = await writeTypesIndex(client, resolved.publicBase)
+        if (types) payload.types = types
         const file = await createDescriptorFile(payload, process.env)
         const info: ComponentsBuildInfo = {
           kind: 'components',

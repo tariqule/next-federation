@@ -1,10 +1,12 @@
 // The Mode A build descriptor, bundler-neutral: shared by
 // @next-federation/vite's nextFederationComponents and `nf-describe` (any
 // Module Federation 2.0 build), so both write exactly the same file.
-import { lstat, readFile, realpath } from 'node:fs/promises'
+import { lstat, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   COMPONENTS_JWS_TYPE,
+  MAX_TYPE_FILES,
+  canonicalJson,
   componentDescriptorBytes,
   componentDescriptorDigest,
   isSemverRange,
@@ -14,6 +16,8 @@ import {
 import type {
   ComponentBuildAssets,
   ComponentBuildDescriptor,
+  ComponentBuildTypes,
+  ComponentTypesIndex,
   ComponentDescriptorFile,
   ComponentSharedModule,
 } from '@next-federation/protocol'
@@ -221,6 +225,107 @@ export async function collectServerIntegrity(
     }
   }
   return integrity
+}
+
+/** The type declarations folder in a build's `client/` (Module Federation's name). */
+export const TYPES_FOLDER = '@mf-types'
+/** The declarations index in `@mf-types/`, which the descriptor signs. */
+export const TYPES_INDEX_FILE = 'index.json'
+
+/**
+ * The declarations index of a build: every `.d.ts` file under
+ * `client/@mf-types/` with its sha384 (paths relative to the build folder,
+ * so to its base URL), and per expose ('./Counter') its entry file
+ * `@mf-types/Counter.d.ts` when there is one (Module Federation's layout).
+ * undefined when the build has no `@mf-types/` folder. NF-002 for a
+ * symlink, or a file or folder that resolves outside the build folder.
+ */
+export async function collectTypesIndex(
+  dir: string
+): Promise<ComponentTypesIndex | undefined> {
+  const root = resolve(dir)
+  const folder = join(root, TYPES_FOLDER)
+  try {
+    await lstat(folder)
+  } catch {
+    return undefined
+  }
+  const realRoot = await realpath(root)
+  await assertBuildDir(folder, realRoot, `${TYPES_FOLDER}/`)
+  const files: Record<string, string> = {}
+  const walk = async (current: string): Promise<void> => {
+    const entries = await readdir(current, { withFileTypes: true })
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    for (const entry of entries) {
+      const path = join(current, entry.name)
+      const rel = relative(root, path).split(sep).join('/')
+      if (entry.isDirectory()) {
+        await assertBuildDir(path, realRoot, `${rel}/`)
+        await walk(path)
+      } else if (entry.name.endsWith('.d.ts')) {
+        await assertBuildFile(path, realRoot, rel)
+        if (Object.keys(files).length >= MAX_TYPE_FILES) {
+          throw new NFError(
+            'NF-002',
+            `${TYPES_FOLDER}/ has more than ${MAX_TYPE_FILES} declaration files.`
+          )
+        }
+        files[rel] = await sha384Integrity(await readFile(path))
+      } else if (entry.isSymbolicLink()) {
+        throw new NFError(
+          'NF-002',
+          `${rel} is a symlink: a build's files must be regular files inside its folder.`
+        )
+      }
+    }
+  }
+  await walk(folder)
+  const manifest = JSON.parse(
+    await readFile(join(root, 'mf-manifest.json'), 'utf8')
+  ) as Manifest
+  const exposes: Record<string, string> = {}
+  for (const expose of manifest.exposes ?? []) {
+    if (typeof expose.path !== 'string') continue
+    const key = expose.path.startsWith('./') ? expose.path : `./${expose.path}`
+    const entry = `${TYPES_FOLDER}/${key.slice(2)}.d.ts`
+    if (entry in files) exposes[key] = entry
+  }
+  return { exposes, files }
+}
+
+/** The bytes of `@mf-types/index.json` for an index (canonical JSON). */
+export function typesIndexBytes(index: ComponentTypesIndex): Uint8Array {
+  return new TextEncoder().encode(`${canonicalJson(index)}\n`)
+}
+
+/**
+ * Writes `client/@mf-types/index.json` (never through a symlink) and returns
+ * the descriptor's signed `types` entry: the index URL and its sha384.
+ * undefined when the build has no `@mf-types/` folder.
+ */
+export async function writeTypesIndex(
+  dir: string,
+  base: string
+): Promise<ComponentBuildTypes | undefined> {
+  const index = await collectTypesIndex(dir)
+  if (!index) return undefined
+  const path = join(resolve(dir), TYPES_FOLDER, TYPES_INDEX_FILE)
+  try {
+    if ((await lstat(path)).isSymbolicLink()) {
+      throw new NFError(
+        'NF-002',
+        `${TYPES_FOLDER}/${TYPES_INDEX_FILE} is a symlink: a build's files must be regular files inside its folder.`
+      )
+    }
+  } catch (error) {
+    if ((error as { code?: unknown }).code !== 'ENOENT') throw error
+  }
+  const bytes = typesIndexBytes(index)
+  await writeFile(path, bytes)
+  return {
+    index: `${base}${TYPES_FOLDER}/${TYPES_INDEX_FILE}`,
+    integrity: await sha384Integrity(bytes),
+  }
 }
 
 /** Always the host's (never in the descriptor's `shared`). */

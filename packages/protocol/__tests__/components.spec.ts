@@ -1,10 +1,14 @@
 import { createHash } from 'node:crypto'
-import type { ComponentSharedModule } from '../src/components.ts'
+import type {
+  ComponentBuildTypes,
+  ComponentSharedModule,
+} from '../src/components.ts'
 import {
   COMPONENTS_DESCRIPTOR_PATH,
   componentDescriptorDigest,
   componentTrustRegistry,
   parseComponentDescriptorFile,
+  parseComponentTypesIndex,
   sha384Integrity,
 } from '../src/components.ts'
 
@@ -292,5 +296,125 @@ describe('shared modules (version negotiation)', () => {
     ],
   ])('rejects %s', (_name, value) => {
     expect(parseComponentDescriptorFile(value)).toBeNull()
+  })
+})
+
+describe('type declarations', () => {
+  const hash = `sha384-${'A'.repeat(64)}`
+  const types: ComponentBuildTypes = {
+    index: `${base}@mf-types/index.json`,
+    integrity: hash,
+  }
+
+  test('parses one signed index entry, and the digest covers it', async () => {
+    const file = parseComponentDescriptorFile({
+      ...payload,
+      types,
+      digest: 'd',
+    })
+    expect(file?.types).toEqual(types)
+    const a = await componentDescriptorDigest({ ...payload, types })
+    expect(a).not.toBe(await componentDescriptorDigest(payload))
+    expect(
+      await componentDescriptorDigest({
+        ...payload,
+        types: { ...types, integrity: `sha384-${'B'.repeat(64)}` },
+      })
+    ).not.toBe(a)
+  })
+
+  test('a descriptor without types still parses (older builds)', () => {
+    expect(
+      parseComponentDescriptorFile({ ...payload, digest: 'd' })?.types
+    ).toBeUndefined()
+  })
+
+  const withTypes = (value: unknown) => ({
+    ...payload,
+    types: value,
+    digest: 'd',
+  })
+  test.each([
+    ['types not an object', withTypes([])],
+    [
+      'an index outside the base',
+      withTypes({ ...types, index: 'https://evil.example/i.json' }),
+    ],
+    [
+      'an index that is not .json',
+      withTypes({ ...types, index: `${base}@mf-types/index.js` }),
+    ],
+    [
+      'an index with a query',
+      withTypes({ ...types, index: `${base}@mf-types/index.json?x` }),
+    ],
+    [
+      'an integrity that is not sha384',
+      withTypes({ ...types, integrity: 'md5-x' }),
+    ],
+  ])('rejects %s', (_name, value) => {
+    expect(parseComponentDescriptorFile(value)).toBeNull()
+  })
+})
+
+describe('type declarations index (@mf-types/index.json)', () => {
+  const hash = `sha384-${'A'.repeat(64)}`
+  const index = {
+    exposes: { './Counter': '@mf-types/Counter.d.ts' },
+    files: {
+      '@mf-types/Counter.d.ts': hash,
+      '@mf-types/compiled-types/Counter.d.ts': hash,
+    },
+  }
+
+  test('parses a valid index', () => {
+    expect(parseComponentTypesIndex(index)).toEqual(index)
+  })
+
+  test.each([
+    ['files missing', { exposes: {} }],
+    [
+      'a file that is not a .d.ts',
+      { exposes: {}, files: { '@mf-types/a.js': hash } },
+    ],
+    [
+      'a parent segment',
+      { exposes: {}, files: { '@mf-types/../x.d.ts': hash } },
+    ],
+    [
+      'an encoded parent segment',
+      { exposes: {}, files: { '%2e%2e/x.d.ts': hash } },
+    ],
+    ['a drive letter segment', { exposes: {}, files: { 'a/C:/x.d.ts': hash } }],
+    ['a backslash', { exposes: {}, files: { 'a\\x.d.ts': hash } }],
+    ['an absolute path', { exposes: {}, files: { '/etc/x.d.ts': hash } }],
+    ['a file without a sha384', { exposes: {}, files: { 'a.d.ts': 'md5-x' } }],
+    [
+      'an expose key that is not ./name',
+      { exposes: { Counter: '@mf-types/Counter.d.ts' }, files: index.files },
+    ],
+    [
+      'an expose pointing at an unlisted file',
+      { exposes: { './Counter': '@mf-types/Other.d.ts' }, files: index.files },
+    ],
+    [
+      'an expose naming an inherited property (toString)',
+      { exposes: { './Counter': 'toString' }, files: index.files },
+    ],
+    [
+      'an expose naming an inherited property (constructor)',
+      { exposes: { './Counter': 'constructor' }, files: index.files },
+    ],
+    [
+      'more than 2000 files',
+      {
+        exposes: {},
+        files: Object.fromEntries(
+          Array.from({ length: 2001 }, (_, i) => [`t/${i}.d.ts`, hash])
+        ),
+      },
+    ],
+  ])('rejects %s', (_name, value) => {
+    expect(parseComponentTypesIndex(value)).toBeNull()
   })
 })

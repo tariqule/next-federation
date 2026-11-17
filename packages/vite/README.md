@@ -155,6 +155,14 @@ module with its range, its fallback flag and the exposed modules that import it 
 An exposed module compiled with Fast Refresh fails the build (`NF-002`). The dev server answers
 `/_nf/components.json` with `ssr: null` (hosts render a dev remote in the browser only).
 Programmatic builds set `NF_VITE_COMMAND=build` (the plugin reads the command before Vite does).
+`types: true` (off by default in 0.x) emits the exposed modules' declarations into
+`client/@mf-types/` (no comments, `/*!` ones included; paths relative to the Vite root) with an `index.json` of their
+sha384, and signs that index in the descriptor, for hosts' `nf-types`. The declarations of the
+exposed modules and the local files they import become public, **including the literal values of
+constants, `as const` objects and enums** (also ones inlined from outside the root): don't expose
+a module whose type graph reaches a secret. Without `typescript`, when TypeScript cannot emit
+them, or when a declaration names an absolute path or a path above the root, the build warns and
+publishes no types.
 Guide: [Remote components](../../docs/guides/remote-components.md).
 
 ## API

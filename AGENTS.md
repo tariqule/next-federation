@@ -38,13 +38,13 @@ packages/
   vite/       index.ts, options.ts, scope-flight-client.ts, checks.ts, share.ts (React sharing),
               plugin-rsc/ (plugin.ts, entry.rsc.tsx, entry.ssr.tsx, entry.client.tsx,
               bootstrap.client.tsx, css.ts), components/ (plugin.ts, options.ts, descriptor.ts,
-              version.ts: the Mode A components remote, nextFederationComponents)
+              version.ts, types.ts: the Mode A components remote, nextFederationComponents)
   next/       config.ts → "./config"; server/ (create-islands.tsx, island-cache.legacy.ts,
               island-cache.cc.ts, private-envelope.ts, component-descriptor.ts,
               get-component-descriptor.ts) → "./server"; client/next-island-mount.tsx;
               routes.ts, route-core.ts → "./routes"; pages/ (create-pages-islands.ts,
               remote-island.tsx, api-handler.ts, component-descriptor.ts) → "./pages",
-              "./pages/server"; bridge.ts
+              "./pages/server"; bridge.ts; types/ (sync.ts, cli.ts) → bin "nf-types"
 test/
   fixtures/island-remote/   Vite remote (names a, b), built with @next-federation/vite
   fixtures/host-app/        App Router host (with and without cacheComponents)
