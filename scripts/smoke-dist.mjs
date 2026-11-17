@@ -4,6 +4,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { importCallComments } from './lib/import-comments.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packagesDir = join(root, 'packages')
@@ -176,8 +177,7 @@ for (const key of NEXT_RUNTIME_ONLY) {
   const file = join(packagesDir, 'react', 'dist', 'island-mount.js')
   if (existsSync(file)) {
     const source = readFileSync(file, 'utf8')
-    const call = /import\(\s*((?:\/\*[^]*?\*\/\s*)+)url\s*\)/.exec(source)
-    const comments = call?.[1] ?? ''
+    const comments = importCallComments(source, 'url') ?? ''
     const missing = [
       'webpackIgnore: true',
       'turbopackIgnore: true',

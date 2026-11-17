@@ -62,6 +62,18 @@ test('another @module-federation/vite is NF-026; NF_ALLOW_MF_VITE=1 only warns',
   expect(String(warn.mock.calls[0]?.join(' '))).toMatch(/NF-026.*1\.25\.0/)
 })
 
+test('outDir: trimming trailing slashes is linear on a long run of inner slashes', () => {
+  // `/\/+$/` retries the slash run from every start position: quadratic.
+  const outDir = `dist${'/'.repeat(100_000)}x`
+  const started = performance.now()
+  const resolved = resolveComponentsOptions(
+    { ...base, buildId: 'c1', outDir: `${outDir}//` },
+    ctx
+  )
+  expect(performance.now() - started).toBeLessThan(100)
+  expect(resolved.outDir).toBe(`${outDir}/c1`)
+})
+
 test('a build gets an immutable /b/<buildId>/ base and its own folder', () => {
   const resolved = resolveComponentsOptions(
     { ...base, buildId: 'c1', shared: ['components-context'] },

@@ -17,6 +17,7 @@ import {
   MODE,
   REMOTE_A,
 } from './servers.ts'
+import { markup } from './lib/strip-scripts.ts'
 
 const PAYLOAD = '</script><script>window.pwned=1</script><!--'
 // The same string as the `big-props` fixture pages: Latin with a combining
@@ -31,12 +32,6 @@ const HOSTS = [
   { name: 'Pages Router', url: HOST_PAGES, router: 'pages' },
 ] as const
 
-// The rendered markup only: without Next's embedded data (RSC rows or
-// __NEXT_DATA__), which also carries fallbacks and props.
-const markup = (html: string) =>
-  html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-    .replaceAll('<!-- -->', '')
 const unique = (label: string) =>
   `${label}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 

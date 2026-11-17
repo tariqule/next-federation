@@ -24,6 +24,7 @@ import {
   MODE,
   PORTS,
 } from './servers.ts'
+import { markup } from './lib/strip-scripts.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const remoteFixture = join(here, '..', 'fixtures', 'components-remote')
@@ -106,12 +107,6 @@ function watch(page: Page) {
   })
   return { bad, all }
 }
-
-// The rendered markup: no scripts (Next's RSC data carries props), no text separators.
-const markup = (html: string) =>
-  html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-    .replaceAll('<!-- -->', '')
 
 async function html(url: string): Promise<{ status: number; body: string }> {
   // A server render must never hang: fail fast instead of waiting minutes.

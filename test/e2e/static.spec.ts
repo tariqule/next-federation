@@ -5,16 +5,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { FAKE_REMOTE, HOST_APP_CC, LOGS_DIR, PORTS } from './servers.ts'
+import { markup } from './lib/strip-scripts.ts'
 
 const FAKE = FAKE_REMOTE
 const buildLog = (port: number) =>
   readFileSync(join(LOGS_DIR, `host-app-${port}.build.log`), 'utf8')
-// The rendered markup only: without Next's embedded RSC data, which also
-// carries the fallbacks as props.
-const strip = (html: string) =>
-  html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-    .replaceAll('<!-- -->', '')
 
 test.skip(process.env.NF_MODE !== 'prod', 'production builds only')
 
@@ -53,7 +48,7 @@ for (const [name, port] of [
     request,
   }) => {
     const page = async () =>
-      strip(await (await request.get(`${url}/reval`)).text())
+      markup(await (await request.get(`${url}/reval`)).text())
     const revOf = (html: string) =>
       Number(/echo reval rev (\d+)/.exec(html)?.[1])
     // Start from a fresh entry: a background regeneration still in flight
@@ -91,7 +86,7 @@ test('cacheComponents: a static route whose remote is down at revalidation regen
   request,
 }) => {
   const url = `${HOST_APP_CC}/flaky-static`
-  const page = async () => strip(await (await request.get(url)).text())
+  const page = async () => markup(await (await request.get(url)).text())
   expect(buildLog(PORTS.hostAppCc)).toMatch(/^[├└┌] [○◐] \/flaky-static\b/m)
   try {
     // Built while the remote was up: the island is in the static output.

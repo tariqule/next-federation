@@ -12,6 +12,7 @@
     "@next-federation/protocol": "workspace:*",
     "@playwright/test": "1.65.0",
     "@types/node": "24.10.1",
+    "parse5": "8.1.1",
     "typescript": "6.0.3"
   }
 }

@@ -40,7 +40,7 @@
     "@types/node": "24.10.1",
     "alex": "11.0.1",
     "eslint": "9.39.3",
-    "happy-dom": "20.9.0",
+    "happy-dom": "21.0.4",
     "prettier": "3.8.1",
     "publint": "0.3.25",
     "tsdown": "0.23.7",

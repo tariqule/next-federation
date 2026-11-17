@@ -38,6 +38,29 @@ test('strips trailing slashes from base', () =>
     /^https:\/\/r\.example\/_nf\/island\/Panel\?p=/
   ))
 
+/** Milliseconds `fn` takes (best of three, to ride out GC pauses). */
+function timeOf(fn: () => unknown): number {
+  let best = Infinity
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now()
+    fn()
+    best = Math.min(best, performance.now() - started)
+  }
+  return best
+}
+
+test('trimming trailing slashes is linear on a long run of inner slashes', () => {
+  // `/\/+$/` retries the slash run from every start position: quadratic.
+  const crafted = `${base}${'/'.repeat(100_000)}x`
+  const baseline = `${base}${'a'.repeat(100_000)}`
+  const encode = (b: string) => () => encodeIslandRequest(b, 'P', {})
+  const linear = timeOf(encode(baseline))
+  expect(timeOf(encode(crafted))).toBeLessThan(linear * 20 + 50)
+  expect(encodeIslandRequest(`${crafted}///`, 'P', {}).url).toBe(
+    `${crafted}/_nf/island/P?p=e30`
+  )
+})
+
 test('equal props in different key order give the same URL', () =>
   expect(encodeIslandRequest(base, 'P', { a: 1, b: 2 }).url).toBe(
     encodeIslandRequest(base, 'P', { b: 2, a: 1 }).url

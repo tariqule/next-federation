@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium, expect, test, type Page } from '@playwright/test'
 import { createLocalJWKSet, decodeJwt, jwtVerify } from 'jose'
 import { FAKE_REMOTE, HOST_APP, HOST_APP_CC } from './servers.ts'
+import { markup } from './lib/strip-scripts.ts'
 
 const HOSTS = [
   { name: 'cacheComponents off', url: HOST_APP, cc: false },
@@ -30,10 +31,6 @@ function collectErrors(page: Page) {
   return errors
 }
 const strip = (html: string) => html.replaceAll('<!-- -->', '')
-// The rendered markup only: without Next's embedded RSC data, which also
-// carries the fallbacks as props.
-const markup = (html: string) =>
-  strip(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''))
 const island = (page: Page, name: string) =>
   page.locator(`[data-island="${name}"]`)
 // Next's embedded RSC data: the `self.__next_f.push([1, "<rows>"])` scripts in

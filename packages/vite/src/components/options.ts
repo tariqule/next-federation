@@ -4,6 +4,7 @@ import {
   parseAllowInsecureHttp,
 } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
+import { trimTrailingSlashes } from '../trim-slashes.ts'
 
 export type ComponentsRemoteOptions = {
   /** Module Federation container name: a JavaScript identifier. */
@@ -164,7 +165,7 @@ export function resolveComponentsOptions(
       `buildId must match ${BUILD_ID_PATTERN}, got ${JSON.stringify(buildId)}.`
     )
   }
-  const outDir = (options.outDir ?? 'dist').replace(/\/+$/, '')
+  const outDir = trimTrailingSlashes(options.outDir ?? 'dist')
   if (outDir.trim() === '') {
     throw invalid('`outDir` must be a non-empty path.')
   }

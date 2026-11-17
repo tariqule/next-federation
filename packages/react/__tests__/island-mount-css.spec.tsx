@@ -12,6 +12,13 @@ import { IslandMount } from '../src/index.ts'
 ;(
   globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
+// happy-dom 21 loads no stylesheets unless asked; these tests load their own
+// trusted ones (data: URLs, a local server), as a browser would.
+;(
+  window as unknown as {
+    happyDOM: { settings: { enableCSSFileLoading: boolean } }
+  }
+).happyDOM.settings.enableCSSFileLoading = true
 
 const PLACEHOLDER = 'nfid-1a2b3c4d'
 // React keeps the stylesheets it inserted per document, across tests, so every

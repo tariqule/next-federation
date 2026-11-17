@@ -6,6 +6,7 @@ import rsc from '@vitejs/plugin-rsc'
 import { normalizePath } from 'vite'
 import type { Plugin, ResolvedConfig } from 'vite'
 import { assertNoFastRefresh, findServerActions } from '../checks.ts'
+import { codeLiteral } from '../code-literal.ts'
 import { devCorsMiddleware } from '../dev-cors.ts'
 import { resolveOptions } from '../options.ts'
 import type { IslandRemoteOptions, ResolvedOptions } from '../options.ts'
@@ -72,13 +73,13 @@ function checksPlugin(): Plugin {
 }
 
 function serverConfigModule(resolved: ResolvedOptions): string {
-  return `export default ${JSON.stringify(resolved)}\n`
+  return `export default ${codeLiteral(resolved)}\n`
 }
 
 // The browser bundle only needs these; issuers and hosts stay on the server.
 function clientConfigModule(resolved: ResolvedOptions): string {
   const { name, buildId, publicBase, scopeKey, mode } = resolved
-  return `export default ${JSON.stringify({ name, buildId, publicBase, scopeKey, mode })}\n`
+  return `export default ${codeLiteral({ name, buildId, publicBase, scopeKey, mode })}\n`
 }
 
 function islandsModule(
@@ -87,7 +88,7 @@ function islandsModule(
 ): string {
   const lines = Object.entries(resolved.islands).map(([name, island]) => {
     const file = normalizePath(resolve(config.root, island.entry))
-    return `  ${JSON.stringify(name)}: { load: () => import(${JSON.stringify(file)}), private: ${island.private} },`
+    return `  ${codeLiteral(name)}: { load: () => import(${codeLiteral(file)}), private: ${island.private} },`
   })
   return `export default {\n${lines.join('\n')}\n}\n`
 }
@@ -172,7 +173,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
           return islandsModule(opts, viteConfig!)
         }
         if (id === resolvedIds.get(VIRTUAL_BOOTSTRAP)) {
-          return `export { mountIsland } from ${JSON.stringify(ENTRIES.client)}\n`
+          return `export { mountIsland } from ${codeLiteral(ENTRIES.client)}\n`
         }
         return undefined
       },

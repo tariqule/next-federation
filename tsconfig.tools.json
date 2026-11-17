@@ -7,5 +7,10 @@
     "outDir": "./node_modules/.cache/tsc-tools",
     "types": ["node", "@rstest/core/globals"]
   },
-  "include": ["rstest.config.ts", "scripts/**/*.ts", "scripts/**/*.mjs"]
+  "include": [
+    "rstest.config.ts",
+    "scripts/**/*.ts",
+    "scripts/**/*.mjs",
+    "test/e2e/lib/**/*.ts"
+  ]
 }
