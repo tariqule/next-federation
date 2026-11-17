@@ -46,10 +46,12 @@ export default defineConfig({
 
 - `client/`: the browser build (`remoteEntry.js`, `mf-manifest.json`, chunks) **and** the server
   copy (`remoteEntry.ssr.js` and its `.cjs` chunks), served under the immutable
-  `https://shop.example.com/b/<buildId>/`.
+  `https://shop.example.com/b/<buildId>/`, and, with `types: true`, `@mf-types/`: the exposed
+  modules' type declarations and their index (see [Types](#types)).
 - `nf-components.json`: the build descriptor: `buildId`, the manifest URL, the **sha384 of every
   server file** and the **browser files** of each exposed module (its stylesheets and JS chunks, as
-  absolute `/b/<buildId>/…` URLs), plus its digest and, when signed, an ES256 JWS over all of it.
+  absolute `/b/<buildId>/…` URLs) and, with types, the URL and sha384 of the declarations index,
+  plus its digest and, when signed, an ES256 JWS over all of it.
 - `nf-build.json`: what `nf-serve` reads.
 - `nf-shared-usage.json`: which exposed modules import which shared module. It is signed into
   the descriptor's `shared` field, and `nf-describe` reads it when it describes the build again.
@@ -210,6 +212,10 @@ its `requiredVersion`, and `fallback` for a non-singleton (bundled) share. Witho
 plugin's `nf-shared-usage.json` there is no per-expose list, so a host checks every exposed module
 against every host-provided module the build shares (`NF-036`).
 
+When the build has a `client/@mf-types/` folder, it writes `client/@mf-types/index.json` (every
+`.d.ts` file there with its sha384) and signs that one file in the descriptor's `types` field (see
+[Types](#types)).
+
 It never reads or writes a build file through a symlink, and refuses server files that resolve
 outside the build folder (`NF-002`).
 
@@ -223,8 +229,9 @@ browser-only build. Describing a build again keeps its build time.
 
 `nf-describe --dir <build folder> --verify` checks a described build before you ship it
 (`NF-027` otherwise): the digest covers the payload (assets included), the JWS signs exactly that
-payload, the assets are the ones `mf-manifest.json` lists, and every server file still matches its
-sha384. With `--public-key <public JWK or file>` (repeatable) it also verifies the ES256
+payload, the assets are the ones `mf-manifest.json` lists, the signed types index matches
+`client/@mf-types/index.json` and lists exactly the declaration files there, and every server file
+still matches its sha384. With `--public-key <public JWK or file>` (repeatable) it also verifies the ES256
 signature, as hosts do; **without one the signature is not checked**, and the output says so.
 
 ## Host: configure the remote
@@ -480,6 +487,110 @@ whether it has a fallback, and the exposed modules that import it. The field is 
 rest of the descriptor. A remote dev server (`vite`) publishes no `shared` field, so the host does
 not check a dev remote; a missing module then fails when the remote's code asks for it (`NF-029`).
 
+## Types
+
+A host gets the props of a remote component from the remote's own TypeScript declarations,
+without importing the remote's code at build time.
+
+**Remote (Vite).** Types are off by default in 0.x. With `types: true`, `nextFederationComponents`
+emits the declarations of every exposed module into the build, with the project's own `typescript`
+package and `tsconfig.json` (the TypeScript compiler API; `@module-federation/vite`'s `dts` option
+stays off):
+
+- `client/@mf-types/compiled-types/…`: the `.d.ts` of each exposed module and the local files it
+  imports (stylesheet imports are dropped);
+- `client/@mf-types/<Name>.d.ts` per expose (`./Cart` -> `@mf-types/Cart.d.ts`), which re-exports
+  the module and its default export (Module Federation's layout).
+
+- `client/@mf-types/index.json`: every declaration file with its sha384, and each expose's entry
+  file.
+
+The descriptor's `types` field signs that one index (its URL and sha384), so the descriptor (also
+sent to the browser) stays small however many files there are, and the files are covered by the
+descriptor's digest and signature through the index. Every URL is under the immutable
+`/b/<buildId>/`.
+
+**What becomes public.** The declarations of the exposed modules and of every local file they
+import, which can be more than their types:
+
+- the literal values of `const` declarations, exported or not (`export const KEY = 'sk_live_…'`
+  becomes `export declare const KEY = "sk_live_…";`), of `as const` objects, of enum members, and
+  of constants referenced through `typeof`, published as written;
+- values TypeScript inlines from other files, including files outside the remote's folder (a
+  `const url = BILLING_URL` imported from a sibling package publishes the URL);
+- exported names and prop types.
+
+**Do not expose a module whose type graph reaches a secret** (a key, an internal URL, a feature flag
+name you don't want seen): types are opt-in for this reason. Comments and JSDoc are never published:
+TypeScript's `removeComments` drops most of them, and the plugin strips the `/*!` comments it keeps
+from each emitted file, using TypeScript's parser (string literals are left alone); a file that
+still has a comment makes the build warn and publish no types. Paths are relative to the Vite root
+(`rootDir`): when an emitted declaration names an absolute path, or a relative path above the root
+(an import, an inferred `import("…")` type, a `/// <reference path>` or a `/// <reference types>`),
+the build warns, naming the file and the path, and publishes **no** types, so the build machine's
+folders and the monorepo layout never become public. Package imports (`react`, `components-context`)
+stay as written and resolve from the host's dependencies.
+
+Without `typescript` installed, or when TypeScript cannot emit the declarations (a syntax or
+declaration error), the build **warns and publishes no types**; it never fails because of them, and
+never publishes partial types. Upgrade hosts first: an older host computes the descriptor digest
+without `types` and refuses a build that has them (`NF-027`, rendered in the browser only).
+
+**Remote (Rspack or webpack).** `nf-describe` writes and signs `client/@mf-types/index.json` when
+the folder exists. Module Federation's own `dts` plugin writes a zip (`@mf-types.zip`) and fails on any
+type error, and `nf-describe` does not read the zip: unzip it into `client/@mf-types/` before
+`nf-describe`, or emit the folder with `tsc --declaration --emitDeclarationOnly` in the same layout.
+
+**Host.** `nf-types` (in `@next-federation/next`) downloads the declarations of each remote's
+current build into the project and writes `next-federation-types/index.d.ts`:
+
+```sh
+nf-types --config lib/federation.mjs           # every remote with `components`
+nf-types --config lib/federation.mjs --remote shop --out next-federation-types
+```
+
+`--config` names a module that exports your `defineFederation(...)` result as `federation` (or as
+its default export). Node runs it as is, so use `.mjs`/`.js`, or a `.ts` file on a Node version that
+strips types. For each remote, `nf-types`:
+
+1. fetches the descriptor from the remote's configured descriptor URL (no credentials, no
+   redirects), and refuses a build served outside the remote's origins (`NF-005`);
+2. verifies it with the remote's `components.ssr` trust policy, a signature from one of
+   `publicKeys` or a `pinned` digest (`unsafe-dev` in development, with a warning), **before** it
+   fetches anything the descriptor names (`NF-028` unverified, `NF-027` altered; a remote with
+   `ssr: false` has no policy, so its types are refused);
+3. downloads the declarations index and checks its raw bytes against the signed sha384 (`NF-027`)
+   before it reads the list (`NF-029` for an invalid index: more than 2000 files, or a path that
+   is not a plain relative `.d.ts` path);
+4. downloads every listed file from under the build's base (at most 1 MiB per file, 20 MiB per
+   build, counted while the body streams), checks each file's raw bytes against its sha384
+   (`NF-027`), writes those bytes unchanged, and only then replaces
+   `next-federation-types/<remote>/`. A failed remote keeps the types it had, and the command
+   exits 1.
+
+Nothing downloaded ever runs: the files are only read by TypeScript. Next.js's default
+`tsconfig.json` (`include: ["**/*.ts", …]`, `skipLibCheck: true`) picks up `index.d.ts`; with a
+narrower `include`, add `next-federation-types`. Then:
+
+```tsx
+'use client'
+import { createRemoteComponent } from '@next-federation/next/components'
+import type { RemoteProps } from '@next-federation/next/components'
+
+export const Cart = createRemoteComponent<RemoteProps<'shop', './Cart'>>({
+  expose: './Cart',
+})
+
+// <Cart descriptor={descriptor} items="3" /> is now a type error.
+```
+
+`RemoteProps<remote, expose>` reads the props of the expose's default export from the global
+`NextFederationRemoteComponents` interface that `index.d.ts` fills (remote key -> expose -> module
+type). A remote or expose that `nf-types` did not download is a type error. The types are those of
+the build that was current when `nf-types` ran: run it in CI before `tsc`/`next build`, and commit
+the folder or not as you prefer (it is regenerated on every run). Modules the declarations import
+(`react`, shared packages) resolve from the host's own dependencies.
+
 ## Client-only Next.js apps
 
 Many Next.js apps render almost everything on the client: pages are client components, data is
@@ -567,6 +678,28 @@ or an `onNavigate` callback as a prop instead.
 - **Events**: in the browser, every load and failure is a `nf:component` `CustomEvent` on
   `document` (`COMPONENT_EVENT`); on the server, `defineFederation({ onEvent })` receives
   `component:descriptor` and `component:error`.
+
+## Devtools
+
+The [Module Federation Chrome devtools](https://module-federation.io/guide/debug/chrome-devtool)
+work with remote components. They read the page's `window.__FEDERATION__`: the global snapshot
+(`moduleInfo`), the runtime instances (`__INSTANCES__`), and the plugins the extension pushes into
+`__GLOBAL_PLUGIN__` before the page runs. Remote components load through the real
+`@module-federation/runtime`, registering each build with its `mf-manifest.json` as the entry, so:
+
+- the host appears as the consumer `nf_host`, and each remote as a producer keyed
+  `<container name>:<manifest URL>` (`/b/<buildId>/mf-manifest.json`, so a new build is a new
+  entry), with its exposed modules and shared modules from the manifest;
+- the extension's plugins run inside the remote components runtime (its `loadRemoteSnapshot` hook
+  posts the snapshot to the panel); the instance is created on the first load, so it always picks
+  them up;
+- the panel fetches each producer's manifest for its details: `nf-serve` answers it with
+  `Access-Control-Allow-Origin: *`.
+
+Only the browser has these globals: server rendering does not show in the panel. The panel's proxy
+feature (pointing a remote at another build) changes browser loads only; the server keeps
+rendering the verified build, so a proxied component's server HTML and the browser's module can
+differ until it hydrates.
 
 ## Requirements and limits
 

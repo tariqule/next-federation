@@ -101,5 +101,8 @@
   },
   "scripts": {
     "build": "tsdown"
+  },
+  "bin": {
+    "nf-types": "./dist/types/cli.js"
   }
 }

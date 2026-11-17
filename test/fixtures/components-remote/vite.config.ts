@@ -40,6 +40,8 @@ export default defineConfig({
         'next/navigation': {},
         'next/router': {},
       },
+      // Publish the exposed modules' declarations (hosts' nf-types).
+      types: true,
       outDir: process.env.NF_OUT ?? 'dist/components',
     }),
   ],

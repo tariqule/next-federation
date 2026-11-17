@@ -36,6 +36,11 @@ import {
   assertBuildFile,
   collectBrowserAssets,
   collectServerIntegrity,
+  TYPES_FOLDER,
+  TYPES_INDEX_FILE,
+  collectTypesIndex,
+  typesIndexBytes,
+  writeTypesIndex,
   createDescriptorFile,
   readSharedUsage,
   sharedFromManifest,
@@ -375,6 +380,9 @@ export async function describeComponentsBuild(
   // per expose only with the Vite plugin's usage file.
   const shared = sharedFromManifest(manifest, await readSharedUsage(dir))
   if (shared) payload.shared = shared
+  // The exposed modules' declarations index, when the build has `@mf-types/`.
+  const types = await writeTypesIndex(client, base)
+  if (types) payload.types = types
   const file = await createDescriptorFile(payload, opts.env)
   const info: ComponentsBuildInfo = {
     kind: 'components',
@@ -441,6 +449,8 @@ async function signatureVerifies(jws: string, keys: JWK[]): Promise<boolean> {
  *   `publicKeys`, its ES256 signature verifies (without them the signature
  *   is not checked, and the result says so);
  * - the assets and the shared modules are the ones `mf-manifest.json` lists;
+ * - the signed types index is `client/@mf-types/index.json` and lists exactly
+ *   the declaration files there;
  * - every server file still has its recorded sha384, and the server graph has
  *   no file the descriptor does not list.
  */
@@ -516,6 +526,7 @@ export async function verifyComponentsBuild(
       `The shared modules in ${COMPONENTS_DESCRIPTOR_FILE} are not the ones mf-manifest.json lists.`
     )
   }
+  await verifyTypes(client, realClient, file)
   if (!file.ssr) return { signature }
   const graph = await collectServerIntegrity(client)
   for (const [path, expected] of Object.entries(file.ssr.integrity)) {
@@ -542,6 +553,41 @@ export async function verifyComponentsBuild(
     )
   }
   return { signature }
+}
+
+/** The signed index is the one on disk, and lists exactly the files there. */
+async function verifyTypes(
+  client: string,
+  realClient: string,
+  file: ComponentDescriptorFile
+): Promise<void> {
+  const index = await collectTypesIndex(client)
+  if (!file.types) {
+    if (index) {
+      throw mismatch(
+        `client/${TYPES_FOLDER}/ exists, but ${COMPONENTS_DESCRIPTOR_FILE} lists no types.`
+      )
+    }
+    return
+  }
+  const path = `${TYPES_FOLDER}/${TYPES_INDEX_FILE}`
+  if (!index || file.types.index !== `${file.base}${path}`) {
+    throw mismatch(
+      `The types index in ${COMPONENTS_DESCRIPTOR_FILE} is not client/${path}.`
+    )
+  }
+  await assertBuildFile(join(client, path), realClient, path)
+  const bytes = await readFile(join(client, path))
+  if ((await sha384Integrity(bytes)) !== file.types.integrity) {
+    throw mismatch(
+      `client/${path} does not match its sha384 in ${COMPONENTS_DESCRIPTOR_FILE}.`
+    )
+  }
+  if (!sameBytes(new Uint8Array(bytes), typesIndexBytes(index))) {
+    throw mismatch(
+      `client/${path} is not the declarations in client/${TYPES_FOLDER}/ (a file was edited, added or removed).`
+    )
+  }
 }
 
 const USAGE =

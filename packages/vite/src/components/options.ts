@@ -38,6 +38,18 @@ export type ComponentsRemoteOptions = {
    * (warned once). Default false.
    */
   allowInsecureHttp?: boolean
+  /**
+   * Emit the exposed modules' TypeScript declarations into the build
+   * (`client/@mf-types/`, listed and signed in the descriptor) so hosts can
+   * download prop types (`nf-types`). Default false (opt-in in 0.x). The
+   * declarations of the exposed modules and every local file they import
+   * become public, with the literal values of constants, `as const` objects
+   * and enums (also ones inlined from outside the root): don't expose a
+   * module whose type graph reaches a secret. Without `typescript`, when
+   * TypeScript cannot emit them, or when a declaration names an absolute
+   * path or a path above the root, the build warns and publishes no types.
+   */
+  types?: boolean
 }
 
 export type SharedModuleOptions = {
@@ -60,6 +72,7 @@ export type ResolvedComponentsOptions = {
   exposes: Record<string, string>
   shared: Record<string, ResolvedSharedModule>
   ssr: boolean
+  types: boolean
 }
 
 export type ComponentsResolveContext = {
@@ -214,6 +227,9 @@ export function resolveComponentsOptions(
   if (outDir.trim() === '') {
     throw invalid('`outDir` must be a non-empty path.')
   }
+  if (options.types !== undefined && typeof options.types !== 'boolean') {
+    throw invalid('`types` must be true or false.')
+  }
   const build = ctx.command === 'build'
   return {
     name: options.name,
@@ -223,5 +239,6 @@ export function resolveComponentsOptions(
     exposes,
     shared: resolveSharedOption(options.shared),
     ssr: options.ssr ?? true,
+    types: options.types ?? false,
   }
 }

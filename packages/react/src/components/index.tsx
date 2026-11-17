@@ -29,6 +29,7 @@ export type {
   RemoteComponentOptions,
   RemoteComponentProps,
   RemoteComponentType,
+  RemoteProps,
 } from './render.tsx'
 
 /** Name of the DOM event (on `document`) for every remote component load and failure. */
@@ -135,6 +136,7 @@ export async function fetchDescriptorInBrowser(
       ...(file.assets === undefined ? {} : { assets: file.assets }),
       // What the host's shared modules must satisfy (checked before loading).
       ...(file.shared === undefined ? {} : { shared: file.shared }),
+      ...(file.types === undefined ? {} : { types: file.types }),
     }
   } catch {
     return null

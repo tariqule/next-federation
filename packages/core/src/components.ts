@@ -40,6 +40,46 @@ export type FetchComponentDescriptorOptions = {
   init?: Record<string, unknown>
 }
 
+/** A descriptor body larger than this is refused (NF-029). */
+export const MAX_DESCRIPTOR_BYTES: number = 1024 * 1024
+
+/**
+ * The raw bytes of a response body, read with a byte counter: null (and the
+ * body cancelled) once it passes `maxBytes`, whatever its content-length
+ * says, so a remote can never make the host buffer an unbounded body.
+ */
+export async function readBodyLimited(
+  response: Response,
+  maxBytes: number
+): Promise<Uint8Array | null> {
+  const declared = Number(response.headers.get('content-length'))
+  if (declared > maxBytes) {
+    await response.body?.cancel().catch(() => {})
+    return null
+  }
+  if (!response.body) return new Uint8Array(0)
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {})
+      return null
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return out
+}
+
 function errorName(error: unknown): string {
   return typeof error === 'object' && error !== null
     ? String((error as { name?: unknown }).name)
@@ -91,7 +131,14 @@ export async function fetchComponentDescriptor(
         response.status
       )
     }
-    text = await response.text()
+    const bytes = await readBodyLimited(response, MAX_DESCRIPTOR_BYTES)
+    if (!bytes) {
+      return fail(
+        'NF-029',
+        `${target.descriptorUrl} is larger than ${MAX_DESCRIPTOR_BYTES} bytes.`
+      )
+    }
+    text = new TextDecoder().decode(bytes)
   } catch (error) {
     if (
       timedOut ||
@@ -194,19 +241,18 @@ async function verifySignature(
   return null
 }
 
-/**
- * Decides whether the host may evaluate this build's server code. Returns the
- * descriptor `RemoteComponent` takes, with `ssr` kept only for a verified
- * build: a JWS from one of `ssr.publicKeys` whose payload equals the
- * descriptor, a `pinned` digest equal to the payload's, or `unsafe-dev`.
- */
-export async function verifyComponentDescriptor(
-  target: ComponentTarget,
-  file: ComponentDescriptorFile
-): Promise<VerifiedComponentDescriptor> {
-  const { v, name, buildId, base, manifest, ssr, iat, assets, shared, jws } =
+type TrustPolicy = NonNullable<ComponentTarget['ssr']>
+
+/** How a descriptor was trusted, or why it was refused. */
+export type DescriptorTrustResult =
+  | { ok: true; trust: ComponentTrustKind }
+  | { ok: false; code: 'NF-027' | 'NF-028'; detail: string }
+
+/** The descriptor's payload fields (what is signed, pinned and digested). */
+function payloadOf(file: ComponentDescriptorFile): ComponentBuildDescriptor {
+  const { v, name, buildId, base, manifest, ssr, iat, assets, shared, types } =
     file
-  const payload: ComponentBuildDescriptor = {
+  return {
     v,
     name,
     buildId,
@@ -216,75 +262,54 @@ export async function verifyComponentDescriptor(
     ...(iat === undefined ? {} : { iat }),
     ...(assets === undefined ? {} : { assets }),
     ...(shared === undefined ? {} : { shared }),
+    ...(types === undefined ? {} : { types }),
   }
-  // `shared` is kept even for a refused file: it names no URL, and the host
-  // only uses it to refuse a load it could not satisfy (NF-036).
-  const unstyled: RemoteComponentDescriptor = {
-    remote: target.remote,
-    name,
-    buildId,
-    base,
-    manifest,
-    ssr: null,
-    maxBuilds: target.maxBuilds,
-    ...(iat === undefined ? {} : { iat }),
-    ...(shared === undefined ? {} : { shared }),
-  }
-  // The browser renders an unverified build too, with its stylesheets.
-  const browserOnly: RemoteComponentDescriptor =
-    assets === undefined ? unstyled : { ...unstyled, assets }
-  const digest = await componentDescriptorDigest(payload)
-  const trusted = (trust: ComponentTrustKind): VerifiedComponentDescriptor => {
-    // The server loader evaluates only descriptors recorded here (or that it
-    // re-verifies itself from `jws` / a pin): `ssr` in a prop is never enough.
-    // The kind matters: `ssr.maxAge` bounds signed builds only.
-    componentTrustRegistry().verified.set(
-      verifiedKey(target.remote, digest),
-      trust
-    )
+}
+
+/** The published digest must be the payload's, and the build time not ahead. */
+function checkFile(
+  target: ComponentTarget,
+  file: ComponentDescriptorFile,
+  digest: string
+): Extract<DescriptorTrustResult, { ok: false }> | null {
+  // A mismatch means the file was altered after the build (or hand-edited),
+  // whatever else it carries.
+  if (file.digest !== digest) {
     return {
-      descriptor: {
-        ...browserOnly,
-        ssr: payload.ssr,
-        ...(jws === undefined ? {} : { jws }),
-      },
-      trust,
+      ok: false,
+      code: 'NF-027',
+      detail: `The descriptor of build "${file.buildId}" of remote "${target.remote}" carries a digest that is not its payload's.`,
     }
   }
+  if (file.iat !== undefined && file.iat > nowSeconds() + FUTURE_IAT_SECONDS) {
+    return {
+      ok: false,
+      code: 'NF-027',
+      detail: `Build "${file.buildId}" of remote "${target.remote}" has a build time (iat) more than ${FUTURE_IAT_SECONDS} s in the future.`,
+    }
+  }
+  return null
+}
+
+/** Signed by one of the policy's keys, pinned, or `unsafe-dev`; else refused. */
+async function trustOf(
+  target: ComponentTarget,
+  policy: TrustPolicy,
+  file: ComponentDescriptorFile,
+  payload: ComponentBuildDescriptor,
+  digest: string
+): Promise<DescriptorTrustResult> {
+  const { name, buildId, iat } = payload
   const refuse = (
     code: 'NF-027' | 'NF-028',
     detail: string
-  ): VerifiedComponentDescriptor => ({
-    // NF-027: the file is not what was built, so none of its URLs are used
-    // (no stylesheet or modulepreload link from a URL the remote didn't sign).
-    descriptor: code === 'NF-027' ? unstyled : browserOnly,
-    trust: null,
-    code,
-    detail,
-  })
-  // The published digest must be the payload's: a mismatch means the file
-  // was altered after the build (or hand-edited), whatever else it carries.
-  if (file.digest !== digest) {
-    return refuse(
-      'NF-027',
-      `The descriptor of build "${buildId}" of remote "${target.remote}" carries a digest that is not its payload's.`
-    )
-  }
-  if (iat !== undefined && iat > nowSeconds() + FUTURE_IAT_SECONDS) {
-    return refuse(
-      'NF-027',
-      `Build "${buildId}" of remote "${target.remote}" has a build time (iat) more than ${FUTURE_IAT_SECONDS} s in the future.`
-    )
-  }
-  const policy = target.ssr
-  if (!policy || !payload.ssr) return { descriptor: browserOnly, trust: null }
+  ): DescriptorTrustResult => ({ ok: false, code, detail })
   if (target.name !== null && name !== target.name) {
     return refuse(
       'NF-027',
       `Build "${buildId}" names container "${name}", but remote "${target.remote}" expects "${target.name}".`
     )
   }
-
   if (file.jws !== undefined && policy.publicKeys.length > 0) {
     const signed = await verifySignature(file.jws, policy.publicKeys)
     if (!signed) {
@@ -308,7 +333,7 @@ export async function verifyComponentDescriptor(
         `Build "${buildId}" of remote "${target.remote}" was signed ${iat === undefined ? 'without a build time' : 'too long ago'} (ssr.maxAge ${policy.maxAgeSeconds} s).`
       )
     }
-    return trusted('signature')
+    return { ok: true, trust: 'signature' }
   }
   const pin = policy.pinned[buildId]
   if (pin !== undefined) {
@@ -318,13 +343,105 @@ export async function verifyComponentDescriptor(
         `Build "${buildId}" of remote "${target.remote}" does not match its pinned digest.`
       )
     }
-    return trusted('pinned')
+    return { ok: true, trust: 'pinned' }
   }
-  if (policy.unsafeDev) return trusted('unsafe-dev')
+  if (policy.unsafeDev) return { ok: true, trust: 'unsafe-dev' }
   return refuse(
     'NF-028',
     `Build "${buildId}" of remote "${target.remote}" is neither signed by a configured key nor pinned, so its server code is not evaluated.`
   )
+}
+
+/**
+ * Decides whether the host may evaluate this build's server code. Returns the
+ * descriptor `RemoteComponent` takes, with `ssr` kept only for a verified
+ * build: a JWS from one of `ssr.publicKeys` whose payload equals the
+ * descriptor, a `pinned` digest equal to the payload's, or `unsafe-dev`.
+ */
+export async function verifyComponentDescriptor(
+  target: ComponentTarget,
+  file: ComponentDescriptorFile
+): Promise<VerifiedComponentDescriptor> {
+  const payload = payloadOf(file)
+  const { name, buildId, base, manifest, iat, assets, shared, types } = payload
+  const { jws } = file
+  // `shared` is kept even for a refused file: it names no URL, and the host
+  // only uses it to refuse a load it could not satisfy (NF-036).
+  const unstyled: RemoteComponentDescriptor = {
+    remote: target.remote,
+    name,
+    buildId,
+    base,
+    manifest,
+    ssr: null,
+    maxBuilds: target.maxBuilds,
+    ...(iat === undefined ? {} : { iat }),
+    ...(shared === undefined ? {} : { shared }),
+    // Carried so a server can re-verify the descriptor (the digest covers it).
+    ...(types === undefined ? {} : { types }),
+  }
+  // The browser renders an unverified build too, with its stylesheets.
+  const browserOnly: RemoteComponentDescriptor =
+    assets === undefined ? unstyled : { ...unstyled, assets }
+  const digest = await componentDescriptorDigest(payload)
+  const refuse = (
+    code: 'NF-027' | 'NF-028',
+    detail: string
+  ): VerifiedComponentDescriptor => ({
+    // NF-027: the file is not what was built, so none of its URLs are used
+    // (no stylesheet or modulepreload link from a URL the remote didn't sign).
+    descriptor: code === 'NF-027' ? unstyled : browserOnly,
+    trust: null,
+    code,
+    detail,
+  })
+  const bad = checkFile(target, file, digest)
+  if (bad) return refuse(bad.code, bad.detail)
+  const policy = target.ssr
+  if (!policy || !payload.ssr) return { descriptor: browserOnly, trust: null }
+  const outcome = await trustOf(target, policy, file, payload, digest)
+  if (!outcome.ok) return refuse(outcome.code, outcome.detail)
+  // The server loader evaluates only descriptors recorded here (or that it
+  // re-verifies itself from `jws` / a pin): `ssr` in a prop is never enough.
+  // The kind matters: `ssr.maxAge` bounds signed builds only.
+  componentTrustRegistry().verified.set(
+    verifiedKey(target.remote, digest),
+    outcome.trust
+  )
+  return {
+    descriptor: {
+      ...browserOnly,
+      ssr: payload.ssr,
+      ...(jws === undefined ? {} : { jws }),
+    },
+    trust: outcome.trust,
+  }
+}
+
+/**
+ * Whether a descriptor is what the remote built, by the remote's `ssr` trust
+ * policy (a signature from one of its keys, a pinned digest or
+ * `unsafe-dev`), whether or not the build has server code. For tools that
+ * trust the descriptor's other data (its type declarations); records nothing
+ * in the process trust registry. A remote with `ssr: false` has no policy, so
+ * nothing it serves verifies (NF-028).
+ */
+export async function verifyDescriptorTrust(
+  target: ComponentTarget,
+  file: ComponentDescriptorFile
+): Promise<DescriptorTrustResult> {
+  const payload = payloadOf(file)
+  const digest = await componentDescriptorDigest(payload)
+  const bad = checkFile(target, file, digest)
+  if (bad) return bad
+  if (!target.ssr) {
+    return {
+      ok: false,
+      code: 'NF-028',
+      detail: `Remote "${target.remote}" has \`ssr: false\`, so no trust policy (publicKeys or pinned) verifies its descriptor.`,
+    }
+  }
+  return trustOf(target, target.ssr, file, payload, digest)
 }
 
 export type VerifiedDescriptorResult =

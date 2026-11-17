@@ -44,6 +44,8 @@ export {
   verifiedKey,
   parseComponentBuildDescriptor,
   parseComponentDescriptorFile,
+  parseComponentTypesIndex,
+  MAX_TYPE_FILES,
   sha384Integrity,
 } from './components.ts'
 export type {
@@ -52,6 +54,8 @@ export type {
   ComponentDescriptorFile,
   ComponentExposeAssets,
   ComponentSharedModule,
+  ComponentBuildTypes,
+  ComponentTypesIndex,
   ComponentTrustKind,
   ComponentTrustPolicy,
   ComponentTrustRegistry,

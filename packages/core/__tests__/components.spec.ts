@@ -13,7 +13,9 @@ import { CompactSign, importJWK } from 'jose'
 import type { JWK } from 'jose'
 import {
   fetchComponentDescriptor,
+  readBodyLimited,
   verifyComponentDescriptor,
+  verifyDescriptorTrust,
 } from '../src/components.ts'
 import { defineFederation } from '../src/config.ts'
 
@@ -688,5 +690,123 @@ describe('shared modules (version negotiation)', () => {
     )
     expect(unsigned.code).toBe('NF-028')
     expect(unsigned.descriptor.shared).toEqual(withShared.shared)
+  })
+})
+
+describe('type declarations (types)', () => {
+  const hash = `sha384-${'A'.repeat(64)}`
+  const withTypes: ComponentBuildDescriptor = {
+    ...payload,
+    types: { index: `${BASE}@mf-types/index.json`, integrity: hash },
+  }
+  const target = (components: Record<string, unknown>) =>
+    federationWith(components).componentTarget('components')
+
+  test('a signed descriptor with types still verifies for SSR', async () => {
+    const { priv, pub } = keyPair('k1')
+    const result = await verifyComponentDescriptor(
+      target({ ssr: { publicKeys: [pub] } }),
+      await file(withTypes, await sign(withTypes, priv))
+    )
+    expect(result.code).toBeUndefined()
+    expect(result.trust).toBe('signature')
+  })
+
+  test('verifyDescriptorTrust accepts a signed or pinned build, with or without server code', async () => {
+    const { priv, pub } = keyPair('k1')
+    const browserOnly: ComponentBuildDescriptor = { ...withTypes, ssr: null }
+    const signed = await verifyDescriptorTrust(
+      target({ ssr: { publicKeys: [pub] } }),
+      await file(browserOnly, await sign(browserOnly, priv))
+    )
+    expect(signed).toEqual({ ok: true, trust: 'signature' })
+    const pinned = await verifyDescriptorTrust(
+      target({
+        ssr: { pinned: { c1: await componentDescriptorDigest(withTypes) } },
+      }),
+      await file(withTypes)
+    )
+    expect(pinned).toEqual({ ok: true, trust: 'pinned' })
+  })
+
+  test('verifyDescriptorTrust refuses types changed after signing (NF-027)', async () => {
+    const { priv, pub } = keyPair('k1')
+    const jws = await sign(withTypes, priv)
+    const swapped: ComponentBuildDescriptor = {
+      ...withTypes,
+      types: {
+        index: `${BASE}@mf-types/index.json`,
+        integrity: `sha384-${'B'.repeat(64)}`,
+      },
+    }
+    const result = await verifyDescriptorTrust(
+      target({ ssr: { publicKeys: [pub] } }),
+      await file(swapped, jws)
+    )
+    expect(result).toMatchObject({ ok: false, code: 'NF-027' })
+  })
+
+  test('verifyDescriptorTrust refuses an unverifiable build (NF-028), and a remote with ssr: false', async () => {
+    const { pub } = keyPair('k1')
+    expect(
+      await verifyDescriptorTrust(
+        target({ ssr: { publicKeys: [pub] } }),
+        await file(withTypes)
+      )
+    ).toMatchObject({ ok: false, code: 'NF-028' })
+    expect(
+      await verifyDescriptorTrust(target({ ssr: false }), await file(withTypes))
+    ).toMatchObject({ ok: false, code: 'NF-028' })
+  })
+
+  test("verifyDescriptorTrust refuses a digest that is not the payload's (NF-027)", async () => {
+    const tampered = { ...(await file(withTypes)), digest: 'sha384-x' }
+    expect(
+      await verifyDescriptorTrust(
+        target({ ssr: { pinned: { c1: tampered.digest } } }),
+        tampered
+      )
+    ).toMatchObject({ ok: false, code: 'NF-027' })
+  })
+})
+
+describe('bounded response bodies', () => {
+  /** A body that never ends: `chunk` bytes per pull, counting pulls and cancels. */
+  function endless(chunk: number, delayMs = 0) {
+    const seen = { pulls: 0, cancelled: false }
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        seen.pulls++
+        if (delayMs) await new Promise((r) => setTimeout(r, delayMs))
+        controller.enqueue(new Uint8Array(chunk).fill(32))
+      },
+      cancel() {
+        seen.cancelled = true
+      },
+    })
+    return { body, seen }
+  }
+
+  test('a descriptor body over 1 MiB without content-length is refused without buffering it (NF-029)', async () => {
+    const target = federationWith({}).componentTarget('components')
+    const { body, seen } = endless(64 * 1024)
+    const result = await fetchComponentDescriptor(target, {
+      fetch: async () => new Response(body),
+    })
+    expect(result).toMatchObject({ ok: false, code: 'NF-029' })
+    expect(seen.cancelled).toBe(true)
+    expect(seen.pulls).toBeLessThan(40)
+  })
+
+  test('a slow drip is cut at the limit too', async () => {
+    const { body, seen } = endless(8, 5)
+    expect(await readBodyLimited(new Response(body), 64)).toBeNull()
+    expect(seen.cancelled).toBe(true)
+    expect(seen.pulls).toBeLessThan(15)
+  })
+
+  test('a body within the limit is returned as its raw bytes', async () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0x41])
+    expect(await readBodyLimited(new Response(bytes), 4)).toEqual(bytes)
   })
 })
