@@ -1,3 +1,4 @@
+import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import {
   MAX_SCOPES,
@@ -480,6 +481,29 @@ describe('fix round 1', () => {
     expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(/NF-028/)
   })
 
+  test('the process-wide registry records a build the server loaded, or refused, for static regenerations', async () => {
+    const registry = componentTrustRegistry()
+    registry.serverReady?.clear()
+    const { runtime, instance } = setup()
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const original = instance.loadRemote.bind(instance)
+    instance.loadRemote = async (id) => {
+      await gate
+      return original(id)
+    }
+    const load = runtime.serverLoad(descriptor('c1'), './Counter')
+    // Still loading: not ready (a render now would show its fallback).
+    expect(registry.serverReady?.get(descriptor('c1').base)).toBeUndefined()
+    release()
+    expect(await load).not.toBeNull()
+    expect(registry.serverReady?.get(descriptor('c1').base)).toBe('loaded')
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const refusing = setup({ isTrusted: () => false })
+    await refusing.runtime.serverLoad(descriptor('c2'), './Counter')
+    expect(registry.serverReady?.get(descriptor('c2').base)).toBe('refused')
+  })
+
   test('S1: a second descriptor for a loading base cannot replace its integrity map', async () => {
     let lookup: ((url: string) => unknown) | undefined
     const { runtime } = setup({
@@ -809,6 +833,45 @@ describe('shared modules registered late, and fallback copies', () => {
     runtime.registerShared({ ctx: { version: '1.1.0', module: {} } })
     await runtime.load(descriptor('c1'), './Other')
     expect(created).toBe(2)
+  })
+
+  test('browser: a late module drops the replaced MF instance from the global registry', async () => {
+    type Registry = {
+      __INSTANCES__: unknown[]
+      __SHARE__: Record<string, unknown>
+    }
+    const g = globalThis as { __FEDERATION__?: Registry }
+    const saved = g.__FEDERATION__
+    const fed: Registry = { __INSTANCES__: [], __SHARE__: {} }
+    g.__FEDERATION__ = fed
+    try {
+      const created: Fake[] = []
+      const runtime = createComponentRuntime({
+        isServer: false,
+        react: fakeReact,
+        hostShared: { react: { version: '19.3.1', module: fakeReact } },
+        // As MF's createInstance: every instance joins __INSTANCES__, and
+        // the first of a name registers its share scopes under that name.
+        createInstance: (options) => {
+          const next = Object.assign(fakeInstance(), { shareScopeMap: {} })
+          fed.__INSTANCES__.push(next)
+          fed.__SHARE__[options.name] ??= next.shareScopeMap
+          created.push(next)
+          return next
+        },
+        canLoadServerCode: () => false,
+      })
+      await runtime.load(descriptor('c1'), './NavLink')
+      runtime.registerShared({ ctx: { version: '1.0.0', module: {} } })
+      await runtime.load(descriptor('c1'), './Counter')
+      expect(created).toHaveLength(2)
+      expect(fed.__INSTANCES__).toEqual([created[1]])
+      expect(fed.__SHARE__.nf_host).toBe(
+        (created[1] as unknown as { shareScopeMap: unknown }).shareScopeMap
+      )
+    } finally {
+      g.__FEDERATION__ = saved
+    }
   })
 
   test("fallback: a satisfying host copy is what the build's own copy resolves to", async () => {

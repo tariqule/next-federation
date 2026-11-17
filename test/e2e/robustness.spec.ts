@@ -278,6 +278,11 @@ for (const host of HOSTS) {
       // The Banner (GET) and both Echo islands (POST).
       expect(html.split(UNICODE).length - 1).toBe(3)
       await page.goto(`${host.url}/big-props?id=${unique('u')}`)
+      // The fake remote's Echo has no bootstrap: both Echo islands end up
+      // inert, their server HTML kept (no errorFallback of their own).
+      await expect(
+        page.locator('[data-nf-root][data-nf-state="inert"]')
+      ).toHaveCount(2, FIRST_LIVE)
       // In GET props (the Banner) and in POST props (both Echo islands).
       await expect(page.getByTestId('echo-text')).toHaveText([UNICODE, UNICODE])
       const banner = page.locator('[data-island="Banner"]')

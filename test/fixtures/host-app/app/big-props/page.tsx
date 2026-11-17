@@ -6,7 +6,9 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>
 // Review Focus 3. Props above the protocol's GET limit (2048 base64url
 // characters) are sent by POST; the two Echo islands have equal props in a
 // different key order, so they share one cache entry (canonical JSON). Both
-// carry the unicode string too.
+// carry the unicode string too. The fake remote's Echo has no bootstrap, so
+// they have no errorFallback of their own: their server HTML stays (inert)
+// instead of being replaced when the bootstrap fails to load (NF-011).
 const PAD = 'x'.repeat(3000)
 // Latin with a combining accent, CJK, right-to-left, an emoji ZWJ sequence
 // and an astral symbol (test/e2e/robustness.spec.ts has the same string).
@@ -21,14 +23,12 @@ async function Body({ searchParams }: { searchParams: SearchParams }) {
         island="Echo"
         props={{ id, pad: PAD, tag: 'big', text: UNICODE }}
         fallback={<p>loading echo…</p>}
-        errorFallback={<p>echo unavailable</p>}
       />
       <RemoteIsland
         remote="fake"
         island="Echo"
         props={{ text: UNICODE, tag: 'big', pad: PAD, id }}
         fallback={<p>loading echo…</p>}
-        errorFallback={<p>echo unavailable</p>}
       />
       <RemoteIsland
         remote="b"

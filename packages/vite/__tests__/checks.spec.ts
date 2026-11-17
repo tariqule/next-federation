@@ -189,3 +189,24 @@ test('findRawFormActions: formAction inside <Form> is safe, inside <form> it is 
   ].join('\n')
   expect(findRawFormActions(code, 'A.tsx')).toEqual([10, 11, 13, 14])
 })
+
+test('findRawFormActions: a Form that is not the island Form is not safe', () => {
+  const local = [
+    'function Form({ children }) { return <form>{children}</form> }',
+    'export function A({ save }) {',
+    '  return <Form><button formAction={save}>local</button></Form>',
+    '}',
+  ].join('\n')
+  expect(findRawFormActions(local, 'A.tsx')).toEqual([3])
+  const other = [
+    'import { Form } from "./form"',
+    'import { Form as IslandForm } from "@next-federation/island"',
+    'export function A({ save }) {',
+    '  return (<>',
+    '    <Form><button formAction={save}>other</button></Form>',
+    '    <IslandForm><button formAction={save}>island</button></IslandForm>',
+    '  </>)',
+    '}',
+  ].join('\n')
+  expect(findRawFormActions(other, 'A.tsx')).toEqual([5])
+})

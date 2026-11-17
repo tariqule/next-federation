@@ -17,8 +17,10 @@ export function NextIslandMount(props: {
   /** `identityKey: null`: a public island whose actions act as the signed-in user. */
   token: { endpoint: string; identityKey: string | null } | null
   errorFallback?: ReactNode
+  /** The page gave no `errorFallback` of its own: keep the HTML if the code cannot load. */
+  inertOnLoadFailure?: boolean
 }): ReactElement {
-  const { envelope, host, token, errorFallback } = props
+  const { envelope, host, token, errorFallback, inertOnLoadFailure } = props
   const router = useRouter()
   const { basePath, locale } = host
   const bridge = useMemo(
@@ -37,6 +39,7 @@ export function NextIslandMount(props: {
       bridge={bridge}
       token={token}
       errorFallback={errorFallback}
+      inertOnLoadFailure={inertOnLoadFailure}
     />
   )
 }

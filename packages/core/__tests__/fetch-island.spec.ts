@@ -433,6 +433,52 @@ describe('envelope size limit', () => {
     expect(f).toHaveBeenCalledTimes(1)
   })
 
+  test('passing maxBytes aborts the request itself, not only the body read', async () => {
+    rs.useRealTimers()
+    // A wrapped fetch (Next's patched fetch reads its own copy of the
+    // body): cancelling the body handed to us does not stop the request,
+    // so the request's signal must be aborted at the limit.
+    const signals: AbortSignal[] = []
+    const f = rs.fn(async (_url: string, init: RequestInit) => {
+      signals.push(init.signal!)
+      return signals.length === 1
+        ? new Response(new Uint8Array(128).fill(32))
+        : new Response('x', { headers: { 'content-length': '65' } })
+    })
+    for (let i = 0; i < 2; i++) {
+      const r = await fetchIsland(
+        { ...target, maxBytes: 64 },
+        { island: 'Cart', fetch: asFetch(f) }
+      )
+      expect(r).toMatchObject({ ok: false, code: 'NF-007' })
+    }
+    expect(signals.map((s) => s.aborted)).toEqual([true, true])
+  })
+
+  test('a body within maxBytes never aborts its request, and a retry gets its own signal', async () => {
+    rs.useRealTimers()
+    const text = JSON.stringify(envelope({ html: '<p>é</p>' }))
+    const signals: AbortSignal[] = []
+    const f = rs.fn(async (_url: string, init: RequestInit) => {
+      signals.push(init.signal!)
+      return signals.length === 1
+        ? new Response('busy', { status: 503 })
+        : new Response(text)
+    })
+    const r = await fetchIsland(
+      { ...target, retries: 1, maxBytes: 1024 },
+      // POST: props above the GET limit.
+      { island: 'Cart', props: { pad: 'x'.repeat(3000) }, fetch: asFetch(f) }
+    )
+    expect(r.ok).toBe(true)
+    expect(f.mock.calls[0]![1].method).toBe('POST')
+    expect(signals).toHaveLength(2)
+    expect(signals[0]).not.toBe(signals[1])
+    // After the fetch settled, and after the timeout would have fired.
+    await new Promise((resolve) => setTimeout(resolve, target.timeoutMs + 50))
+    expect(signals.map((s) => s.aborted)).toEqual([false, false])
+  })
+
   test('without maxBytes the 5 MiB default applies', async () => {
     rs.useRealTimers()
     const over = new Uint8Array(MAX_ENVELOPE_BYTES + 1).fill(32)

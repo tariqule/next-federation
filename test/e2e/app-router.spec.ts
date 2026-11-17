@@ -3,7 +3,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, expect, test, type Page } from '@playwright/test'
 import { createLocalJWKSet, decodeJwt, jwtVerify } from 'jose'
-import { FAKE_REMOTE, HOST_APP, HOST_APP_CC } from './servers.ts'
+import {
+  FAKE_REMOTE,
+  HOST_APP,
+  HOST_APP_CC,
+  PORTS,
+  serverLog,
+} from './servers.ts'
 import { markup } from './lib/strip-scripts.ts'
 
 const HOSTS = [
@@ -174,6 +180,35 @@ for (const host of HOSTS) {
       expect(flight(html)).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\./)
     })
 
+    test('a private island with partialPrefetching logs no unstable Date.now() on the server', async ({
+      page,
+      context,
+    }) => {
+      test.skip(
+        !host.cc,
+        'partialPrefetching is on for the cacheComponents host'
+      )
+      const log = serverLog('host-app', PORTS.hostAppCc)
+      // The log is live: Next's own start line is in it.
+      expect(readFileSync(log, 'utf8')).toMatch(/Next\.js 16/)
+      const before = readFileSync(log, 'utf8').length
+      await context.addCookies([
+        { name: 'nf-user', value: 'user-1', url: host.url },
+      ])
+      // Signed-in document requests: each one rendered the token.
+      for (let i = 0; i < 2; i++) {
+        const res = await page.goto(`${host.url}/orders`)
+        expect(strip(await res!.text())).toContain('Orders for user-1')
+      }
+      // Let the server flush what it logged for these requests.
+      await page.waitForTimeout(1000)
+      // Only this route: other fixture pages read the clock themselves.
+      const logged = readFileSync(log, 'utf8').slice(before)
+      expect(logged).not.toMatch(
+        /Route "\/orders": Next\.js encountered the unstable value/
+      )
+    })
+
     test('a private island is a per-request dynamic hole: each user sees their own, anonymous sees the error fallback', async ({
       request,
     }) => {
@@ -257,10 +292,11 @@ for (const host of HOSTS) {
       expect(payload.exp).toBe(body.expiresAt)
       expect(protectedHeader.kid).toBe(signingKey.kid)
 
+      // An anonymous visitor is not an error: no token, no 401.
       const anonymous = await request.post(url)
-      expect(anonymous.status()).toBe(401)
+      expect(anonymous.status()).toBe(200)
       expect(anonymous.headers()['cache-control']).toBe('no-store')
-      expect(await anonymous.text()).toBe('')
+      expect(await anonymous.json()).toEqual({ token: null })
 
       const unknown = await request.post(
         `${host.url}/api/next-federation/token?aud=nope`,

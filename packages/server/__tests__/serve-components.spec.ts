@@ -37,6 +37,15 @@ function makeComponentsBuild(id: string, hoursAgo: number) {
   )
   writeFileSync(join(dir, 'client', 'mf-manifest.json'), `{"id":"${id}"}`)
   writeFileSync(join(dir, 'client', 'assets', 'Counter-x.cjs'), 'exports.c = 1')
+  // Build bookkeeping Vite and Module Federation leave in the browser folder.
+  mkdirSync(join(dir, 'client', '.vite'), { recursive: true })
+  writeFileSync(
+    join(dir, 'client', '.vite', 'manifest.json'),
+    '{"src/x.tsx":{}}'
+  )
+  writeFileSync(join(dir, 'client', '.vite', 'mf-preload.json'), '{}')
+  writeFileSync(join(dir, 'client', 'mf-stats.json'), '{"shared":[]}')
+  writeFileSync(join(dir, 'client', 'assets', '.hidden'), 'x')
 }
 
 beforeAll(async () => {
@@ -112,6 +121,21 @@ test('nothing outside client/ is reachable', async () => {
     // `%2e%2e` is normalised to `..` by fetch: `/b/nf-build.json` names no live build (410).
     expect([404, 410]).toContain((await fetch(url(path))).status)
   }
+})
+
+test('build bookkeeping is not served: dot folders and files (.vite/), mf-stats.json', async () => {
+  for (const path of [
+    '/b/c1/.vite/manifest.json',
+    '/b/c1/.vite/mf-preload.json',
+    '/b/c1/%2Evite/manifest.json',
+    '/b/c1/mf-stats.json',
+    '/b/c1/assets/.hidden',
+  ]) {
+    const res = await fetch(url(path))
+    expect(res.status, path).toBe(404)
+  }
+  // The browser and server code next to them still is.
+  expect((await fetch(url('/b/c1/mf-manifest.json'))).status).toBe(200)
 })
 
 test('/_nf/health answers for a components current build', async () => {

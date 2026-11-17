@@ -361,6 +361,22 @@ describe('M-1: a hung init never blocks the container', () => {
   })
 })
 
+describe('M-1b: init timing never reads the wall clock', () => {
+  test('serializedInit times inits with performance.now(), not Date.now() (flagged in a partialPrefetching render)', async () => {
+    const name = `clock_${Math.random().toString(36).slice(2)}`
+    const dateNow = rs.spyOn(Date, 'now')
+    const wrap = () =>
+      serializedInit(name, { init: () => Promise.resolve() }, 30) as {
+        init: () => Promise<unknown>
+      }
+    await wrap().init()
+    void wrap().init()
+    await wrap().init()
+    expect(dateNow).not.toHaveBeenCalled()
+    dateNow.mockRestore()
+  })
+})
+
 describe('M-2: what the server never evaluates', () => {
   test('a server-side document global never hands remote code the real global', async () => {
     const entry = `

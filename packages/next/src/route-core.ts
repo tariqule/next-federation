@@ -62,7 +62,10 @@ export async function handleFederationRoute(
       return { status: 400, headers: NO_STORE }
     }
     const identity = await req.identity()
-    if (!identity) return { status: 401, headers: NO_STORE }
+    // An anonymous visitor is not an error: no token, so island requests and
+    // Server Actions go without `Authorization` (and the browser logs no 401).
+    if (!identity)
+      return { status: 200, headers: NO_STORE, body: { token: null } }
     const { token, expiresAt } = await mintIslandToken(federation, {
       remote: aud,
       identity,

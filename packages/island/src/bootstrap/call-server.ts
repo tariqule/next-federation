@@ -40,6 +40,36 @@ async function errorCode(res: Response): Promise<NFErrorCode | undefined> {
 }
 
 /**
+ * The error for a failed action response without an NF code in its body:
+ * the remote's bare 404 and 413, a 5xx from the remote or a proxy, or
+ * anything else that is not a Server Action response.
+ */
+function withoutCode(id: string, status: number): NFError {
+  if (status === 404) {
+    return new NFError(
+      'NF-031',
+      `Server Action "${id}" failed with status 404.`
+    )
+  }
+  if (status === 413) {
+    return new NFError(
+      'NF-032',
+      `Server Action "${id}": the request body is larger than the remote accepts (413).`
+    )
+  }
+  if (status >= 500) {
+    return new NFError(
+      'NF-038',
+      `Server Action "${id}" failed with a server or network failure (status ${status}).`
+    )
+  }
+  return new NFError(
+    'NF-038',
+    `Server Action "${id}" got a response that is not a Server Action response (status ${status}).`
+  )
+}
+
+/**
  * One Server Action client per island mount: posts to that mount's own remote build,
  * with that mount's token, so actions never cross islands or builds.
  */
@@ -106,14 +136,16 @@ export function createCallServer(options: CallServerOptions): CallServer {
     if (status !== 200 || !type.startsWith('text/x-component')) {
       code = await errorCode(res)
       done(false)
-      throw new NFError(
-        code ?? 'NF-031',
-        `Server Action "${id}" failed with status ${status}.`
-      )
+      throw code === undefined
+        ? withoutCode(id, status)
+        : new NFError(
+            code,
+            `Server Action "${id}" failed with status ${status}.`
+          )
     }
     if (res.body === null) {
       done(false)
-      throw new NFError('NF-031', `Server Action "${id}" sent no body.`)
+      throw new NFError('NF-038', `Server Action "${id}" sent no body.`)
     }
     try {
       const { returnValue } = await options.createFromReadableStream<{

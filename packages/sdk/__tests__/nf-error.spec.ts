@@ -35,9 +35,9 @@ test('cause is preserved', () => {
   expect(new NFError('NF-007', 'x').cause).toBeUndefined()
 })
 
-test('codes are contiguous NF-001..NF-037 with unique slugs', () => {
+test('codes are contiguous NF-001..NF-038 with unique slugs', () => {
   const expected = Array.from(
-    { length: 37 },
+    { length: 38 },
     (_, i) => `NF-${String(i + 1).padStart(3, '0')}`
   )
   expect(Object.keys(ERROR_CODES)).toEqual(expected)

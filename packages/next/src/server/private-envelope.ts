@@ -24,6 +24,27 @@ const CAUSES: Record<DevDebugInfoCause, string> = {
 }
 
 /**
+ * The token's clock. A render with `partialPrefetching` (create-next-app's
+ * default) flags `Date.now()` before the render's first uncached I/O, which
+ * the token comes before. `performance.timeOrigin + performance.now()` is
+ * not flagged (Next reserves it for measurements), but it is monotonic: it
+ * stops while the machine sleeps and ignores clock steps. So it is
+ * corrected by `clockOffset`, re-measured with `Date.now()` once the remote
+ * request has returned, when the render is past those stages.
+ */
+let clockOffset = 0
+const monotonicWallMs = (): number => performance.timeOrigin + performance.now()
+const tokenNow = (): number => (monotonicWallMs() + clockOffset) / 1000
+/** Re-measures the offset; returns how far it moved, in ms. */
+function syncTokenClock(): number {
+  const previous = clockOffset
+  clockOffset = Date.now() - monotonicWallMs()
+  return Math.abs(clockOffset - previous)
+}
+/** An offset that moved this much may have made the token look expired. */
+const CLOCK_JUMP_MS = 5_000
+
+/**
  * The host's session lookup for App Router. It receives the request's
  * `cookies()` and `headers()` values and returns the signed-in user, or null
  * for an anonymous visitor. Used by `createIslands` and `createFederationRoutes`.
@@ -40,8 +61,8 @@ export type PrivateEnvelope =
 /**
  * Fetches a per-user island. The identity is read with `cookies()` and
  * `headers()` here, outside any cache scope, and the token is minted on the
- * server for this one request: it goes only into the request's
- * `Authorization` header and is never returned. Host cookies are not
+ * server for this one request (without `Date.now()`, see `tokenNow`): it
+ * goes only into the request's `Authorization` header and is never returned. Host cookies are not
  * forwarded (`fetchIsland` sends `credentials: 'omit'`). An anonymous visitor
  * makes no remote request. Under `next dev`, warns once (NF-037) when
  * React's debug info may carry these values to the browser: this library
@@ -73,15 +94,24 @@ export async function getPrivateEnvelope(
     headers: await headers(),
   })
   if (!identity) return { kind: 'anonymous' }
-  const { token } = await mintIslandToken(federation, {
-    remote: target.remote,
-    identity,
-  })
-  const result = await fetchIsland(target, {
-    ...request,
-    token,
-    init: { cache: 'no-store' },
-  })
+  const fetchWithToken = async (): Promise<IslandResult> => {
+    const { token } = await mintIslandToken(federation, {
+      remote: target.remote,
+      identity,
+      now: tokenNow(),
+    })
+    return fetchIsland(target, {
+      ...request,
+      token,
+      init: { cache: 'no-store' },
+    })
+  }
+  let result = await fetchWithToken()
+  // A remote that refused a token minted on a clock that had fallen behind
+  // (the host slept) gets one more, minted on the corrected clock.
+  if (syncTokenClock() > CLOCK_JUMP_MS && !result.ok && result.status === 401) {
+    result = await fetchWithToken()
+  }
   return {
     kind: 'fetched',
     result,

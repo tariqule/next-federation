@@ -10,7 +10,17 @@ const RESERVED = ['iss', 'aud', 'sub', 'exp', 'iat', 'nbf', 'jti']
 /** Mints a short-lived ES256 token for one remote (aud = remote), signed with the first key. */
 export async function mintIslandToken(
   federation: Federation,
-  opts: { remote: string; identity: HostIdentity; ttlSeconds?: number }
+  opts: {
+    remote: string
+    identity: HostIdentity
+    ttlSeconds?: number
+    /**
+     * The current time in Unix seconds, for a caller that must not read
+     * `Date.now()` (a Next.js render with partial prefetching flags it).
+     * Default: `Date.now()`.
+     */
+    now?: number
+  }
 ): Promise<{ token: string; expiresAt: number }> {
   const keys = await signingKeys(federation) // NF-013 / NF-002
   const config = federation.identity!
@@ -32,7 +42,11 @@ export async function mintIslandToken(
     throw new NFError('NF-002', '`ttlSeconds` must be a finite number > 0.')
   }
   const signing = keys[0]!
-  const iat = Math.floor(Date.now() / 1000)
+  const now = opts.now ?? Date.now() / 1000
+  if (typeof now !== 'number' || !Number.isFinite(now)) {
+    throw new NFError('NF-002', '`now` must be a finite number of seconds.')
+  }
+  const iat = Math.floor(now)
   const expiresAt = iat + Math.ceil(ttl)
   const token = await new SignJWT({ ...claims })
     .setProtectedHeader({ alg: ALG, kid: signing.kid })

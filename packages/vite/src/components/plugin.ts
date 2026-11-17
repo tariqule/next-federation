@@ -41,9 +41,18 @@ const RESOLVED_ENTRY = `\0${VIRTUAL_ENTRY}`
 // Fast Refresh registration calls: a host page has no Vite preamble for them.
 const FAST_REFRESH_MARKER = /\$RefreshReg\$|\$RefreshSig\$/
 
-function viteConfig(resolved: ResolvedComponentsOptions): UserConfig {
+function viteConfig(
+  resolved: ResolvedComponentsOptions,
+  user: UserConfig
+): UserConfig {
   const client = `${resolved.outDir}/client`
   return {
+    // Vite 8 can forward browser console output to the dev server's
+    // terminal: for a remote that is every host page's console. Off, unless
+    // the remote's own config sets it.
+    ...(user.server?.forwardConsole === undefined
+      ? { server: { forwardConsole: false } }
+      : {}),
     base: resolved.publicBase,
     // `vite build` builds every environment (the browser and the server copy).
     builder: {},
@@ -123,7 +132,7 @@ export function nextFederationComponents(
   const nfPlugin: Plugin = {
     name: 'nf:components',
     enforce: 'pre',
-    config(_user, env) {
+    config(user, env) {
       if (env.command !== command) {
         throw new NFError(
           'NF-002',
@@ -135,7 +144,7 @@ export function nextFederationComponents(
         env: process.env,
         now: builtAt,
       })
-      return viteConfig(resolved)
+      return viteConfig(resolved, user)
     },
     resolveId: {
       filter: { id: /^virtual:next-federation\/components-entry$/ },

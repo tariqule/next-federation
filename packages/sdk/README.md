@@ -1,8 +1,7 @@
 # @next-federation/sdk
 
 Shared building blocks for every `next-federation` package: a category logger and the
-`NF-001` to `NF-030` and `NF-036` error codes (`NF-031` to `NF-035` are reserved), each with a
-docs page under
+`NF-001` to `NF-038` error codes, each with a docs page under
 [`docs/errors`](https://github.com/tariqule/next-federation/tree/main/docs/errors).
 
 ```ts

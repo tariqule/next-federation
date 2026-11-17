@@ -415,3 +415,24 @@ test('emitBuildTypes: a declaration failure warns and publishes no types; no typ
     })
   ).toBe(false)
 })
+
+test('emitBuildTypes: TypeScript 7 (no compiler API) warns with the fix and publishes no types', async () => {
+  // What `require('typescript')` returns for typescript@7.0.2.
+  const ts7 = { version: '7.0.2', versionMajorMinor: '7.0' }
+  const warnings: string[] = []
+  const ok = await emitBuildTypes({
+    types: true,
+    ts: ts7 as unknown as typeof ts,
+    root,
+    exposes: { './Counter': './src/Counter.tsx' },
+    clientDir: client,
+    warn: (line) => warnings.push(line),
+  })
+  expect(ok).toBe(false)
+  expect(existsSync(join(client, '@mf-types'))).toBe(false)
+  expect(warnings).toHaveLength(1)
+  expect(warnings[0]).toMatch(/TypeScript 7\.0\.2 has no compiler API/)
+  expect(warnings[0]).toMatch(/npm install -D typescript@6/)
+  expect(warnings[0]).toMatch(/publishes no types/)
+  expect(warnings[0]).not.toMatch(/Cannot read properties/)
+})

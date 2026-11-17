@@ -297,6 +297,21 @@ test('registers a flight scope once, memoising and stripping $$cache', async () 
   await expect(scope.chunkLoad('c')).resolves.toBeUndefined()
 })
 
+test('a client reference that fails to load rejects with NF-011 (island code did not load)', async () => {
+  const down = new TypeError('Failed to fetch dynamically imported module')
+  loadClientReference.mockImplementationOnce(async () => {
+    throw down
+  })
+  setup()
+  const scope = (
+    globalThis as unknown as Record<string, Record<string, FlightScope>>
+  )[FLIGHT_REGISTRY_GLOBAL]![KEY]!
+  const error = await scope.require('/src/down.tsx').catch((e: unknown) => e)
+  expect(isNFError(error, 'NF-011')).toBe(true)
+  expect((error as Error).message).toContain('/src/down.tsx')
+  expect((error as Error).cause).toBe(down)
+})
+
 test('update after destroy is a no-op and destroy is idempotent', async () => {
   const handle = await mount()
   await act(async () => handle.destroy())

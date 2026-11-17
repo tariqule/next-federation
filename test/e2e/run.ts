@@ -1,7 +1,7 @@
 // `pnpm e2e:dev -- <filter>` reaches this script as `-- <filter>`, and
 // Playwright ignores filters after `--`; so drop it and run Playwright.
 //
-// NF_MIN_PASSED=<n> (the installed cells set 1): the run also fails when
+// NF_MIN_PASSED=<n> (the installed cells set 4, one per host): the run also fails when
 // fewer than n tests passed, e.g. when every test skipped, which Playwright
 // itself reports as a success. Counted from a JSON report written next to
 // the list output.

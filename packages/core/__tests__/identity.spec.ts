@@ -97,6 +97,25 @@ test('honours ttlSeconds from the call and from config', async () => {
   expect(Math.abs(b.expiresAt - (now + 10))).toBeLessThanOrEqual(2)
 })
 
+test('`now` sets the issue time (no Date.now() read); a non-finite one is NF-002', async () => {
+  const f = await fed([await generateSigningKey()])
+  const spy = rs.spyOn(Date, 'now')
+  const { token, expiresAt } = await mintIslandToken(f, {
+    remote: 'shop',
+    identity: { sub: 'u' },
+    now: 1_800_000_000.7,
+  })
+  expect(spy).not.toHaveBeenCalled()
+  spy.mockRestore()
+  expect(decodeJwt(token).iat).toBe(1_800_000_000)
+  expect(expiresAt).toBe(1_800_000_300)
+  expect(
+    await codeOf(
+      mintIslandToken(f, { remote: 'shop', identity: { sub: 'u' }, now: NaN })
+    )
+  ).toBe('NF-002')
+})
+
 test('publicJwks lists every key and contains no private member "d"', async () => {
   const f = await fed([
     await generateSigningKey('a'),

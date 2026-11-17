@@ -28,3 +28,20 @@ test('an unreadable report fails', () => {
 test('a minimum of 0 never fails', () => {
   expect(minPassedFailure(undefined, 0)).toBeNull()
 })
+
+test('the installed cells require one passed test per installed host', async () => {
+  // installed-dev.spec.ts runs one test per installed host it starts.
+  const { readFileSync } = await import('node:fs')
+  const { resolve } = await import('node:path')
+  const scripts = (
+    JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }
+  ).scripts
+  for (const cell of ['e2e:installed', 'e2e:installed:webpack']) {
+    const apps = /NF_APPS=(\S+)/.exec(scripts[cell]!)![1]!.split(',')
+    const hosts = apps.filter((app) => app.startsWith('host-installed-'))
+    expect(hosts).toHaveLength(4)
+    expect(scripts[cell]).toContain(`NF_MIN_PASSED=${hosts.length} `)
+  }
+})

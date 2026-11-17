@@ -39,11 +39,18 @@ export type IslandMountProps = {
   /** Per-user islands: the host's token endpoint for this remote and the identity it renders for. */
   token?: { endpoint: string; identityKey: string | null } | null
   /**
-   * Rendered in place of the island after an uncaught island error. It stays
+   * Rendered in place of the island after an uncaught island error, and when
+   * its code cannot load (see `inertOnLoadFailure`). It stays
    * for that build: an envelope with a new `buildId` or `bootstrap` URL
    * renders a fresh container and bootstraps the island again.
    */
   errorFallback?: ReactNode
+  /**
+   * When the island's code cannot load (its bootstrap, `NF-011`), keep the
+   * server HTML in place, not interactive (`inert`), instead of rendering
+   * `errorFallback`. Default: true without `errorFallback`, false with one.
+   */
+  inertOnLoadFailure?: boolean
   onEvent?: (event: IslandClientEvent) => void
   /** Test seam; defaults to a native `import()` of the remote URL. */
   loadBootstrap?: (url: string) => Promise<IslandBootstrapModule>
@@ -198,7 +205,9 @@ export function IslandMount(props: IslandMountProps): ReactElement {
         remote: entry.original.remote,
         buildId: entry.buildId,
         kind,
-        code: 'NF-012',
+        // The bootstrap rejects a module of the island that cannot load
+        // (remote down, build retired) with NF-011: not an island bug.
+        code: isNFError(error, 'NF-011') ? 'NF-011' : 'NF-012',
         error,
       })
       if (!fails) return
@@ -280,7 +289,18 @@ export function IslandMount(props: IslandMountProps): ReactElement {
           } else onHydrated()
         },
         (error: unknown) => {
-          if (isCurrent(entry)) markInert(entry, error)
+          if (!isCurrent(entry)) return
+          markInert(entry, error)
+          // The island's code cannot load: show its errorFallback when it has
+          // one; without one the server HTML stays, inert.
+          const { errorFallback, inertOnLoadFailure } = latest.current
+          if (!(inertOnLoadFailure ?? errorFallback === undefined)) {
+            destroyEntry(entry)
+            setFailedBuild({
+              buildId: entry.buildId,
+              bootstrap: entry.bootstrap,
+            })
+          }
         }
       )
     }

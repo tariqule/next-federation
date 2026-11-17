@@ -142,6 +142,25 @@ describe('createTokenClient', () => {
     expect(calls).toHaveLength(3)
   })
 
+  test('an anonymous visitor ({ token: null }, or a 401 from an older host) gets null, uncached', async () => {
+    const { fn, calls } = fakeFetch([
+      { status: 200, body: { token: null } },
+      { status: 401 },
+      { status: 200, body: { token: null } },
+    ])
+    const client = createTokenClient({
+      endpoint: EP,
+      identityKey: null,
+      fetch: fn,
+      now,
+    })
+    expect(await client.getToken()).toBeNull()
+    expect(await client.getToken()).toBeNull()
+    expect(await client.getToken()).toBeNull()
+    // Nothing cached for an anonymous visitor: a later sign-in is seen.
+    expect(calls).toHaveLength(3)
+  })
+
   test('a network failure or malformed reply returns null and clears the entry', async () => {
     const { fn } = fakeFetch([
       ok('t1', 1100),

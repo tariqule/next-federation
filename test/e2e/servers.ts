@@ -226,6 +226,18 @@ function nextCommand(app: string, port: number, distDir: string): string {
 }
 
 /**
+ * The cacheComponents host's server output (dev or `next start`) also goes
+ * to test/e2e/.logs/<app>-<port>.server.log, for checks on what the server
+ * logged (still shown on stderr).
+ */
+export const serverLog = (app: string, port: number): string =>
+  join(logs, `${app}-${port}.server.log`)
+function withServerLog(command: string, app: string, port: number): string {
+  const log = JSON.stringify(serverLog(app, port))
+  return `mkdir -p ${JSON.stringify(logs)} && rm -f ${log} && { ${command}; } 2>&1 | tee ${log} >&2`
+}
+
+/**
  * Next 15 hosts: webpack is the default there and `--turbopack` opts in;
  * `next dev` keeps its fetch cache in `<distDir>/cache/fetch-cache`.
  */
@@ -390,7 +402,11 @@ export const APPS: App[] = [
     key: 'host-app-cc',
     dir: 'host-app',
     url: `http://localhost:${PORTS.hostAppCc}`,
-    command: nextCommand('host-app', PORTS.hostAppCc, nextDist('.next-cc')),
+    command: withServerLog(
+      nextCommand('host-app', PORTS.hostAppCc, nextDist('.next-cc')),
+      'host-app',
+      PORTS.hostAppCc
+    ),
     env: { ...hostEnv(PORTS.hostAppCc), NF_CC: '1' },
   },
   {

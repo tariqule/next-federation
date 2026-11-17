@@ -104,9 +104,10 @@ export async function fetchIsland(
   })
 
   async function attempt(
-    signal: AbortSignal,
+    controller: AbortController,
     timedOut: () => boolean
   ): Promise<Failure | IslandResult> {
+    const { signal } = controller
     let response: Response
     try {
       response = await doFetch(encoded.url, {
@@ -154,8 +155,13 @@ export async function fetchIsland(
       }
       return { code: 'NF-007', retry: true }
     }
-    // Over the limit: the body was cancelled. Deterministic, so not retried.
-    if (body === null) return { code: 'NF-007', retry: false }
+    // Over the limit: the body was cancelled, and the request is aborted (a
+    // wrapping fetch, like Next's, may read its own copy of the body, which
+    // cancelling ours does not stop). Deterministic, so not retried.
+    if (body === null) {
+      controller.abort()
+      return { code: 'NF-007', retry: false }
+    }
     bytes = body.byteLength
     try {
       const text = new TextDecoder().decode(body)
@@ -190,7 +196,7 @@ export async function fetchIsland(
 
     let outcome: Failure | IslandResult
     try {
-      outcome = await attempt(controller.signal, () => timedOut)
+      outcome = await attempt(controller, () => timedOut)
     } finally {
       clearTimeout(timer)
     }

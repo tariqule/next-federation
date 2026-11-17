@@ -35,8 +35,11 @@ pnpm add @next-federation/react react react-dom
 re-renders, StrictMode and hidden `<Activity>`. It tears the root down once its container has
 left the document. An uncaught error inside the island renders `errorFallback` instead. That
 fallback stays for the failed build; an envelope with a new `buildId` or `bootstrap` URL mounts
-a fresh container and bootstraps the island again. A bootstrap that fails to load leaves the
-server HTML in place and marks the island `inert`.
+a fresh container and bootstraps the island again. When the island's code cannot load (its
+bootstrap, or a module it needs while hydrating: the remote is down or the build was retired), the
+island reports `NF-011` and renders `errorFallback`. Without an `errorFallback` prop (or with
+`inertOnLoadFailure`), a bootstrap that fails to load leaves the server HTML in place and marks the
+island `inert`.
 The container's `data-nf-state` becomes `live` (and `island:hydrate` fires) only once the
 island's hydration has committed, so the island is interactive from that point.
 `IslandMount` also renders the envelope's stylesheets as

@@ -107,7 +107,26 @@ describe('remoteViteConfig', () => {
   })
 
   test("Vite's own CORS is off: it would pre-empt the handler on /_nf/ (ruling 18)", () => {
-    expect(config.server).toEqual({ cors: false })
+    expect(config.server!.cors).toBe(false)
+  })
+
+  test('dev: React is pre-bundled up front and the island package never is, so a cold optimizer never re-optimizes on the first host load (two Reacts)', () => {
+    expect(env.client!.optimizeDeps!.include).toEqual([
+      'react',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom',
+      'react-dom/client',
+    ])
+    expect(env.client!.optimizeDeps!.exclude).toEqual([
+      '@next-federation/island',
+    ])
+  })
+
+  test("dev: the host's browser console is not forwarded to the remote's terminal, unless the remote asks for it", () => {
+    expect(config.server!.forwardConsole).toBe(false)
+    const own = remoteViteConfig(built, { server: { forwardConsole: true } })
+    expect(own.server).toEqual({ cors: false })
   })
 })
 
