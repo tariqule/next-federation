@@ -2,9 +2,16 @@ import { fetchIsland } from '@next-federation/core'
 import type { Federation, IslandResult } from '@next-federation/core'
 import { identityKey, mintIslandToken } from '@next-federation/core/identity'
 import type { HostContext, IslandEnvelope } from '@next-federation/protocol'
+import { canonicalJson } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import type { GetServerSidePropsContext, GetStaticPropsContext } from 'next'
 import { hostBasePath } from '../server/assert-wrapped.ts'
+import {
+  keepSeconds,
+  lastGood,
+  lastGoodKey,
+  rememberGood,
+} from '../server/last-good.ts'
 import { reportIsland } from '../server/report-island.ts'
 import type { PagesIdentity } from './api-handler.ts'
 
@@ -22,6 +29,13 @@ export type IslandProps = {
   envelope: IslandEnvelope | null
   host: HostContext
   token: { endpoint: string; identityKey: string | null } | null
+  /**
+   * Set when the remote failed and `envelope` is this public island's last
+   * good envelope from this server process (stale-if-error, kept at most an
+   * hour or twice `islands.revalidate`). Retry soon, e.g. `revalidate:
+   * banner.envelope && !banner.stale ? 60 : 5` in `getStaticProps`.
+   */
+  stale?: true
 }
 
 export type PagesIslandSpec = {
@@ -51,11 +65,12 @@ function localeOf(ctx: PagesContext): string {
  * ```
  *
  * Public islands fetch on every call; in `getStaticProps` the page's own
- * `revalidate` is the cache. Private islands read the identity from `ctx.req`
- * and mint the token on the server, where it is used for the one remote
- * request and never returned. Remote failures and anonymous visitors give
- * `envelope: null` (the fallback); caller mistakes throw (NF-001, NF-002,
- * NF-009, NF-013, NF-017).
+ * `revalidate` is the cache. A failed public fetch returns the island's last
+ * good envelope from this process with `stale: true` when there is one.
+ * Private islands read the identity from `ctx.req` and mint the token on the
+ * server, where it is used for the one remote request and never returned.
+ * Remote failures and anonymous visitors give `envelope: null` (the
+ * fallback); caller mistakes throw (NF-001, NF-002, NF-009, NF-013, NF-017).
  */
 export function createPagesIslands(
   federation: Federation,
@@ -77,15 +92,28 @@ export function createPagesIslands(
 
       if (!spec.private) {
         const result = await fetchIsland(target, { island, props, host })
-        reportIsland(federation, target, island, result)
-        if (!result.ok) return empty
+        const at = Date.now()
+        const key = lastGoodKey(
+          target,
+          island,
+          canonicalJson(props),
+          canonicalJson(host)
+        )
+        const kept = result.ok
+          ? null
+          : lastGood(key, at, keepSeconds(federation.islands.revalidate))
+        if (result.ok) rememberGood(key, result, at)
+        reportIsland(federation, target, island, result, kept?.ageSeconds)
+        const good = result.ok ? result : kept?.result
+        if (!good) return empty
         // D2: no identity is read (getStaticProps works, nothing per-user is rendered).
         const actsAsUser =
           options.getIdentity !== undefined && federation.identity !== null
         return {
           ...empty,
-          envelope: result.envelope,
+          envelope: good.envelope,
           token: actsAsUser ? { endpoint, identityKey: null } : null,
+          ...(kept ? { stale: true as const } : {}),
         }
       }
 

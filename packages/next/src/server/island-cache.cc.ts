@@ -14,22 +14,39 @@ import { unstable_rethrow } from 'next/navigation'
 import { markFresh } from './fresh-mark.ts'
 import type { MarkedIslandResult } from './fresh-mark.ts'
 
-// Next 16's built-in 'seconds' profile values (stale 30, revalidate 1,
-// expire 60), inlined: a host may redefine the named profile in next.config
-// `cacheLife`, which would freeze failures again.
-const FAILURE_LIFE = { stale: 30, revalidate: 1, expire: 60 }
+/**
+ * A failed fetch (island envelope or components descriptor): retried within
+ * about 5 s, and still part of the static shell. Next leaves an entry whose
+ * `expire` is under 300 s (or whose `revalidate` is 0) out of a static
+ * prerender, as a dynamic hole. That is a trap for a failure on a static
+ * page: the regenerated shell no longer holds the island's cache entry, so
+ * it gets `revalidate: false` and Next never regenerates it again. The page
+ * stays a partial prerender (`private, no-store`) after the remote recovers,
+ * and across restarts, since Next keeps it in `.next/server/route-cache`
+ * (where its RSC requests then answer 404). An `expire` well above 300 s
+ * keeps the failure in the shell with a short `revalidate`: the page stays
+ * static and is regenerated within seconds.
+ * Inlined, not a named profile: a host may redefine those in next.config.
+ */
+const FAILURE_LIFE = { stale: 30, revalidate: 5, expire: 600 }
+
+/**
+ * NF-039 only: a render deliberately left out of the static shell (Next's
+ * built-in 'seconds' values, inlined). The page's descriptor entries stay in
+ * the shell, so the page keeps a finite revalidate and is regenerated.
+ */
+const DEFER_LIFE = { stale: 30, revalidate: 1, expire: 60 }
 
 /**
  * Public island envelope for hosts with `cacheComponents`: `'use cache'` with
  * `cacheLife` and the `nf:<remote>`, `nf:<remote>:<island>` tags.
  *
  * A failure is returned, not thrown: Next fails a build-time prerender on any
- * error raised inside `'use cache'`, even one caught outside. Instead a failure
- * switches to a short inline profile (the shorter profile wins). Next
- * keeps short-lived entries out of the static shell and renders them as
- * dynamic holes, so a failed remote is never frozen into a static page and is
- * retried within about a second (a failure may be served stale once while the
- * background refresh runs), while a working remote stays cached for minutes.
+ * error raised inside `'use cache'`, even one caught outside. Instead a
+ * failure switches to `FAILURE_LIFE` (the shorter profile wins): the page
+ * stays static and is regenerated within seconds, while a working remote
+ * stays cached for minutes. The caller (`loadIsland`) renders the island's
+ * last good envelope in place of a failure when it has one (stale-if-error).
  *
  * There is no `catch` here, so Next's control-flow errors always propagate.
  * Every argument is plain data, because it is part of the cache key.
@@ -55,22 +72,28 @@ export async function getPublicEnvelope(
   })
   if (!result.ok) cacheLife(FAILURE_LIFE)
   // Stored with the entry: a cache hit returns the mark of this run, which the
-  // caller already took, so the hit is not reported as a new fetch.
-  return markFresh(result)
+  // caller already took, so the hit is not reported as a new fetch. The time
+  // is read here, in the cache scope (a prerender may not read it outside).
+  return markFresh(result, Date.now())
 }
 
 /**
- * Called by `RemoteIsland` after a failed load. When the island renders
- * inside the host's own `'use cache'` scope, an explicit `cacheLife` there
- * would keep the failure for that scope's whole lifetime (Next does not let an
- * inner, shorter lifetime override an explicit outer one). `cacheLife()` keeps
- * the shortest call made in a scope, so this makes the enclosing entry
- * short-lived as well: a dynamic hole, retried like the island's own entry.
+ * Called by `RemoteIsland` after a failed load (no last good envelope). When
+ * the island renders inside the host's own `'use cache'` scope, an explicit
+ * `cacheLife` there would keep the failure for that scope's whole lifetime
+ * (Next does not let an inner, shorter lifetime override an explicit outer
+ * one). `cacheLife()` keeps the shortest call made in a scope, so this gives
+ * the enclosing entry the failure profile as well: still cached (and part of
+ * a static shell), retried within seconds like the island's own entry.
  * Outside a `'use cache'` scope `cacheLife()` throws; that case is ignored.
  */
 export function shortenEnclosingCache(): void {
+  shortenTo(FAILURE_LIFE)
+}
+
+function shortenTo(life: typeof FAILURE_LIFE): void {
   try {
-    cacheLife(FAILURE_LIFE)
+    cacheLife(life)
   } catch (error) {
     unstable_rethrow(error)
   }
@@ -80,10 +103,10 @@ export function shortenEnclosingCache(): void {
  * Mode A: a components remote's verified build descriptor, for hosts with
  * `cacheComponents`: `'use cache'` with a `cacheLife` of at least minutes
  * (a shorter one makes the entry dynamic). A failure is returned with the
- * short failure profile, like an island envelope, so it is never frozen
- * into a static page. Verification runs inside the cache scope (WebCrypto
- * work outside it would make the prerender treat it as uncached I/O). No
- * in-process cache: Next must see this fetch.
+ * failure profile, like an island envelope: retried within seconds, without
+ * turning a static page into a partial prerender. Verification runs inside
+ * the cache scope (WebCrypto work outside it would make the prerender treat
+ * it as uncached I/O). No in-process cache: Next must see this fetch.
  */
 export async function getDescriptorFile(
   target: ComponentTarget
@@ -102,12 +125,12 @@ export async function getDescriptorFile(
 
 /**
  * A short-lived cache entry: an App Router render that uses it is left out
- * of the static shell (a dynamic hole, rendered per request) and the page
- * is regenerated soon, as for a failed island.
+ * of the static shell (a dynamic hole, rendered per request). The page's
+ * descriptor entries stay in the shell, so it is regenerated.
  */
 async function notServerReadyYet(base: string): Promise<string> {
   'use cache'
-  cacheLife(FAILURE_LIFE)
+  cacheLife(DEFER_LIFE)
   return base
 }
 
@@ -137,6 +160,6 @@ export async function skipStaticShellUntilReady(
     `not-loaded:${descriptor.base}`,
     `Build "${descriptor.buildId}" of "${descriptor.remote}" is not loaded in this server process yet: this render leaves its remote components to request time (each request waits for the build) instead of keeping their fallback in the static page, and the page regenerates once it is loaded.`
   )
-  shortenEnclosingCache()
+  shortenTo(DEFER_LIFE)
   await notServerReadyYet(descriptor.base)
 }

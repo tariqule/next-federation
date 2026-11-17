@@ -1,7 +1,11 @@
 import type { IslandResult } from '@next-federation/core'
 
-/** An island-cache result; `fresh` is set by the run that actually fetched. */
-export type MarkedIslandResult = IslandResult & { fresh?: string }
+/**
+ * An island-cache result; `fresh` is set by the run that actually fetched,
+ * `at` is when that run fetched (ms since the epoch), read inside the cached
+ * function so the caller never reads the wall clock.
+ */
+export type MarkedIslandResult = IslandResult & { fresh?: string; at?: number }
 
 // Marks of fetches that ran in this process and are not yet reported. A
 // cached entry carries the mark of the run that filled it, which was taken
@@ -11,14 +15,19 @@ export type MarkedIslandResult = IslandResult & { fresh?: string }
 const pending = new Set<string>()
 const MAX_PENDING = 1000
 
-/** Called inside the island cache when the fetch really ran. */
-export function markFresh(result: IslandResult): MarkedIslandResult {
+/** Called inside the island cache when the fetch really ran, at `at`. */
+export function markFresh(
+  result: IslandResult,
+  at?: number
+): MarkedIslandResult {
   const mark = crypto.randomUUID()
   pending.add(mark)
   if (pending.size > MAX_PENDING) {
     pending.delete(pending.values().next().value!)
   }
-  return { ...result, fresh: mark }
+  return at === undefined
+    ? { ...result, fresh: mark }
+    : { ...result, fresh: mark, at }
 }
 
 /** True exactly once for a result whose fetch ran in this process. */

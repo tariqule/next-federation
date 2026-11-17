@@ -75,8 +75,11 @@ export function createIslands(
   }: LoaderProps): Promise<ReactElement> {
     const loaded: LoadedIsland = await load(spec)
     const onError = errorFallback ?? fallback ?? null
-    // A failure must not be kept by a host 'use cache' around this island.
-    if (loaded.kind === 'failed') shortenEnclosingCache()
+    // A failure (or the last good envelope standing in for one) must not be
+    // kept by a host 'use cache' around this island.
+    if (loaded.kind === 'failed' || (loaded.kind === 'ok' && loaded.stale)) {
+      shortenEnclosingCache()
+    }
     if (loaded.kind !== 'ok') return <>{onError}</>
     const { envelope, token } = loaded
     // The island's CSS links are rendered by `IslandMount`, as in every host.

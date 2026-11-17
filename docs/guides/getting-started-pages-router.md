@@ -123,13 +123,14 @@ renders `errorFallback ?? fallback`. It throws for caller mistakes: `NF-001` (un
 
 ## Static pages
 
-In `getStaticProps` the page's own `revalidate` is the island cache. A remote failure is baked into the
-page for that window, so retry sooner when the envelope is missing:
+In `getStaticProps` the page's own `revalidate` is the island cache. When the remote fails, the page keeps
+the island's last good envelope from this server process (`stale: true`), or gets `envelope: null` (the
+fallback) without one ([Caching](caching.md#stale-if-error)). Either way, regenerate soon:
 
 ```ts
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const banner = await getIslandProps(ctx, { remote: 'shop', island: 'Banner' })
-  return { props: { banner }, revalidate: banner.envelope ? 60 : 1 }
+  return { props: { banner }, revalidate: banner.envelope && !banner.stale ? 60 : 5 }
 }
 ```
 

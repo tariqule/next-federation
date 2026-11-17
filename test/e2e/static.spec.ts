@@ -4,7 +4,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { FAKE_REMOTE, HOST_APP_CC, LOGS_DIR, PORTS } from './servers.ts'
+import type { APIRequestContext, APIResponse } from '@playwright/test'
+import { FAKE_REMOTE, LOGS_DIR, PORTS, serverLog } from './servers.ts'
 import { markup } from './lib/strip-scripts.ts'
 
 const FAKE = FAKE_REMOTE
@@ -82,30 +83,191 @@ for (const [name, port] of [
   })
 }
 
-test('cacheComponents: a static route whose remote is down at revalidation regenerates as a partial prerender', async ({
+// B1/B2 (validation round 3) and B5 (round 4): a static page with a public
+// island must stay static through an island outage, regenerate on its
+// revalidate time, answer client navigations (RSC) with 200, and keep the
+// island's last good envelope while the remote fails (stale-if-error).
+// `/flaky-static` and `/flaky-cold` revalidate their island every 2 s.
+
+/** The page's cache state: never a partial prerender (`x-nextjs-postponed`). */
+function staticState(res: APIResponse, what: string): string {
+  const h = res.headers()
+  const state = `${what}: ${res.status()} cache=${h['x-nextjs-cache']} postponed=${h['x-nextjs-postponed']} cache-control=${h['cache-control']}`
+  expect(res.status(), state).toBe(200)
+  expect(h['x-nextjs-postponed'], state).toBeUndefined()
+  // MISS: rendered for this request and stored (still static).
+  expect(['HIT', 'STALE', 'MISS'], state).toContain(h['x-nextjs-cache'])
+  expect(h['cache-control'], state).toMatch(/^s-maxage=\d+/)
+  return h['x-nextjs-cache']!
+}
+
+/** A client navigation's RSC request for the page answers 200. */
+async function expectRsc(request: APIRequestContext, url: string) {
+  const res = await request.get(`${url}?_rsc`, {
+    headers: { RSC: '1' },
+    maxRedirects: 0,
+  })
+  expect(res.status(), `RSC ${url}`).toBe(200)
+}
+
+const flakyRev = (html: string, id: string) =>
+  Number(new RegExp(`flaky ${id} rev (\\d+)`).exec(html)?.[1])
+
+const flakyRequests = async (request: APIRequestContext, id: string) =>
+  (
+    (await (await request.get(`${FAKE}/_stats`)).json()) as {
+      requests: Record<string, number>
+    }
+  ).requests[`Flaky:${id}`] ?? 0
+
+/** Polls until a regeneration ran in this server process (STALE, then HIT). */
+async function regenerated(request: APIRequestContext, url: string) {
+  let seenStale = false
+  await expect
+    .poll(
+      async () => {
+        const cache = staticState(await request.get(url), url)
+        if (cache === 'STALE') seenStale = true
+        return seenStale && cache === 'HIT'
+      },
+      { timeout: 20_000, intervals: [250] }
+    )
+    .toBe(true)
+}
+
+for (const [name, port] of [
+  ['legacy', PORTS.hostApp],
+  ['cacheComponents', PORTS.hostAppCc],
+] as const) {
+  const url = `http://localhost:${port}`
+
+  test(`${name}: a public island page regenerates as static on its revalidate time, and its RSC requests answer 200`, async ({
+    request,
+  }) => {
+    await request.post(`${FAKE}/_flaky?down=0`)
+    const page = `${url}/flaky-static`
+    expect(buildLog(port)).toMatch(/^[├└┌] ○ \/flaky-static\b/m)
+    await regenerated(request, page)
+    // And again: not a one-off.
+    await regenerated(request, page)
+    await expectRsc(request, page)
+    await expectRsc(request, `${url}/`)
+  })
+
+  test(`${name}: an island outage at regeneration keeps the page static with the last good island (stale-if-error), then it refreshes`, async ({
+    request,
+  }) => {
+    const page = `${url}/flaky-static`
+    const html = async () => {
+      const res = await request.get(page)
+      staticState(res, page)
+      return markup(await res.text())
+    }
+    try {
+      await request.post(`${FAKE}/_flaky?down=0`)
+      await regenerated(request, page)
+      const good = flakyRev(await html(), 'isr')
+      expect(good).toBeGreaterThan(0)
+      const fetchedBefore = await flakyRequests(request, 'isr')
+      await request.post(`${FAKE}/_flaky?down=1`)
+      // Several regenerations while the remote fails: every response is the
+      // static page with the last good island, never the fallback.
+      const until = Date.now() + 8_000
+      while (Date.now() < until) {
+        const down = await html()
+        expect(down).toContain(`flaky isr rev ${good}`)
+        expect(down).not.toContain('flaky unavailable')
+        await new Promise((r) => setTimeout(r, 400))
+      }
+      await expectRsc(request, page)
+      // The regenerations did reach the (failing) remote.
+      expect(await flakyRequests(request, 'isr')).toBeGreaterThan(fetchedBefore)
+      if (name === 'cacheComponents') {
+        const log = readFileSync(serverLog('host-app', port), 'utf8')
+        expect(log).toMatch(
+          /NF-007: .*Island "Flaky" from remote "fake" failed at \S+\/_nf\/island\/Flaky \(HTTP 503\); rendering its last good envelope \(\d+ s old\)/
+        )
+      }
+      // Recovery: the next regenerations pick up the remote's new content.
+      const { rev } = (await (await request.post(`${FAKE}/_rev`)).json()) as {
+        rev: number
+      }
+      await request.post(`${FAKE}/_flaky?down=0`)
+      await expect
+        .poll(async () => flakyRev(await html(), 'isr'), {
+          timeout: 20_000,
+          intervals: [500],
+        })
+        .toBe(rev)
+      await regenerated(request, page)
+      await expectRsc(request, page)
+    } finally {
+      await request.post(`${FAKE}/_flaky?down=0`)
+    }
+  })
+
+  test(`${name}: an outage with no good envelope in this process: static with the fallback, regenerated within seconds`, async ({
+    request,
+  }) => {
+    const page = `${url}/flaky-cold`
+    const html = async () => {
+      const res = await request.get(page)
+      staticState(res, page)
+      return markup(await res.text())
+    }
+    try {
+      // Down before this process ever fetched the island: the first
+      // regeneration has nothing to keep.
+      await request.post(`${FAKE}/_flaky?down=1`)
+      await expect
+        .poll(html, { timeout: 20_000, intervals: [500] })
+        .toContain('flaky unavailable')
+      await expectRsc(request, page)
+      await request.post(`${FAKE}/_flaky?down=0`)
+      await expect
+        .poll(html, { timeout: 20_000, intervals: [500] })
+        .toContain('flaky cold rev')
+      await regenerated(request, page)
+    } finally {
+      await request.post(`${FAKE}/_flaky?down=0`)
+    }
+  })
+}
+
+test('Pages Router ISR: a failed regeneration keeps the last good island (`stale: true`), then it refreshes', async ({
   request,
 }) => {
-  const url = `${HOST_APP_CC}/flaky-static`
-  const page = async () => markup(await (await request.get(url)).text())
-  expect(buildLog(PORTS.hostAppCc)).toMatch(/^[├└┌] [○◐] \/flaky-static\b/m)
+  const page = `http://localhost:${PORTS.hostPages}/flaky-isr`
+  const html = async () => {
+    const res = await request.get(page)
+    staticState(res, page)
+    return markup(await res.text())
+  }
   try {
-    // Built while the remote was up: the island is in the static output.
-    expect(await page()).toContain('flaky isr rev')
+    await request.post(`${FAKE}/_flaky?down=0`)
+    await regenerated(request, page)
+    const good = flakyRev(await html(), 'pages')
+    expect(good).toBeGreaterThan(0)
+    const fetchedBefore = await flakyRequests(request, 'pages')
     await request.post(`${FAKE}/_flaky?down=1`)
-    // The island revalidates every 2 s. After the next regeneration the
-    // failure is a dynamic hole: the shell carries the Suspense fallback and
-    // the error fallback is streamed into it per request.
-    await expect
-      .poll(page, { timeout: 20_000, intervals: [1000] })
-      .toContain('flaky unavailable')
-    const down = await page()
-    expect(down).toContain('loading flaky…')
-    expect(down).not.toContain('flaky isr rev')
-    // Not frozen: the next requests pick the remote up again.
+    const until = Date.now() + 6_000
+    while (Date.now() < until) {
+      const down = await html()
+      expect(down).toContain(`flaky pages rev ${good}`)
+      expect(down).not.toContain('flaky unavailable')
+      await new Promise((r) => setTimeout(r, 400))
+    }
+    expect(await flakyRequests(request, 'pages')).toBeGreaterThan(fetchedBefore)
+    const { rev } = (await (await request.post(`${FAKE}/_rev`)).json()) as {
+      rev: number
+    }
     await request.post(`${FAKE}/_flaky?down=0`)
     await expect
-      .poll(page, { timeout: 20_000, intervals: [1000] })
-      .toContain('flaky isr rev')
+      .poll(async () => flakyRev(await html(), 'pages'), {
+        timeout: 20_000,
+        intervals: [500],
+      })
+      .toBe(rev)
   } finally {
     await request.post(`${FAKE}/_flaky?down=0`)
   }

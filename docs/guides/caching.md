@@ -7,8 +7,10 @@ How islands are cached depends on the host. Public islands are cached; private i
 The adapter fetches the envelope with Next's fetch cache: `next: { revalidate, tags }`. `revalidate`
 defaults to `islands.revalidate` (60 seconds). The tags are `nf:<remote>` and `nf:<remote>:<island>`.
 
-- The page can be static (ISR). **A remote that is down when the page is generated is baked into
-  that page** as the fallback, until the next regeneration. That is at most `revalidate` seconds.
+- The page can be static (ISR). When a regeneration's island fetch fails, the page keeps the island's
+  **last good envelope** (stale-if-error, see below) and the next regeneration, `revalidate` seconds
+  later, tries again. Without a last good envelope, the fallback is in that page until the next
+  regeneration: at most `revalidate` seconds.
 - A 200 response whose body is not a valid envelope (`NF-004`) is cached for `revalidate` seconds as
   well. Non-2xx responses, timeouts and network errors are not cached.
 - `dynamic` fetches on every request (`cache: 'no-store'`) and makes the route dynamic.
@@ -17,15 +19,25 @@ defaults to `islands.revalidate` (60 seconds). The tags are `nf:<remote>` and `n
 
 The envelope comes from a `'use cache'` function, with the same tags.
 
-- A **failure is never frozen**. It switches the entry to a short cache lifetime (Next's `seconds`
-  values), so a failed island becomes a dynamic hole inside its `<Suspense>` boundary (the route
-  shows as `◐`) and is retried within about a second. A working island stays cached.
+- A failure never turns a static page into a partial prerender. A failed fetch is cached with a
+  short inline profile, `{ stale: 30, revalidate: 5, expire: 600 }`: it stays in the static shell, so
+  the page stays static (`○`, with `x-nextjs-cache`) and is regenerated within about 5 seconds. The
+  island shows its last good envelope (stale-if-error) or, without one, its `errorFallback`. A
+  working island stays cached for its `revalidate`.
+- Why not a dynamic hole: Next 16 leaves a cache entry whose `expire` is under 5 minutes out of a
+  static prerender. When that entry was the page's only changing content, the regenerated shell gets
+  `revalidate: false`, so Next never regenerates it again: the page is served `private, no-store`
+  with the island rendered per request, also after the remote recovers and across restarts (Next
+  keeps it in `.next/server/route-cache`), and its client navigations (RSC requests) answer 404
+  after a restart. A Next 16.4 app without next-federation does the same with a short `cacheLife`
+  inside `<Suspense>`.
 - `RemoteIsland` renders its own `<Suspense>` (a private island with `blocking` does not, see
   [Private islands](#private-islands)).
-- If you put your own `'use cache'` component around a `RemoteIsland`, that component **must be inside
-  `<Suspense>`**. A failed island also shortens the enclosing cache, so the failure is not kept for
-  the scope's lifetime. If the component is not inside `<Suspense>`, a build with the remote down
-  fails with Next's "uncached data outside `<Suspense>`" error.
+- If you put your own `'use cache'` component around a `RemoteIsland`, a failed island (or one
+  showing its last good envelope) applies the same failure profile to that component's entry
+  (`cacheLife()` keeps the shortest call in a scope, even against an explicit long one there), so the
+  failure is retried within seconds instead of being kept for the component's lifetime. Keep such a
+  component inside `<Suspense>`: anything uncached in it (a private island, for example) needs one.
 
 ```tsx
 async function CachedSection() {
@@ -42,6 +54,20 @@ export default function Page() {
   )
 }
 ```
+
+## Stale-if-error
+
+A cached public island whose fetch fails (`NF-003`, `NF-004`, `NF-005`, `NF-007`, `NF-008`) renders the
+last good envelope this server process fetched for the same remote, island, props and host context,
+instead of the fallback. It is kept as long as the island's cache entry could be served stale: at
+least an hour, or twice `revalidate`. The failure is still logged with its code ("…failed (HTTP 503);
+rendering its last good envelope (42 s old)") and emitted as `island:error`, and the island is
+retried soon (above). The envelope's build stays loadable because remotes retain builds
+([Build cache and remote retention](#build-cache-and-remote-retention)).
+
+The last good envelopes live in the server process's memory (at most 500, 50 MiB in all). A fresh
+process, a new serverless instance, or `next build` has none, so a failure there renders the
+fallback. Private and `dynamic` islands are never served stale.
 
 ## Private islands
 
@@ -84,11 +110,12 @@ caching consequences:
 
 ## Pages Router
 
-`getIslandProps` fetches on every call. In `getStaticProps`, the page's own `revalidate` is the cache,
-so a remote failure is kept for that window. Retry sooner when the envelope is missing:
+`getIslandProps` fetches on every call. In `getStaticProps`, the page's own `revalidate` is the cache.
+When the fetch fails, `getIslandProps` returns the island's last good envelope with `stale: true`
+(stale-if-error, above), or `envelope: null` without one. Either way, regenerate soon:
 
 ```ts
-return { props: { banner }, revalidate: banner.envelope ? 60 : 1 }
+return { props: { banner }, revalidate: banner.envelope && !banner.stale ? 60 : 5 }
 ```
 
 Private islands work in `getServerSideProps` only.

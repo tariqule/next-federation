@@ -408,9 +408,9 @@ With `cacheComponents`, two shapes are supported:
 
 - **Cached** (default): the descriptor is read through `'use cache'` with
   `cacheLife({ revalidate: components.revalidate, … })` (at least minutes of `expire`), so the page
-  can be prerendered static with the remote's markup in it. Put the component inside `<Suspense>`:
-  if the remote is down at build time, the failure is short-lived and becomes a dynamic hole
-  instead of failing the build.
+  can be prerendered static with the remote's markup in it. If the remote is down, the failure is
+  cached for a few seconds (still in the static shell, so the page stays static and is regenerated
+  soon) and the last known build or the fallback renders. Put the component inside `<Suspense>`.
 - **Per request**: `getComponentDescriptor(federation, 'shop', { dynamic: true })` inside
   `<Suspense>`: a partial prerender (the shell is static, the component streams in). Outside
   `<Suspense>` Next fails the build, as for any uncached data.

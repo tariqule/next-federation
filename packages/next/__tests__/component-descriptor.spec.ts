@@ -104,7 +104,7 @@ test('legacy: the descriptor fetch uses next.revalidate and the remote tag', asy
   expect(calls[0]![1].next).toEqual({ revalidate: 7, tags: ['nf:components'] })
 })
 
-test("cacheComponents: 'use cache' with cacheLife >= the revalidate, a failure is short-lived", async () => {
+test("cacheComponents: 'use cache' with cacheLife >= the revalidate, a failure is retried soon but stays in the static shell", async () => {
   respond = async () => new Response(JSON.stringify(await signedFile('c1')))
   expect((await ccGet(target)).ok).toBe(true)
   expect(cacheLife).toHaveBeenCalledWith({
@@ -116,10 +116,12 @@ test("cacheComponents: 'use cache' with cacheLife >= the revalidate, a failure i
   expect(calls[0]![1].next).toBeUndefined()
   respond = () => new Response('down', { status: 503 })
   expect((await ccGet(target)).ok).toBe(false)
+  // expire >= 300 s: Next keeps it in the static shell (no dynamic hole,
+  // which would stop the page from ever regenerating).
   expect(cacheLife).toHaveBeenLastCalledWith({
     stale: 30,
-    revalidate: 1,
-    expire: 60,
+    revalidate: 5,
+    expire: 600,
   })
 })
 

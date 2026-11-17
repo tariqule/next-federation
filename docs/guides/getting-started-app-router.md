@@ -58,8 +58,8 @@ A project from `create-next-app` 16.4.6 has `cacheComponents: true` and `partial
 `next.config.ts`. For islands that means:
 
 - Public islands are cached with `'use cache'`, and a page with only public islands stays static
-  (`○` in the build output). A failed island becomes a dynamic hole instead of being baked in
-  ([Caching](caching.md)).
+  (`○` in the build output), also when a remote fails: the island keeps its last good envelope (or
+  shows its fallback) and the page is regenerated within seconds ([Caching](caching.md)).
 - A private island is a dynamic hole inside the island's own `<Suspense>`, unless you render it
   with [`blocking`](#private-content-in-the-first-html-blocking). Put your own `'use cache'`
   components around a `RemoteIsland` only inside `<Suspense>`.
