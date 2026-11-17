@@ -24,6 +24,13 @@ function fromBase64Url(text: string): string {
   )
 }
 
+// A scan, not `/\/+$/`: that regex is quadratic on a long run of inner slashes.
+function trimTrailingSlashes(text: string): string {
+  let end = text.length
+  while (end > 0 && text.charCodeAt(end - 1) === 0x2f) end--
+  return text.slice(0, end)
+}
+
 const NO_HOST: HostContext = { basePath: '', locale: '' }
 const isNoHost = (h: HostContext): boolean =>
   h.basePath === '' && h.locale === ''
@@ -40,7 +47,7 @@ export function encodeIslandRequest(
   const host = opts.host ?? NO_HOST
   const headers: Record<string, string> = { accept: 'application/json' }
   if (opts.token) headers.authorization = `Bearer ${opts.token}`
-  const url = `${base.replace(/\/+$/, '')}${ISLAND_PATH}${island}`
+  const url = `${trimTrailingSlashes(base)}${ISLAND_PATH}${island}`
   const propsJson = canonicalJson(props ?? {})
   const p = toBase64Url(propsJson)
   if (p.length <= GET_PROPS_LIMIT) {

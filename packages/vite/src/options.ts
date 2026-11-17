@@ -11,6 +11,7 @@ import {
   packageVersionReader,
   resolveShared,
 } from './share.ts'
+import { trimTrailingSlashes } from './trim-slashes.ts'
 
 export type IslandRemoteOptions = {
   name: string
@@ -265,7 +266,7 @@ export function resolveOptions(
     mode: ctx.command === 'serve' ? 'development' : 'production',
     publicBase,
     scopeKey: publicBase,
-    outDir: versioned ? `${outDir.replace(/\/+$/, '')}/${buildId}` : outDir,
+    outDir: versioned ? `${trimTrailingSlashes(outDir)}/${buildId}` : outDir,
     islands,
     hosts,
     issuers,

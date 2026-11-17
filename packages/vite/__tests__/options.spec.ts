@@ -185,6 +185,18 @@ test('outDir: versioned builds go to <outDir>/<buildId>, serve to <outDir>', () 
   )
 })
 
+test('outDir: trimming trailing slashes is linear on a long run of inner slashes', () => {
+  // `/\/+$/` retries the slash run from every start position: quadratic.
+  const outDir = `dist${'/'.repeat(100_000)}x`
+  const started = performance.now()
+  const r = resolveOptions(
+    { ...opts, outDir: `${outDir}//`, buildId: 'v1' },
+    build
+  )
+  expect(performance.now() - started).toBeLessThan(100)
+  expect(r.outDir).toBe(`${outDir}/v1`)
+})
+
 test.each(['_canary', '-x', 'x'.repeat(129), '.', '..'])(
   'buildId %j is NF-002 (one pattern with nf-serve and the descriptor)',
   (buildId) => {

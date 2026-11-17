@@ -5,6 +5,7 @@ import { ISLAND_SHARE_SCOPE } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import { normalizePath } from 'vite'
 import type { Plugin, Rolldown } from 'vite'
+import { codeLiteral } from './code-literal.ts'
 
 export { ISLAND_SHARE_SCOPE }
 
@@ -139,7 +140,7 @@ type ResolvedShareOptions = {
   share: null | { libs: Array<{ name: string; version: string }> }
 }
 
-const json = JSON.stringify
+const json = codeLiteral
 
 /** The init module: resolves every shared lib, then the stubs read them. */
 function initModule(
@@ -248,7 +249,7 @@ export function islandSharePlugin(ctx: SharePluginContext): Plugin {
         if (!result || result.external) {
           throw new NFError(
             'NF-002',
-            `Cannot resolve ${json(name)} to share it with other island remotes.`
+            `Cannot resolve ${JSON.stringify(name)} to share it with other island remotes.`
           )
         }
         const file = result.id.split('?')[0]!

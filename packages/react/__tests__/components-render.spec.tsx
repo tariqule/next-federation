@@ -14,6 +14,13 @@ import type { RemoteModule, Thenable } from '../src/components/runtime.ts'
 ;(
   globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
+// happy-dom 21 loads no stylesheets unless asked; these tests load their own
+// trusted ones (data: URLs, a local server), as a browser would.
+;(
+  window as unknown as {
+    happyDOM: { settings: { enableCSSFileLoading: boolean } }
+  }
+).happyDOM.settings.enableCSSFileLoading = true
 
 function Counter({ start = 0 }: { start?: number }) {
   const [n] = useState(start)

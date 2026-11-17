@@ -190,3 +190,29 @@ test('an extra lib is shared only between builds on the same React', async () =>
     '1.0.0+react@19.3.1',
   ])
 })
+
+test.each([
+  // Computed keys: a literal `__proto__:` would set the prototype instead.
+  ['a lib named __proto__', { ['__proto__']: '1.0.0' }, '19.3.1'],
+  ['a lib named constructor', { ['constructor']: '1.0.0' }, '19.3.1'],
+  ['a React version of __proto__', {}, '__proto__'],
+  ['a React version of constructor', {}, 'constructor'],
+])(
+  '%s never writes to a prototype: the build uses its own copies',
+  async (_label, extras: Record<string, string>, version: string) => {
+    const warn = rstest.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    const protoBefore = Object.getOwnPropertyNames(Object.prototype).sort()
+    const ctorBefore = Object.getOwnPropertyNames(Object).sort()
+    const a = remote('a', version, extras)
+    const fromA = await initIslandShareScope(a.shared)
+    expect(Object.getOwnPropertyNames(Object.prototype).sort()).toEqual(
+      protoBefore
+    )
+    expect(Object.getOwnPropertyNames(Object).sort()).toEqual(ctorBefore)
+    expect(Object.getPrototypeOf(islandShareScope())).toBe(Object.prototype)
+    for (const { name } of a.shared) {
+      expect(fromA.get(name)).toEqual(a.copy(name))
+    }
+    expect(warn).toHaveBeenCalledTimes(1)
+  }
+)

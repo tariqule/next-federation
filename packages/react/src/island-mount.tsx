@@ -33,6 +33,7 @@ import {
 import type { IslandEntry } from './island-registry.ts'
 
 export type IslandMountProps = {
+  /** From `fetchIsland` (or the Next helpers built on it); its HTML is rendered as-is. */
   envelope: IslandEnvelope
   bridge?: Partial<IslandBridge>
   /** Per-user islands: the host's token endpoint for this remote and the identity it renders for. */
@@ -287,6 +288,7 @@ export function IslandMount(props: IslandMountProps): ReactElement {
     // Rule 5: the remote redeployed; the only case where the HTML is replaced.
     const rebootstrap = (stale: IslandEntry, next: IslandEnvelope) => {
       destroyEntry(stale)
+      // Trust boundary: see the note on `dangerouslySetInnerHTML` below.
       el.innerHTML = applyIdPrefix(next, mountId).html
       rewritten.current = { el, envelope: next }
       el.dataset.nfState = 'booting'
@@ -349,6 +351,16 @@ export function IslandMount(props: IslandMountProps): ReactElement {
         data-nf-build={envelope.buildId}
         data-nf-state="booting"
         suppressHydrationWarning
+        // Trust boundary (design §6 "Honest limits", docs/guides/limits.md
+        // "Trust"): the host trusts its configured remotes' HTML and scripts
+        // by design, as it runs their bootstrap module anyway. This HTML is
+        // the island SSR output of an allowlisted remote: the envelope came
+        // through `fetchIsland` (`parseEnvelope`, `assertEnvelopeUrls`, the
+        // remote name check), and the remote server stripped scripts and head
+        // tags from it (`stripIslandHtml`; cleanup, not a security control).
+        // The only host-side change is the id prefix, which `applyIdPrefix`
+        // reduces to [A-Za-z0-9]. Never pass an envelope built from visitor
+        // input.
         dangerouslySetInnerHTML={{ __html: frozen.html }}
       />
     </>

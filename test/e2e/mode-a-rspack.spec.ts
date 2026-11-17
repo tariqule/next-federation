@@ -14,6 +14,7 @@ import {
   HOST_SPA,
   MODE,
 } from './servers.ts'
+import { markup } from './lib/strip-scripts.ts'
 
 const RSPACK = `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.rspack)}`
 
@@ -56,9 +57,7 @@ function watch(page: Page) {
 
 async function html(url: string): Promise<{ status: number; body: string }> {
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-  const body = (await res.text())
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-    .replaceAll('<!-- -->', '')
+  const body = markup(await res.text())
   return { status: res.status, body }
 }
 

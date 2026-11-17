@@ -31,6 +31,17 @@ export function sharedKey(
   return REACT_LIBS.has(name) ? version : `${version}+react@${reactVersion}`
 }
 
+/**
+ * The share scope is a plain object on the page (Module Federation's format),
+ * so a lib name or version that names an `Object.prototype` member would read
+ * or write the prototype. Such a key fails sharing: the build uses its own copies.
+ */
+function assertSafeKey(key: string): void {
+  if (key in Object.prototype) {
+    throw new Error(`${JSON.stringify(key)} cannot be a share-scope key.`)
+  }
+}
+
 /** Resolves an entry's module, loading the provider's copy once per page. */
 function load(entry: IslandSharedEntry): Promise<unknown> {
   if (entry.loaded && entry.lib) return Promise.resolve(entry.lib())
@@ -85,8 +96,10 @@ export async function initIslandShareScope(
     // behind this build for each of them, so a provider's copy of react-dom
     // never evaluates before that provider resolved react.
     const entries = shared.map(({ name, version, get }) => {
-      const versions = (scope[name] ??= {})
       const key = sharedKey(name, version, reactVersion)
+      assertSafeKey(name)
+      assertSafeKey(key)
+      const versions = (scope[name] ??= {})
       const entry = (versions[key] ??= islandSharedEntry(version, from, () =>
         get().then((lib) => () => lib)
       ))
