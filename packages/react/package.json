@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/react",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "React components for next-federation: the island mount, the island error boundary and fallbacks.",
   "license": "MIT",
   "author": "tariqule",

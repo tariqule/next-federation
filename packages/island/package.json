@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/island",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Remote-side runtime for next-federation islands: Link, navigation bridge, getIdentity and the browser bootstrap.",
   "license": "MIT",
   "author": "tariqule",
