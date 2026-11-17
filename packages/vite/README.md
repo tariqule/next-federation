@@ -196,7 +196,9 @@ exposed modules and the local files they import become public, **including the l
 constants, `as const` objects and enums** (also ones inlined from outside the root): don't expose
 a module whose type graph reaches a secret. It uses the remote project's own TypeScript compiler
 API: TypeScript 5 or 6 (TypeScript 7, the native compiler, has no compiler API: pin
-`typescript@6` in the remote project). Without `typescript`, with TypeScript 7, when TypeScript cannot emit
+`typescript@6` in the remote project). The optional `typescript` peer accepts any version from 5,
+so a project on TypeScript 7 (create-vite's default) still installs with npm; only `types: true`
+needs TypeScript 6. Without `typescript`, with TypeScript 7, when TypeScript cannot emit
 them, or when a declaration names an absolute path or a path above the root, the build warns
 (`NF-002`) and publishes no types.
 Guide: [Remote components](../../docs/guides/remote-components.md).

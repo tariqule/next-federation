@@ -142,6 +142,34 @@ test('dev mode logs NF-018 for a <title> but not for a modulepreload link', asyn
   }
 })
 
+test("dev mode: React's own form-replay script is removed without NF-018; an imitation still warns", async () => {
+  // react-dom 19.3's form-replay runtime, emitted before a <form> with a function action.
+  const runtime = `addEventListener("submit",function(a){if(!a.defaultPrevented){var b=a.target,d=a.submitter,c=b.action,e=d;if(d){var f=d.getAttribute("formAction");null!=f&&(c=f,e=null)}"javascript:throw new Error('React form unexpectedly submitted.')"===c&&(a.preventDefault(),a=new FormData(b,e),c=b.ownerDocument||b,(c.$$reactFormReplay=c.$$reactFormReplay||[]).push(b,d,a))}});`
+  const form = '<form><button>go</button></form>'
+  const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    const react = make({
+      dev: true,
+      render: okRender(`<script>${runtime}</script>${form}`),
+    })
+    const env = await (await react.handler(get(P))).json()
+    expect(env.html).toBe(form)
+    expect(warn).not.toHaveBeenCalled()
+    const imitation = make({
+      dev: true,
+      render: okRender(`<script>${runtime}steal()</script>${form}`),
+    })
+    const html = (await (await imitation.handler(get(P))).json()).html
+    expect(html).toBe(form)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]!.join(' '))).toMatch(
+      /NF-018.*rendered <script>; it was removed/
+    )
+  } finally {
+    warn.mockRestore()
+  }
+})
+
 test('public response is public, max-age=60; any token makes it private, no-store', async () => {
   const { handler } = make(authed())
   expect((await handler(get(P))).headers.get('cache-control')).toBe(

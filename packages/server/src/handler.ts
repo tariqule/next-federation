@@ -410,6 +410,9 @@ export function createIslandHandler(
           ) {
             continue
           }
+          // React's form-replay script: an island form is disabled until it
+          // hydrates (nothing to replay), so its removal is expected.
+          if (tag.known === 'react-form-replay') continue
           logger.warn(
             'NF-018',
             `Island "${island}" rendered <${tag.tag}${tag.attrs}>; it was removed.`

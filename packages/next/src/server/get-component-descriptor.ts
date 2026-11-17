@@ -17,7 +17,7 @@ import type {
  * per request (inside `<Suspense>` with cacheComponents). Returns the last
  * known build when the remote is down, null when none was ever fetched.
  * With cacheComponents, a render in a server process that has not loaded the
- * build yet is left out of the static shell (`NF-028` is logged), so a
+ * build yet is left out of the static shell (`NF-039` is logged), so a
  * static regeneration never keeps the components' fallback as the page.
  */
 export async function getComponentDescriptor(

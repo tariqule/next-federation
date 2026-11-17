@@ -232,10 +232,11 @@ describe('skipStaticShellUntilReady (remote components on a static cacheComponen
     await ccSkip(d())
     expect(cacheLife).toHaveBeenCalledWith(FAILURE_LIFE)
     expect(warn).toHaveBeenCalledWith(
-      'NF-028',
+      'NF-039',
       `not-loaded:${base}`,
       expect.stringMatching(/not loaded in this server process yet/)
     )
+    expect(warn.mock.calls.map((c) => c[0])).not.toContain('NF-028')
   })
 
   test('cc: a loaded or refused build, a browser-only descriptor, the build and dev do nothing', async () => {

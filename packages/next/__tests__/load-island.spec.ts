@@ -305,6 +305,63 @@ describe('private island clock (partialPrefetching: Date.now() is flagged before
       Math.abs(claims(seen.headers.authorization!).iat - realNow() / 1000)
     ).toBeLessThan(5)
   })
+
+  test('concurrent renders right after a host sleep each replace their rejected token once', async () => {
+    // A fake clock: the wall clock is real, the monotonic one is shifted.
+    let asleepMs = 0
+    rs.spyOn(performance, 'now').mockImplementation(() => realPerf() - asleepMs)
+    const expired = (auth: string) => claims(auth).exp < realNow() / 1000
+    // The remote refuses an expired token (one issued an hour ago).
+    const answer = (auth: string) =>
+      expired(auth)
+        ? new Response(JSON.stringify({ error: 'NF-014' }), { status: 401 })
+        : new Response(JSON.stringify(envelope))
+    const tokens: string[] = []
+    // Both renders' first requests are in flight before either returns.
+    let release!: () => void
+    const bothSent = new Promise<void>((resolve) => (release = resolve))
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      const auth = (init.headers as Record<string, string>).authorization!
+      if (asleepMs === 0) return answer(auth)
+      tokens.push(auth)
+      if (tokens.length === 2) release()
+      if (tokens.length <= 2) await bothSent
+      return answer(auth)
+    }) as typeof fetch
+    const render = (sub: string) =>
+      loadIsland(
+        federation(),
+        { getIdentity: () => ({ sub }) },
+        { remote: 'a', island: 'MyOrders', private: true }
+      )
+    // One render while awake sets the clock offset; then the host sleeps an hour.
+    expect(await render('user-0')).toMatchObject({ kind: 'ok' })
+    asleepMs = 3_600_000
+    const [a, b] = await Promise.all([render('user-1'), render('user-2')])
+    expect(a).toMatchObject({ kind: 'ok' })
+    expect(b).toMatchObject({ kind: 'ok' })
+    // Two stale tokens, then one fresh one per render: at most one re-mint each.
+    expect(tokens).toHaveLength(4)
+    expect(tokens.slice(0, 2).every(expired)).toBe(true)
+    expect(tokens.slice(2).some(expired)).toBe(false)
+  })
+
+  test('a 401 for a token minted on the right clock is not retried', async () => {
+    const render = () =>
+      loadIsland(
+        federation(),
+        { getIdentity: () => ({ sub: 'user-1' }) },
+        { remote: 'a', island: 'MyOrders', private: true }
+      )
+    // Sets the clock offset (earlier tests leave it shifted).
+    await render()
+    requests = 0
+    respond = () =>
+      new Response(JSON.stringify({ error: 'NF-014' }), { status: 401 })
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    expect(await render()).toEqual({ kind: 'failed' })
+    expect(requests).toBe(1)
+  })
 })
 
 test('host cookies are never forwarded to the remote', async () => {

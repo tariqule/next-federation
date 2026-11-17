@@ -49,6 +49,9 @@ export type IslandMountProps = {
    * When the island's code cannot load (its bootstrap, `NF-011`), keep the
    * server HTML in place, not interactive (`inert`), instead of rendering
    * `errorFallback`. Default: true without `errorFallback`, false with one.
+   * Set it with an `errorFallback` to keep the HTML across a retired build
+   * (skew) and still show `errorFallback` after an island error. The Next
+   * `RemoteIsland` components (App Router and Pages Router) pass it through.
    */
   inertOnLoadFailure?: boolean
   onEvent?: (event: IslandClientEvent) => void

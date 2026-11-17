@@ -1,10 +1,16 @@
 import { parseFragment, serialize } from 'parse5'
 import type { DefaultTreeAdapterMap } from 'parse5'
+import { isReactFormReplayScript } from './react-form-replay.ts'
 
-/** An element removed by {@link stripIslandHtml}; `attrs` is the raw text after the tag name. */
+/**
+ * An element removed by {@link stripIslandHtml}; `attrs` is the raw text after the tag name.
+ * `known: 'react-form-replay'` marks React's own form-replay script (an exact copy, no
+ * attributes), removed like any other script.
+ */
 export type StrippedTag = {
   tag: 'script' | 'link' | 'meta' | 'title' | 'base' | 'style'
   attrs: string
+  known?: 'react-form-replay'
 }
 
 type Node = DefaultTreeAdapterMap['node']
@@ -54,6 +60,13 @@ function keepLeadingNewline(el: Element): void {
 }
 
 const isElement = (n: Node): n is Element => 'tagName' in n
+
+/** The text of an HTML `<script>` with one text child (its raw source), else null. */
+function htmlScriptText(el: Element): string | null {
+  if (el.namespaceURI !== HTML_NS || el.childNodes.length !== 1) return null
+  const only = el.childNodes[0]!
+  return only.nodeName === '#text' ? (only as TextNode).value : null
+}
 
 /**
  * Remove elements React would hoist or run from island SSR HTML: `<script>` (whole element, in
@@ -105,7 +118,12 @@ export function stripIslandHtml(html: string): {
               loc.endOffset - 1
             )
           : ''
-        removed.push({ tag, attrs })
+        const known =
+          tag === 'script' &&
+          isReactFormReplayScript(child.attrs.length, htmlScriptText(child))
+        removed.push(
+          known ? { tag, attrs, known: 'react-form-replay' } : { tag, attrs }
+        )
         continue
       }
     }

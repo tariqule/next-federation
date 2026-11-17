@@ -34,15 +34,13 @@ const CAUSES: Record<DevDebugInfoCause, string> = {
  */
 let clockOffset = 0
 const monotonicWallMs = (): number => performance.timeOrigin + performance.now()
-const tokenNow = (): number => (monotonicWallMs() + clockOffset) / 1000
-/** Re-measures the offset; returns how far it moved, in ms. */
-function syncTokenClock(): number {
-  const previous = clockOffset
+const tokenNowMs = (): number => monotonicWallMs() + clockOffset
+/** Re-measures the offset from `Date.now()`. */
+function syncTokenClock(): void {
   clockOffset = Date.now() - monotonicWallMs()
-  return Math.abs(clockOffset - previous)
 }
-/** An offset that moved this much may have made the token look expired. */
-const CLOCK_JUMP_MS = 5_000
+/** A token minted this far off the wall clock may have looked expired. */
+const CLOCK_SKEW_MS = 5_000
 
 /**
  * The host's session lookup for App Router. It receives the request's
@@ -61,7 +59,7 @@ export type PrivateEnvelope =
 /**
  * Fetches a per-user island. The identity is read with `cookies()` and
  * `headers()` here, outside any cache scope, and the token is minted on the
- * server for this one request (without `Date.now()`, see `tokenNow`): it
+ * server for this one request (without `Date.now()`, see `tokenNowMs`): it
  * goes only into the request's `Authorization` header and is never returned. Host cookies are not
  * forwarded (`fetchIsland` sends `credentials: 'omit'`). An anonymous visitor
  * makes no remote request. Under `next dev`, warns once (NF-037) when
@@ -94,24 +92,43 @@ export async function getPrivateEnvelope(
     headers: await headers(),
   })
   if (!identity) return { kind: 'anonymous' }
-  const fetchWithToken = async (): Promise<IslandResult> => {
+  /**
+   * One request with a fresh token. Once it has returned, `skewMs` is how far
+   * the token's `now` was from `Date.now()`, less the time the request took
+   * (monotonic). It is measured per request, so every render that minted on
+   * a stale clock sees it, even after a concurrent render has corrected the
+   * shared offset.
+   */
+  const fetchWithToken = async (): Promise<{
+    result: IslandResult
+    skewMs: number
+  }> => {
+    const mintedMs = tokenNowMs()
+    const mintedMonotonicMs = monotonicWallMs()
     const { token } = await mintIslandToken(federation, {
       remote: target.remote,
       identity,
-      now: tokenNow(),
+      now: mintedMs / 1000,
     })
-    return fetchIsland(target, {
+    const result = await fetchIsland(target, {
       ...request,
       token,
       init: { cache: 'no-store' },
     })
+    const elapsedMs = monotonicWallMs() - mintedMonotonicMs
+    const skewMs = Date.now() - elapsedMs - mintedMs
+    syncTokenClock()
+    return { result, skewMs }
   }
-  let result = await fetchWithToken()
-  // A remote that refused a token minted on a clock that had fallen behind
-  // (the host slept) gets one more, minted on the corrected clock.
-  if (syncTokenClock() > CLOCK_JUMP_MS && !result.ok && result.status === 401) {
-    result = await fetchWithToken()
-  }
+  const first = await fetchWithToken()
+  // A remote that refused a token minted on a clock that was off (the host
+  // slept) gets one more, minted on the corrected clock: at most one per render.
+  const result =
+    Math.abs(first.skewMs) > CLOCK_SKEW_MS &&
+    !first.result.ok &&
+    first.result.status === 401
+      ? (await fetchWithToken()).result
+      : first.result
   return {
     kind: 'fetched',
     result,

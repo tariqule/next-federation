@@ -130,3 +130,53 @@ describe('a failed island shortens an enclosing host cache scope', () => {
     expect(shortenEnclosingCache).not.toHaveBeenCalled()
   })
 })
+
+describe('RemoteIsland passes inertOnLoadFailure to IslandMount', () => {
+  const envelope = {
+    protocolVersion: 1,
+    remote: 'a',
+    buildId: 'b1',
+    mode: 'production',
+    html: '<p>hi</p>',
+    rscPayload: '0:"x"',
+    css: [],
+    bootstrap: 'https://a.example.com/boot.js',
+    reactVersion: '19.2.0',
+    idPlaceholder: 'nfph0',
+  } as const
+  async function mountProps(
+    extra: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    process.env.NF_CACHE_MODEL = 'cache-components'
+    rs.mocked(getPublicEnvelope).mockResolvedValueOnce({
+      ok: true,
+      envelope,
+      meta: { ms: 1, bytes: 10, attempts: 1 },
+    } as never)
+    const { RemoteIsland } = createIslands(federation)
+    const element = RemoteIsland({
+      remote: 'a',
+      island: 'Panel',
+      fallback: 'loading',
+      ...extra,
+    })
+    const loader = (element.props as { children: ReactElement }).children
+    // The option is for the mount, never part of the island spec (the load key).
+    expect(
+      (loader.props as { spec: Record<string, unknown> }).spec
+    ).not.toHaveProperty('inertOnLoadFailure')
+    const render = loader.type as (props: unknown) => Promise<ReactElement>
+    return (await render(loader.props)).props as Record<string, unknown>
+  }
+
+  test.each([
+    [{}, true],
+    [{ errorFallback: 'down' }, false],
+    [{ errorFallback: 'down', inertOnLoadFailure: true }, true],
+    [{ inertOnLoadFailure: false }, false],
+  ])('%j → inertOnLoadFailure %s', async (extra, expected) => {
+    expect(await mountProps(extra)).toMatchObject({
+      inertOnLoadFailure: expected,
+    })
+  })
+})

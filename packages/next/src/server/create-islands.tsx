@@ -19,12 +19,22 @@ export type RemoteIslandProps = IslandSpec & {
    * Defaults to `fallback`.
    */
   errorFallback?: ReactNode
+  /**
+   * When the island's code cannot load in the browser (its bootstrap,
+   * `NF-011`: the remote is down or the build was retired), keep the server
+   * HTML in place, not interactive (`inert`), instead of `errorFallback`.
+   * Default: true without `errorFallback`, false with one. Set it with an
+   * `errorFallback` to keep the HTML across a retired build (skew) while
+   * still showing `errorFallback` after an island error.
+   */
+  inertOnLoadFailure?: boolean
 }
 
 type LoaderProps = {
   spec: IslandSpec
   fallback: ReactNode
   errorFallback: ReactNode
+  inertOnLoadFailure: boolean | undefined
 }
 
 /**
@@ -49,6 +59,7 @@ export function createIslands(
     spec,
     fallback,
     errorFallback,
+    inertOnLoadFailure,
   }: LoaderProps): Promise<ReactElement> {
     const loaded: LoadedIsland = await load(spec)
     const onError = errorFallback ?? fallback ?? null
@@ -63,9 +74,10 @@ export function createIslands(
         host={{ basePath: hostBasePath(), locale: spec.locale ?? '' }}
         token={token}
         errorFallback={onError}
-        // Without its own errorFallback, an island whose code cannot load in
-        // the browser keeps its server HTML (inert) rather than `fallback`.
-        inertOnLoadFailure={errorFallback === undefined}
+        // Without its own errorFallback (unless the page says otherwise), an
+        // island whose code cannot load in the browser keeps its server HTML
+        // (inert) rather than `fallback`.
+        inertOnLoadFailure={inertOnLoadFailure ?? errorFallback === undefined}
       />
     )
   }
@@ -77,13 +89,14 @@ export function createIslands(
      * there, and a hydration error elsewhere in the host cannot client-render
      * the island's DOM away.
      */
-    RemoteIsland({ fallback, errorFallback, ...spec }) {
+    RemoteIsland({ fallback, errorFallback, inertOnLoadFailure, ...spec }) {
       return (
         <Suspense fallback={fallback}>
           <IslandLoader
             spec={spec}
             fallback={fallback}
             errorFallback={errorFallback}
+            inertOnLoadFailure={inertOnLoadFailure}
           />
         </Suspense>
       )
