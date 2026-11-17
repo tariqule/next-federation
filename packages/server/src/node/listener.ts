@@ -1,9 +1,81 @@
-import { Readable } from 'node:stream'
 import type { IncomingMessage, RequestListener } from 'node:http'
 
 type WebHandler = (req: Request) => Promise<Response>
 
-function toRequest(req: IncomingMessage, signal: AbortSignal): Request {
+/**
+ * The request body as a Web stream that reads `req` only when the handler reads
+ * it. `drain()` stops that and discards whatever is left, as Node does for a body
+ * no one reads: a handler may answer before the end of an upload (a 413 on the
+ * declared length, a cancelled read), and the rest of that upload must not stay
+ * on a keep-alive connection, where the next request on it would never be parsed.
+ */
+function requestBody(req: IncomingMessage): {
+  stream: ReadableStream<Uint8Array>
+  drain: () => void
+} {
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  let state: 'idle' | 'reading' | 'done' = 'idle'
+  const onData = (chunk: Buffer) => {
+    controller.enqueue(new Uint8Array(chunk))
+    if ((controller.desiredSize ?? 0) <= 0) req.pause()
+  }
+  const onEnd = () => {
+    if (state !== 'reading') return
+    detach()
+    controller.close()
+  }
+  const onClose = () => {
+    if (state !== 'reading') return
+    detach()
+    controller.error(new Error('The request was aborted.'))
+  }
+  const onError = (error: Error) => {
+    if (state !== 'reading') return
+    detach()
+    controller.error(error)
+  }
+  const detach = () => {
+    state = 'done'
+    req.off('data', onData)
+    req.off('end', onEnd)
+    req.off('close', onClose)
+    req.off('error', onError)
+  }
+  const drain = () => {
+    if (state === 'reading') detach()
+    state = 'done'
+    // Flowing with no 'data' listener: the rest is read and dropped.
+    req.resume()
+  }
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      start(c) {
+        controller = c
+      },
+      pull() {
+        if (state === 'idle') {
+          state = 'reading'
+          req.on('end', onEnd)
+          req.on('close', onClose)
+          req.on('error', onError)
+          req.on('data', onData)
+        } else if (state === 'reading') {
+          req.resume()
+        }
+      },
+      cancel: drain,
+    },
+    // Pulled only when the handler reads: nothing is read ahead of it.
+    new CountQueuingStrategy({ highWaterMark: 0 })
+  )
+  return { stream, drain }
+}
+
+function toRequest(
+  req: IncomingMessage,
+  signal: AbortSignal,
+  body: ReadableStream<Uint8Array> | null
+): Request {
   const headers = new Headers()
   for (const [name, value] of Object.entries(req.headers)) {
     if (name.startsWith(':') || value === undefined) continue
@@ -14,17 +86,11 @@ function toRequest(req: IncomingMessage, signal: AbortSignal): Request {
     req.url ?? '/',
     `http://${req.headers.host ?? 'localhost'}`
   )
-  const hasBody = req.method !== 'GET' && req.method !== 'HEAD'
   return new Request(url, {
     method: req.method,
     headers,
     signal,
-    ...(hasBody
-      ? {
-          body: Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>,
-          duplex: 'half',
-        }
-      : {}),
+    ...(body ? { body, duplex: 'half' } : {}),
   } as RequestInit)
 }
 
@@ -35,10 +101,15 @@ export function toNodeListener(handler: WebHandler): RequestListener {
     res.on('close', () => {
       if (!res.writableFinished) abort.abort()
     })
+    const body =
+      req.method !== 'GET' && req.method !== 'HEAD' ? requestBody(req) : null
+    if (body) res.on('finish', body.drain)
     void (async () => {
       let response: Response
       try {
-        response = await handler(toRequest(req, abort.signal))
+        response = await handler(
+          toRequest(req, abort.signal, body?.stream ?? null)
+        )
       } catch {
         if (!res.headersSent) {
           res.writeHead(500, { 'content-type': 'text/plain' })

@@ -10,6 +10,8 @@ const HANDLER = `export default async (req) => {
   const p = new URL(req.url).pathname
   if (p.endsWith('/hang')) return new Promise(() => {})
   if (p.endsWith('/crash')) setTimeout(() => process.exit(3), 10)
+  // Refused on its headers, the body never read (as the island handler's 413).
+  if (req.headers.get('x-refuse')) return new Response(null, { status: 413 })
   const text = await req.text()
   return new Response(JSON.stringify({
     buildId: BUILD, pid: process.pid, nodeEnv: process.env.NODE_ENV,
@@ -340,4 +342,20 @@ test('/_nf/action has its own higher ceiling, so the build answers its own limit
   })
   expect(over.status).toBe(413)
   expect(over.headers.get('access-control-allow-origin')).toBe('*')
+})
+
+test("a build's early 413 leaves nf-serve's upstream connection usable", async () => {
+  // Between the build's action limit and nf-serve's ceiling: nf-serve forwards
+  // the upload, the build answers before reading it, and nf-serve's keep-alive
+  // connection to the build must still carry the next request.
+  for (const size of [300_000, 2 * 1024 * 1024]) {
+    const refused = await fetch(`${base()}/b/v1/_nf/action`, {
+      method: 'POST',
+      headers: { 'x-refuse': '1' },
+      body: 'x'.repeat(size),
+    })
+    expect(refused.status).toBe(413)
+    const next = await fetch(`${base()}/b/v1/_nf/x`)
+    expect(next.status, `after ${size} bytes`).toBe(200)
+  }
 })

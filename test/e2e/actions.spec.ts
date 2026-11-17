@@ -510,8 +510,13 @@ test.describe('action endpoint over HTTP', () => {
     page,
   }) => {
     test.skip(MODE !== 'dev', 'vite dev only')
+    // Vite sends the error to the HMR clients connected to remote a, and keeps
+    // it for the next one to connect when there are none: without this page,
+    // the next test's page would open under its error overlay.
+    await open(page, nextHost('App Router', HOST_APP), 'alice')
     const res = await page.request.get(`${REMOTE_A}/src/actions.ts`)
     expect(res.status()).toBe(500)
     expect(await res.text()).toContain('NF-034')
+    await expect(page.locator('vite-error-overlay')).toContainText('NF-034')
   })
 })

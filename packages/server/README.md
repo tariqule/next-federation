@@ -170,6 +170,9 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
   `Access-Control-Allow-Origin: *` and empty bodies. Above the router's ceiling the upload is cut
   off, and a browser may report a network error instead of the `413`; keep the build limit below
   the ceiling.
+- `toNodeListener` reads the request body only as the handler reads it. Whatever the handler
+  leaves unread (an early `413`, a cancelled read) is drained once the response is sent, as Node does
+  for a body no one reads, so the connection stays usable for the next request.
 - Retention: the current build (`--current`, or the newest) is always live; so are the newest
   `--max-builds` (3) and any build younger than `--min-age-hours` (24). Others are retired and answer
   `410 {"error":"NF-023"}` (with `Access-Control-Allow-Origin: *`).

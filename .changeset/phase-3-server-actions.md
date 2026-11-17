@@ -14,4 +14,5 @@ Island Server Actions.
 - `<Form>` (`@next-federation/island`) keeps island forms disabled until hydration. `requireIdentity(fn)` and the Vite option `actions: { requireIdentity: true }` refuse unauthenticated actions.
 - Public islands on Next.js hosts with `getIdentity` run their actions as the signed-in user while the page stays static.
 - `nf-serve` answers its own 413/502/504 with CORS and gives `/_nf/action` a separate 8 MiB ceiling.
+- `toNodeListener` (and so `nf-serve`'s build processes) drains a request body the handler answered without reading to the end, so the next request on that keep-alive connection is not left waiting.
 - New error codes NF-031 to NF-035. NF-019 now only comes from remotes built before this release.
