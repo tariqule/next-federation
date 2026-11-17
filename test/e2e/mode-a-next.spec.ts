@@ -18,6 +18,7 @@ import {
   HOST_SPA,
   MODE,
 } from './servers.ts'
+import { markup } from './lib/strip-scripts.ts'
 
 type Host = {
   name: string
@@ -93,11 +94,6 @@ function watch(page: Page) {
   })
   return { bad, all }
 }
-
-const markup = (html: string) =>
-  html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-    .replaceAll('<!-- -->', '')
 
 async function serverHtml(url: string): Promise<string> {
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
