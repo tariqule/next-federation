@@ -1,0 +1,72 @@
+name: Publish to npm
+
+# Manual only: Actions -> "Publish to npm" -> Run workflow (on main).
+# Publishes every @next-federation/* package whose version is not on npm yet,
+# with provenance, then pushes the release tags. Merge the "Version Packages"
+# pull request first. The job runs in the `npm-publish` environment: add
+# required reviewers there to get an approval step before anything publishes.
+# First publish: an NPM_TOKEN secret (environment or repository). Afterwards:
+# trusted publishing (OIDC, workflow file publish.yml) needs no token.
+# Steps: docs/releasing.md
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: build and pack, publish nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Use an npm version that supports trusted publishing
+        run: npm install -g npm@^11.5.1
+      - run: pnpm install --frozen-lockfile
+      - name: Refuse to publish with pending changesets
+        run: |
+          pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l)
+          if [ "$pending" -ne 0 ]; then
+            echo "::error::$pending pending changeset(s): merge the Version Packages pull request first."
+            exit 1
+          fi
+      - name: Versions to publish
+        run: |
+          for p in packages/*/package.json; do
+            node -e "const p=require('./$p'); console.log(p.name + '@' + p.version)"
+          done
+      - name: Dry run (build, pack, publish nothing)
+        if: inputs.dry_run
+        run: |
+          pnpm build
+          pnpm check:pack
+          pnpm -r --filter "./packages/*" publish --dry-run --no-git-checks
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        run: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+      - name: Push release tags
+        if: ${{ !inputs.dry_run }}
+        run: git push origin --tags
