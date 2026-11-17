@@ -41,7 +41,7 @@ chosen at build time because `'use cache'` only compiles with `cacheComponents`:
   shell, so a failed island becomes a dynamic hole inside its Suspense boundary (the route shows
   as `◐`) and is retried within about a second (a failure may be served stale once while the
   background refresh runs); a working island stays cached. An island must therefore sit inside
-  `<Suspense>` (`RemoteIsland` always renders one).
+  `<Suspense>` (`RemoteIsland` renders one, except a private island with `blocking`).
 
 ## `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router)
 
@@ -58,8 +58,9 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(f
 <RemoteIsland remote="shop" island="Cart" props={{ sku }} fallback={<Spinner />} errorFallback={<p>Cart unavailable</p>} />
 ```
 
-- `RemoteIsland` always renders its own `<Suspense fallback={fallback}>`. `IslandMount` renders the island's CSS as
-  `<link rel="stylesheet" precedence="next-federation">` through the host's React (in `<head>`, once per href).
+- `RemoteIsland` renders its own `<Suspense fallback={fallback}>` (except with `blocking`, below). `IslandMount` renders
+  the island's CSS as `<link rel="stylesheet" precedence="next-federation">` through the host's React (in `<head>`, once
+  per href).
 - Public islands go through the island cache above (`revalidate` defaults to `islands.revalidate`).
   `dynamic: true` fetches with `cache: 'no-store'`, which makes the route dynamic (a dynamic hole with
   `cacheComponents`).
@@ -67,6 +68,13 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(f
   on the server. The token goes only into the request to the remote; the HTML and the props sent to the
   browser carry only the token endpoint. Requires `getIdentity` and `identity` in `defineFederation()`
   (`NF-013`). An anonymous visitor makes no remote request and sees `errorFallback`.
+- `blocking` (private islands only; `NF-002` on a public one) leaves out the island's `<Suspense>`, so the island is in
+  the first HTML, in place, with no streamed `fallback` and no swap (as the Pages Router renders it). The response
+  waits for the remote, up to the island timeout (`timeoutMs`); a failure or timeout renders `errorFallback` in place
+  and the page answers `200`. The route has no static shell: `next build` shows it as `ƒ`. With `cacheComponents` the
+  page must export `instant = false`, or `next build` fails with Next's "runtime data during prerendering" error;
+  without `cacheComponents` it needs nothing (Next refuses `instant` there). A `loading.tsx` or `<Suspense>` above the
+  island streams it again. Guide: [App Router](../../docs/guides/getting-started-app-router.md#private-content-in-the-first-html-blocking).
 - `errorFallback` (default: `fallback`) is shown when the remote fails, times out or returns an invalid
   envelope, for an anonymous visitor on a private island, and after an uncaught island error. When the
   island's code cannot load in the browser (`NF-011`: remote down, build retired), an `errorFallback`
@@ -282,7 +290,7 @@ loses its previous ones and its `index.d.ts` entry. Guide: [Types](../../docs/gu
 - Next.js `>=15.5.28 <17` (16 or 15), React 19, Turbopack or webpack, Node 20.9 or newer. On Next 15
   the island cache is the legacy one; `cacheComponents` is Next 16 only (`NF-002` on Next 15).
   Next 14 is not supported.
-- Private islands make an App Router route dynamic without `cacheComponents`; Pages Router private islands are `getServerSideProps` only (`NF-002`).
+- Private islands make an App Router route dynamic without `cacheComponents`; with `blocking` they make it dynamic (`ƒ`) with `cacheComponents` too, and the page needs `export const instant = false`. Pages Router private islands are `getServerSideProps` only (`NF-002`).
 - A `'use cache'` component around `RemoteIsland` must sit inside `<Suspense>`.
 - A Next app does not expose its `app/` folder: to share UI from one, publish an island remote.
 

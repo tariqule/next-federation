@@ -2,7 +2,7 @@
 
 ## What happened
 
-The object passed to `defineFederation()` or `withNextFederation()` failed validation.
+The object passed to `defineFederation()` or `withNextFederation()`, or an option of an island component, failed validation.
 
 ## Why
 
@@ -12,6 +12,8 @@ A common case: a URL (remote origin, asset origin, `base`, issuer or JWKS URL) u
 
 Another: `withNextFederation()` got `cacheComponents` (or Next 15's `experimental.cacheComponents` or `experimental.dynamicIO`) with Next.js 15 installed. next-federation supports `cacheComponents` on Next.js 16 only; on Next.js 15 it uses the legacy caching model (fetch `revalidate` and tags).
 
+Another: an App Router `RemoteIsland` got `blocking` without `private`. `blocking` renders a private island in the first HTML instead of streaming it; a public island is cached and already renders in place.
+
 ## How to fix
 
-Fix the field named in the message. For `cacheComponents` on Next.js 15, remove the option or upgrade to Next.js 16. For a plain-`http` URL, switch it to `https`; set `allowInsecureHttp: true` only when the traffic is protected some other way (it logs a warning once per process). Configuration is validated at startup so a bad value never reaches production traffic.
+Fix the field named in the message. For `cacheComponents` on Next.js 15, remove the option or upgrade to Next.js 16. For `blocking`, remove it from the public island or add `private`. For a plain-`http` URL, switch it to `https`; set `allowInsecureHttp: true` only when the traffic is protected some other way (it logs a warning once per process). Configuration is validated at startup so a bad value never reaches production traffic.

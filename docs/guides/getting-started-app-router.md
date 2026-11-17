@@ -60,8 +60,9 @@ A project from `create-next-app` 16.4.6 has `cacheComponents: true` and `partial
 - Public islands are cached with `'use cache'`, and a page with only public islands stays static
   (`○` in the build output). A failed island becomes a dynamic hole instead of being baked in
   ([Caching](caching.md)).
-- A private island is always a dynamic hole inside the island's own `<Suspense>`. Put your own
-  `'use cache'` components around a `RemoteIsland` only inside `<Suspense>`.
+- A private island is a dynamic hole inside the island's own `<Suspense>`, unless you render it
+  with [`blocking`](#private-content-in-the-first-html-blocking). Put your own `'use cache'`
+  components around a `RemoteIsland` only inside `<Suspense>`.
 - Next 16 keeps routes you visited mounted but hidden (the validation saw this with the scaffold
   defaults), so an island on a route you navigated away from can stay mounted in the background.
 - `partialPrefetching: true` works with private islands: a signed-in private island renders with no
@@ -127,7 +128,8 @@ export default function Home() {
 ```
 
 - `props` must be plain JSON. Functions, `Date`, `Map` and class instances throw `NF-009`.
-- `RemoteIsland` renders its own `<Suspense fallback={fallback}>`.
+- `RemoteIsland` renders its own `<Suspense fallback={fallback}>` (except a private island with
+  `blocking`, below).
 - `errorFallback` shows when the remote is down, slow or returns an invalid envelope. It defaults to
   `fallback`.
 - A public island is cached. `revalidate` (seconds) overrides `islands.revalidate`; `dynamic` fetches
@@ -154,6 +156,72 @@ request and renders `errorFallback`, which defaults to `fallback`: without it, a
 sees the loading text for good.
 
 Without `cacheComponents`, a private island makes the route dynamic.
+
+### Private content in the first HTML (`blocking`)
+
+By default a private island streams. The first HTML holds `fallback` in its place, and the island's
+HTML comes later in the same response, with a script that swaps it in. To get the island in the
+first HTML, in place, as the Pages Router renders it, add `blocking`:
+
+```tsx
+// app/orders/page.tsx
+import { RemoteIsland } from '../../lib/federation'
+
+// With cacheComponents only: Next refuses `instant` without it.
+export const instant = false
+
+export default function Orders() {
+  return (
+    <RemoteIsland
+      remote="shop"
+      island="MyOrders"
+      private
+      blocking
+      fallback={<p>loading orders…</p>}
+      errorFallback={<p>orders unavailable</p>}
+    />
+  )
+}
+```
+
+`blocking` drops the island's own `<Suspense>`, so React renders the island in the page's shell.
+`fallback` is never rendered (it is still the default for `errorFallback`), and there is no swap.
+
+Use it for private content that must be in the first HTML: clients without JavaScript, crawlers that
+read the first HTML only, or a page whose layout must not shift when the island arrives.
+
+What it costs:
+
+- The page waits for the remote. Nothing is sent until the island has loaded or failed, so the
+  remote's response time is added to the page's time to first byte, up to the island timeout
+  (`timeoutMs`, 3 seconds by default).
+- The whole route becomes per-request. It has no static shell: every layout above the island, the
+  rest of the page and any public islands on it render on each request, and `next build` marks the
+  route `ƒ` (Dynamic). Without `blocking`, a private island route is `◐` (Partial Prerender) with
+  `cacheComponents`, and only the island is rendered per request. Do not add `blocking` to a page
+  you want served from a static shell.
+- A Suspense boundary above the island streams it again. That includes a `loading.tsx` in the route
+  or a `<Suspense>` in a layout: React holds the island behind that boundary's fallback instead.
+- The island's own boundary also isolated it from hydration errors elsewhere on the page. Without
+  it, a hydration error in another part of the page can make React re-render the island on the
+  client, up to the nearest boundary above it.
+
+What stays the same: a remote that is down, slow (past the timeout) or returns an invalid envelope
+renders `errorFallback` in place with the same `NF-007`, `NF-008` or `NF-004` log, and the page
+answers `200`. An anonymous visitor gets `errorFallback` in place. The token never enters the HTML
+or the RSC payload, and the envelope is fetched with `cache: 'no-store'`.
+
+The Next config the route needs:
+
+| Host | What to add |
+| --- | --- |
+| `cacheComponents` (Next 16) | `export const instant = false` in the page that renders the island. Without it, `next build` fails with Next's "Route "/orders": Next.js encountered uncached or runtime data during prerendering" error. |
+| No `cacheComponents` (Next 16 or 15) | Nothing. A private island already makes the route dynamic. Do not add `instant`: Next refuses it without `cacheComponents` ("Route segment config "instant" requires `nextConfig.cacheComponents` to be enabled"). |
+
+Put `instant = false` in the page file, not only in a layout: with it in the layout alone the build
+passes (the route is still `ƒ`), but `next dev` still logs Next's instant-navigation check for the page ("Next.js encountered
+uncached data during prerendering or a navigation"). `blocking` on a public island throws
+[`NF-002`](../errors/invalid-config.md): a public island is cached and already renders in place.
 
 ## 6. Open the CSP
 
