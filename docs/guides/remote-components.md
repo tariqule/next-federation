@@ -45,9 +45,10 @@ components remote does not need. These are the edits that worked in the validati
 6. **oxlint** (the `lint` script and `.oxlintrc.json`) is independent of the build; keep it or
    delete it. Its `react/only-export-components` rule exists for Fast Refresh, which exposed modules
    do not use.
-7. **TypeScript: `types: true` needs TypeScript 5 or 6 for now** (peer range `>=5.0.0 <7`).
-   create-vite installs TypeScript 7; with it the build succeeds but publishes no types and warns
-   `NF-002`, naming `npm install -D typescript@6`. Pin `typescript@~6` in the remote. The plugin
+7. **TypeScript: `types: true` needs TypeScript 5 or 6.** Any version installs, and without
+   `types` the version does not matter. create-vite installs TypeScript 7; with it the build
+   succeeds, warns `NF-002` naming `npm install -D typescript@6`, and publishes no types. Pin
+   `typescript@~6` in a remote that publishes types. The plugin
    reads the project's root `tsconfig.json`; create-vite's references-only file worked as it is.
 
 ## Remote: build it
@@ -76,7 +77,7 @@ export default defineConfig({
   copy (`remoteEntry.ssr.js` and its `.cjs` chunks), served under the immutable
   `https://shop.example.com/b/<buildId>/`, and, with `types: true`, `@mf-types/`: the exposed
   modules' type declarations and their index (see [Types](#types)).
-- **Everything else under `client/` is served to anyone** by `nf-serve`, at `/b/<buildId>/…`, with
+- **`nf-serve` serves the files above to anyone**, at `/b/<buildId>/…`, with
   `Access-Control-Allow-Origin: *`. `client/` also holds build bookkeeping: `.vite/manifest.json`,
   `.vite/mf-preload.json` and `mf-stats.json` (relative source paths and shared package versions, no
   code). Nothing reads them at runtime, and `nf-serve` answers `404` for them (any dot folder or
@@ -385,8 +386,9 @@ server-render remote components.
 
 **Links between the two routers reload the page.** A link from an `app/` route to a `pages/` route
 (or the other way) is a full page load, not a client-side navigation, for a plain `<Link>` and for a
-remote `next/link` (a components remote's link) alike. The navigation still arrives; it only costs a
-reload. Client-side navigation and prefetching work inside each router.
+remote `next/link` (a components remote's link) alike. This is how Next.js handles links between its
+two routers, with or without next-federation. The navigation still arrives; it only costs a reload.
+Client-side navigation and prefetching work inside each router.
 
 **In `next dev`, a Pages Router page that links to an App Router route logs a `404` in the browser
 console** (`Failed to load resource: the server responded with a status of 404`), seen when a remote
@@ -744,7 +746,8 @@ export const Cart = createRemoteComponent<RemoteProps<'shop', './Cart'>>({
 `NextFederationRemoteComponents` interface that `index.d.ts` fills (remote key -> expose -> module
 type). A remote or expose that `nf-types` did not download is a type error. The types are those of
 the build that was current when `nf-types` ran: **run `nf-types` before `tsc` and before `next build`**
-(in CI, and after you change a remote), and commit the folder or not as you prefer (it is
+(in CI, and after you change a remote; on Next 16, run `next typegen` before `tsc` too, or a fresh
+checkout fails with `Cannot find name 'LayoutProps'`), and commit the folder or not as you prefer (it is
 regenerated on every run). Modules the declarations import (`react`, shared packages) resolve from
 the host's own dependencies.
 
@@ -753,6 +756,13 @@ checks) fails on the line that uses it with an error that does not mention `nf-t
 
 ```
 error TS2344: Type '"widgets"' does not satisfy the constraint 'never'.
+```
+
+and every use of the component then fails too, because its type is `RemoteComponentType<never>`:
+
+```
+error TS2786: 'Widget' cannot be used as a JSX component.
+  Its type 'RemoteComponentType<never>' is not a valid JSX element type.
 ```
 
 `never` means the interface is empty: there is no `next-federation-types/index.d.ts` yet. Run

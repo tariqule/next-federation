@@ -14,6 +14,7 @@
 // `next dev`. Run with NF_SUITE=installed NF_MODE=dev.
 import { randomBytes } from 'node:crypto'
 import { expect, test } from '@playwright/test'
+import { warmUp } from './lib/warm-up.ts'
 import { INSTALLED_HOSTS, INSTALLED_NEXT, SUITE } from './servers.ts'
 
 test.skip(SUITE !== 'installed', 'NF_SUITE=installed only')
@@ -29,6 +30,28 @@ const DEBUG_ROW = /\\?"env\\?":\\?"Server\\?"/
  * exactly 2 + id length bytes long.
  */
 const REACT_DEBUG_CHUNK = 0
+
+// Every host is a freshly started `next dev`: its first request to /orders
+// compiles the page, and remote `a`'s dev server compiles the island, while
+// the host's 3 s island timeout runs, so a cold host can render the
+// fallback once (NF-008). Warm each host first, outside the browser, as a
+// different user than the test's: the test still makes and inspects every
+// request it asserts on, and starts with no state for its user. The result
+// is ignored; a host that stays cold fails the assertions below.
+test.beforeAll(async () => {
+  test.setTimeout(90_000)
+  await Promise.all(
+    INSTALLED_HOSTS.map(async (host) => {
+      const url = `http://localhost:${host.port}`
+      await warmUp(`${url}/orders`, {
+        headers: { cookie: 'nf-user=warm-up' },
+        ready: /Orders for (<!-- -->)?warm-up/,
+      })
+      // The page the test navigates to and back from.
+      await warmUp(`${url}/`, { ready: /Installed-library host/ })
+    })
+  )
+})
 
 for (const host of INSTALLED_HOSTS) {
   const url = `http://localhost:${host.port}`

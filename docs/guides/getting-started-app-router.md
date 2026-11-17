@@ -33,8 +33,8 @@ pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 
 `server-only` is imported by `lib/federation.ts` below and is not part of a `create-next-app`
 project. Pin React to one exact version, the one the repo's tests run (19.3.1): `create-next-app`
-scaffolds 19.1.0 or 19.3.0, and the remotes you embed should run the same version to share one copy
-of React.
+scaffolds 19.1.0 or 19.3.0, and the pin keeps the host on the tested version. An App Router host
+never shares its React with islands, so the pin is not about sharing a copy with your remotes.
 
 ## 2. Wrap `next.config.ts`
 
@@ -67,7 +67,10 @@ A project from `create-next-app` 16.4.6 has `cacheComponents: true` and `partial
 - `partialPrefetching: true` works with private islands: a signed-in private island renders with no
   "unstable value `Date.now()`" log in `next dev` or `next start`.
 
-Next 15 has neither option, and the adapter uses the legacy cache there.
+On Next 15 the adapter uses the legacy cache. Next 15's experimental equivalents,
+`experimental.cacheComponents` and `experimental.dynamicIO`, are not supported: `withNextFederation`
+throws [`NF-002`](../errors/invalid-config.md) on Next 15 when either of them, or
+`cacheComponents`, is set.
 
 ## 3. Define the federation
 
@@ -137,8 +140,18 @@ function, and the token routes. See [Identity](identity.md) for the full setup, 
 sign-out example, and key rotation.
 
 ```tsx
-<RemoteIsland remote="shop" island="MyOrders" private fallback={<p>loading orders…</p>} />
+<RemoteIsland
+  remote="shop"
+  island="MyOrders"
+  private
+  fallback={<p>loading orders…</p>}
+  errorFallback={<p>sign in to see your orders</p>}
+/>
 ```
+
+Give a private island an `errorFallback`. For a visitor who is not signed in, the island makes no
+request and renders `errorFallback`, which defaults to `fallback`: without it, an anonymous visitor
+sees the loading text for good.
 
 Without `cacheComponents`, a private island makes the route dynamic.
 

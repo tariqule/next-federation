@@ -101,6 +101,10 @@ Keep the key secret. `signingKeys` takes private ES256 JWKs as JSON strings, eac
 a minimal demo of the shape. They trust the posted user name: replace the bodies with your real
 session login.
 
+Redirect with a relative `Location`. Next normalizes `req.url` to `localhost`, so
+`NextResponse.redirect(new URL('/me', req.url))` sends a host started with `-H 127.0.0.1` to the
+wrong origin.
+
 ```ts
 // app/api/login/route.ts (demo only)
 import { NextResponse, type NextRequest } from 'next/server'
@@ -108,7 +112,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function POST(req: NextRequest) {
   const form = await req.formData()
   const user = String(form.get('user') ?? 'alice')
-  const res = NextResponse.redirect(new URL('/me', req.url), 303)
+  // A relative redirect (with a basePath: `${basePath}/me`).
+  const res = new NextResponse(null, { status: 303, headers: { Location: '/me' } })
   res.cookies.set('session-user', user, {
     httpOnly: true,
     sameSite: 'lax',

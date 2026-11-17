@@ -240,7 +240,16 @@ records in `env.NF_NEXT_VERSION` (`NF-017` without the wrapper).
 ## Remote component prop types: `nf-types`
 
 ```sh
-nf-types --config lib/federation.mjs [--remote shop]... [--out next-federation-types]
+nf-types --config lib/federation.config.ts [--remote shop]... [--out next-federation-types]
+```
+
+`--config` is the federation file with no Next.js imports (`lib/federation.config.ts` in the
+guides), loaded with plain Node. `nf-types` does not read `.env.local`; load it with Node (`cli.js`
+is what the `nf-types` bin runs):
+
+```sh
+node --env-file=.env.local node_modules/@next-federation/next/dist/types/cli.js \
+  --config lib/federation.config.ts
 ```
 
 Downloads the type declarations of each components remote's current build (only from a descriptor
