@@ -252,18 +252,34 @@ describe('parser-differential leaks', () => {
 
 describe('performance', () => {
   // Wall-clock limits flake on loaded machines, so assert scaling instead: time two input sizes
-  // (best of 5) and compare. Linear growth gives a ratio near the size ratio (4); quadratic ~16.
-  const time = (input: string): number => {
-    const runs: number[] = []
-    for (let i = 0; i < 5; i++) {
-      const t = performance.now()
-      stripIslandHtml(input)
-      runs.push(performance.now() - t)
-    }
-    // Best of 5: the least disturbed run (other test files run in parallel).
-    return Math.min(...runs)
+  // 4x apart and compare. Linear growth gives a ratio near 4; quadratic near 16.
+  // - The two sizes are timed alternately, best of 7 each, so both see the same machine load
+  //   (other test files run in parallel) and each keeps its least disturbed run.
+  // - A load spike can still inflate one measurement, so the ratio is measured up to 3 times and
+  //   the lowest counts. A quadratic implementation is near 16 on every attempt, so it still fails.
+  const LIMIT = 8
+  const once = (input: string): number => {
+    const t = performance.now()
+    stripIslandHtml(input)
+    return performance.now() - t
   }
-  const HANG_GUARD_MS = 30_000
+  const ratio = (small: string, large: string): number => {
+    let s = Infinity
+    let l = Infinity
+    for (let i = 0; i < 7; i++) {
+      s = Math.min(s, once(small))
+      l = Math.min(l, once(large))
+    }
+    return l / s
+  }
+  const scaling = (small: string, large: string): number => {
+    let best = Infinity
+    for (let attempt = 0; attempt < 3 && best >= LIMIT; attempt++) {
+      best = Math.min(best, ratio(small, large))
+    }
+    return best
+  }
+  const HANG_GUARD_MS = 60_000
 
   test('React text-separator comments scale linearly (256 KB -> 1 MB)', () => {
     const unit = '<span>a<!-- -->b</span>'
@@ -271,22 +287,20 @@ describe('performance', () => {
       unit.repeat(Math.ceil(bytes / unit.length))
     const big = make(1024 * 1024)
     stripIslandHtml(make(64 * 1024)) // warm up
-    const small = time(make(256 * 1024))
     const t0 = performance.now()
-    const large = time(big)
+    const r = scaling(make(256 * 1024), big)
     expect(performance.now() - t0).toBeLessThan(HANG_GUARD_MS)
-    expect(large / small).toBeLessThan(8)
+    expect(r).toBeLessThan(LIMIT)
     expect(stripIslandHtml(big).html.length).toBe(big.length)
-  }, 120_000)
+  }, 180_000)
 
   test('deep nesting scales linearly (2500 -> 10000 levels)', () => {
     const make = (d: number): string =>
       '<div>'.repeat(d) + 'x' + '</div>'.repeat(d)
     stripIslandHtml(make(1000)) // warm up
-    const small = time(make(2500))
     const t0 = performance.now()
-    const large = time(make(10000))
+    const r = scaling(make(2500), make(10000))
     expect(performance.now() - t0).toBeLessThan(HANG_GUARD_MS)
-    expect(large / small).toBeLessThan(8)
-  }, 120_000)
+    expect(r).toBeLessThan(LIMIT)
+  }, 180_000)
 })

@@ -128,9 +128,31 @@ test.each([
     { ...base, shared: { lib: { requiredVersion: 'latest' } } },
   ],
   ['a non-boolean fallback', { ...base, shared: { lib: { fallback: 'yes' } } }],
+  // Hosts refuse a descriptor with a fallback copy of any React, React DOM
+  // or Next.js subpath (protocol isNeverFallback): never emit one.
+  [
+    'a fallback for react-dom/server',
+    { ...base, shared: { 'react-dom/server': { fallback: true } } },
+  ],
+  [
+    'a fallback for react/jsx-dev-runtime',
+    { ...base, shared: { 'react/jsx-dev-runtime': { fallback: true } } },
+  ],
 ])('rejects %s', (_label, options) => {
   const code = codeOf(() => resolveComponentsOptions(options as never, ctx))
   expect(code === 'NF-002' || code === 'NF-020').toBe(true)
+})
+
+test('a React subpath may be shared host-provided (no fallback)', () => {
+  const resolved = resolveComponentsOptions(
+    { ...base, shared: ['react-dom/server', 'react/jsx-dev-runtime'] },
+    ctx
+  )
+  expect(resolved.shared['react-dom/server']).toEqual({
+    requiredVersion: false,
+    fallback: false,
+  })
+  expect(resolved.shared['react/jsx-dev-runtime']?.fallback).toBe(false)
 })
 
 async function buildDir(): Promise<string> {

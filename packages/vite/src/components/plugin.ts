@@ -226,9 +226,12 @@ export function nextFederationComponents(
           await readSharedUsage(outDir)
         )
         if (shared) payload.shared = shared
-        // Signed too: the declarations index (hosts' prop types).
-        const types = await writeTypesIndex(client, resolved.publicBase)
-        if (types) payload.types = types
+        // Signed too, with `types: true` only: the declarations index (hosts'
+        // prop types). An `@mf-types/` folder alone is never published.
+        if (resolved.types) {
+          const types = await writeTypesIndex(client, resolved.publicBase)
+          if (types) payload.types = types
+        }
         const file = await createDescriptorFile(payload, process.env)
         const info: ComponentsBuildInfo = {
           kind: 'components',

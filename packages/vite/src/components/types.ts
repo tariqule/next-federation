@@ -188,10 +188,13 @@ export async function emitExposeTypes(
     const hasDefault =
       symbol !== undefined &&
       checker.getExportsOfModule(symbol).some((s) => s.name === 'default')
+    // A JSON string is a valid TypeScript string literal (a file name may
+    // hold a quote or a backslash).
+    const from = JSON.stringify(specifier)
     entries.set(
       entry,
-      `export * from '${specifier}'\n${
-        hasDefault ? `export { default } from '${specifier}'\n` : ''
+      `export * from ${from}\n${
+        hasDefault ? `export { default } from ${from}\n` : ''
       }`
     )
   }

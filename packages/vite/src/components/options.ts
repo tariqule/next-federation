@@ -1,6 +1,7 @@
 import {
   BUILD_ID_PATTERN,
   assertSecureUrl,
+  isNeverFallback,
   isSemverRange,
   parseAllowInsecureHttp,
 } from '@next-federation/protocol'
@@ -25,7 +26,8 @@ export type ComponentsRemoteOptions = {
    *   Without it the module is host-provided only, and a missing or
    *   unsatisfying copy renders the host's fallback (NF-036).
    * `next/link`, `next/navigation` and `next/router` can be listed (always
-   * host-provided, from a Next.js host; never a fallback).
+   * host-provided, from a Next.js host). No React, React DOM or Next.js
+   * module (any subpath, such as `react-dom/server`) can have a fallback.
    */
   shared?: string[] | Record<string, SharedModuleOptions>
   buildId?: string
@@ -187,9 +189,9 @@ function resolveSharedOption(
         `\`shared[${JSON.stringify(name)}].fallback\` must be true or false.`
       )
     }
-    if (fallback && isNext) {
+    if (fallback && isNeverFallback(name)) {
       throw invalid(
-        `${JSON.stringify(name)} cannot have a fallback: it is always the host's (a copy would not see the host's router).`
+        `${JSON.stringify(name)} cannot have a fallback: React, React DOM and Next.js modules are always the host's (a second copy breaks hooks, context or the router).`
       )
     }
     out[name] = { requiredVersion: range, fallback }

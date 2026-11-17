@@ -168,8 +168,10 @@ Every other `shared` entry is host-provided too (never bundled) unless it sets `
 the build bundles its own copy and uses it when the host's copy is missing or outside
 `requiredVersion` (a semver range). Without a fallback, a missing or unsatisfying host copy renders
 the host's fallback (`NF-036`). `next/link`, `next/navigation` and `next/router` can be shared
-(host-provided only; the remote needs `next` as a dev dependency). The descriptor lists each shared
-module with its range, its fallback flag and the exposed modules that import it (signed).
+(host-provided only; the remote needs `next` as a dev dependency). No `react`, `react-dom` or
+`next` module (any subpath, such as `react-dom/server`) can set `fallback: true` (`NF-002`). The
+descriptor lists each shared module with its range, its fallback flag and the exposed modules that
+import it (signed).
 An exposed module compiled with Fast Refresh fails the build (`NF-002`). The dev server answers
 `/_nf/components.json` with `ssr: null` (hosts render a dev remote in the browser only).
 Programmatic builds set `NF_VITE_COMMAND=build` (the plugin reads the command before Vite does).

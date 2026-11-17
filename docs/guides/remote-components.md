@@ -208,13 +208,16 @@ nf-serve --dir dist --port 4110
   `NODE_ENV=production` is a warning) and `nf-build.json`.
 
 The descriptor's `shared` field comes from the manifest's `shared` list: every module but React,
-its `requiredVersion`, and `fallback` for a non-singleton (bundled) share. Without the Vite
-plugin's `nf-shared-usage.json` there is no per-expose list, so a host checks every exposed module
-against every host-provided module the build shares (`NF-036`).
+its `requiredVersion`, and `fallback` for a non-singleton (bundled) share (never for a `react`,
+`react-dom` or `next` module, which hosts always provide). Without the Vite plugin's
+`nf-shared-usage.json` there is no per-expose list, so a host checks every exposed module against
+every host-provided module the build shares (`NF-036`).
 
-When the build has a `client/@mf-types/` folder, it writes `client/@mf-types/index.json` (every
-`.d.ts` file there with its sha384) and signs that one file in the descriptor's `types` field (see
-[Types](#types)).
+With `--types` (off by default, as the Vite plugin's `types` option), it writes
+`client/@mf-types/index.json` (every `.d.ts` file in `client/@mf-types/` with its sha384) and signs
+that one file in the descriptor's `types` field (see [Types](#types)); `--types` on a build without
+that folder fails (`NF-002`). Without `--types` a `client/@mf-types/` folder is left as it is,
+unsigned, and hosts download no types for the build.
 
 It never reads or writes a build file through a symlink, and refuses server files that resolve
 outside the build folder (`NF-002`).
@@ -225,13 +228,15 @@ earlier fails the digest check, and hosts then render the build in the browser o
 
 The build id is the folder name (`--build-id` otherwise); the public URL is the manifest's absolute
 `publicPath` (`--base` when it is `auto`) and must contain the build id. `--no-ssr` describes a
-browser-only build. Describing a build again keeps its build time.
+browser-only build. `--types` signs the build's declarations. Describing a build again keeps its
+build time.
 
 `nf-describe --dir <build folder> --verify` checks a described build before you ship it
 (`NF-027` otherwise): the digest covers the payload (assets included), the JWS signs exactly that
-payload, the assets are the ones `mf-manifest.json` lists, the signed types index matches
-`client/@mf-types/index.json` and lists exactly the declaration files there, and every server file
-still matches its sha384. With `--public-key <public JWK or file>` (repeatable) it also verifies the ES256
+payload, the assets are the ones `mf-manifest.json` lists, a signed types index matches
+`client/@mf-types/index.json` and lists exactly the declaration files there (a folder the
+descriptor does not sign, as in a build described without `--types`, is not checked), and every
+server file still matches its sha384. With `--public-key <public JWK or file>` (repeatable) it also verifies the ES256
 signature, as hosts do; **without one the signature is not checked**, and the output says so.
 
 ## Host: configure the remote
@@ -516,7 +521,8 @@ What a remote can get from the host, exactly:
   The remote never bundles them (`import: false`); listing them in `shared` is `NF-002`. No module
   of `react`, `react-dom` or `next` (any subpath, such as `react-dom/server` or `next/head`) ever
   falls back to a copy of the remote's: a descriptor that says `fallback: true` for one is
-  refused.
+  refused, `nextFederationComponents` rejects `fallback: true` for one (`NF-002`), and
+  `nf-describe` lists one as host-provided even when the build bundles it.
 - **Host-provided modules** (the default for every other `shared` entry): the remote never bundles
   them, and the host passes each one with its real version, in
   `createRemoteComponent({ shared: { name: { version, module } } })` or once for every component
@@ -597,20 +603,21 @@ TypeScript's `removeComments` drops most of them, and the plugin strips the `/*!
 from each emitted file, using TypeScript's parser (string literals are left alone); a file that
 still has a comment makes the build warn and publish no types. Paths are relative to the Vite root
 (`rootDir`): when an emitted declaration names an absolute path, or a relative path above the root
-(an import, an inferred `import("…")` type, a `/// <reference path>` or a `/// <reference types>`),
-the build warns, naming the file and the path, and publishes **no** types, so the build machine's
-folders and the monorepo layout never become public. Package imports (`react`, `components-context`)
-stay as written and resolve from the host's dependencies.
+(an import, an inferred `import("…")` type, a `declare module "…"` name, a `/// <reference path>`
+or a `/// <reference types>`), the build warns, naming the file and the path, and publishes **no**
+types, so the build machine's folders and the monorepo layout never become public. Package imports
+(`react`, `components-context`) stay as written and resolve from the host's dependencies.
 
 Without `typescript` installed, or when TypeScript cannot emit the declarations (a syntax or
 declaration error), the build **warns and publishes no types**; it never fails because of them, and
 never publishes partial types. Upgrade hosts first: an older host computes the descriptor digest
 without `types` and refuses a build that has them (`NF-027`, rendered in the browser only).
 
-**Remote (Rspack or webpack).** `nf-describe` writes and signs `client/@mf-types/index.json` when
-the folder exists. Module Federation's own `dts` plugin writes a zip (`@mf-types.zip`) and fails on any
-type error, and `nf-describe` does not read the zip: unzip it into `client/@mf-types/` before
-`nf-describe`, or emit the folder with `tsc --declaration --emitDeclarationOnly` in the same layout.
+**Remote (Rspack or webpack).** `nf-describe --types` writes and signs `client/@mf-types/index.json`
+(without `--types` the folder is never signed). Module Federation's own `dts` plugin writes a zip
+(`@mf-types.zip`) and fails on any type error, and `nf-describe` does not read the zip: unzip it into
+`client/@mf-types/` before `nf-describe --types`, or emit the folder with
+`tsc --declaration --emitDeclarationOnly` in the same layout.
 
 **Host.** `nf-types` (in `@next-federation/next`) downloads the declarations of each remote's
 current build into the project and writes `next-federation-types/index.d.ts`:

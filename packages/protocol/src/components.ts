@@ -158,13 +158,6 @@ export type ComponentTrustPolicy = {
 /** How a build's server code was trusted. */
 export type ComponentTrustKind = 'signature' | 'pinned' | 'unsafe-dev'
 
-/**
- * Server-side, process-wide: the digests of descriptors verified in this
- * process (with how they were trusted: `ssr.maxAge` bounds signed builds
- * only), and each remote's trust policies. The server loader evaluates a
- * build only when its descriptor is in `verified` or re-verifies against
- * `trust`; a descriptor prop alone (ssr.integrity) is never trusted.
- */
 /** One container `init` in the process-wide lock chain (server loader). */
 export type ComponentInitLock = {
   settled: Promise<void>
@@ -173,6 +166,13 @@ export type ComponentInitLock = {
   waitingFor?: ComponentInitLock
 }
 
+/**
+ * Server-side, process-wide: the digests of descriptors verified in this
+ * process (with how they were trusted: `ssr.maxAge` bounds signed builds
+ * only), and each remote's trust policies. The server loader evaluates a
+ * build only when its descriptor is in `verified` or re-verifies against
+ * `trust`; a descriptor prop alone (ssr.integrity) is never trusted.
+ */
 export type ComponentTrustRegistry = {
   verified: Map<string, ComponentTrustKind>
   trust: Map<string, ComponentTrustPolicy[]>

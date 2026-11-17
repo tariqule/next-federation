@@ -86,11 +86,11 @@ test("emits each expose's declarations and an entry file per expose", async () =
   ).toBe(true)
   expect(counter).not.toMatch(/Counter\.css/)
   expect(await read('@mf-types/Counter.d.ts')).toBe(
-    "export * from './compiled-types/src/Counter.js'\nexport { default } from './compiled-types/src/Counter.js'\n"
+    'export * from "./compiled-types/src/Counter.js"\nexport { default } from "./compiled-types/src/Counter.js"\n'
   )
   // No default export: only the named exports.
   expect(await read('@mf-types/ui/Button.d.ts')).toBe(
-    "export * from '../compiled-types/src/ui/Button.js'\n"
+    'export * from "../compiled-types/src/ui/Button.js"\n'
   )
   // Nothing but declarations.
   expect(
@@ -313,6 +313,18 @@ describe('a declaration that points outside the remote root publishes no types',
       () => [
         `import { make } from '../../${outsideName}/util.ts'`,
         'export const create = () => make()',
+        'export default function Counter() {',
+        '  return <span />',
+        '}',
+      ],
+      () => `../../${outsideName}/util`,
+    ],
+    [
+      'an ambient module declaration above the root',
+      () => [
+        `declare module '../../${outsideName}/util' {`,
+        '  interface Extra { y: number }',
+        '}',
         'export default function Counter() {',
         '  return <span />',
         '}',

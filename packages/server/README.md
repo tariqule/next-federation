@@ -188,6 +188,28 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
 
 See [docs/guides/self-hosted-skew.md](../../docs/guides/self-hosted-skew.md) for the operator rule.
 
+## `nf-describe`
+
+Turns any built Module Federation 2.0 remote (Rspack, webpack, Vite) into a remote components build
+in nf-serve's layout: it records the server entry, hashes the server graph and writes
+`nf-components.json` (signed when `NF_COMPONENTS_SIGNING_KEY` holds a private EC P-256 JWK) and
+`nf-build.json`.
+
+```bash
+nf-describe --dir dist/<buildId> (--ssr-entry server/remoteEntry.js | --no-ssr) \
+  [--base <url>] [--build-id <id>] [--types] [--allow-insecure-http]
+nf-describe --dir dist/<buildId> --verify [--public-key <JWK JSON | JWK file>]...
+```
+
+- `--types` (off by default) indexes and signs the declarations in `client/@mf-types/` for hosts'
+  `nf-types`; without it the folder is never signed. `--types` on a build without the folder fails
+  (`NF-002`).
+- `--verify` checks a described build before it ships (`NF-027` otherwise). It checks a types
+  index only when the descriptor signs one, so an older build with an unsigned `@mf-types/` folder
+  still verifies.
+
+See [Remote components](../../docs/guides/remote-components.md) for the full workflow.
+
 ## API
 
 | Export                                                    | Entry                          | Purpose                                                    |
