@@ -22,6 +22,34 @@ Use islands when the remote must stay isolated, or owns its data fetching. Use r
 for interactive pieces that must feel like part of the host: they share its React, context,
 router and event handlers.
 
+## Start from create-vite
+
+`npm create vite@latest widgets -- --template react-ts` gives you a Vite 8 project with things a
+components remote does not need. These are the edits that worked in the validation:
+
+1. **`@vitejs/plugin-react`:** remove it, or exclude your exposed files from it
+   (`react({ exclude: [/src\/Cart\.tsx$/] })`). An exposed module compiled with Fast Refresh fails
+   the build with `NF-002`, because a host page has no Vite preamble. The validated remote removed
+   the plugin: Vite compiles JSX without it.
+2. **`index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/assets/`:** the build only
+   reads the files in `exposes`, so the scaffold's page is unused. Delete them, or keep them as a
+   dev playground if you applied the exclusion above. Exposed modules must not import from them.
+3. **`vite.config.ts`:** replace it with the `nextFederationComponents` config below.
+4. **Build script:** `"build": "vite build"` and `"start": "nf-serve --dir dist --port 4110"`.
+   The scaffold's `tsc -b && vite build` still works as a type check when every file in `src`
+   compiles. `vite preview` does not serve a remote: use `nf-serve`.
+5. **Dependencies:** `@next-federation/vite` and `@next-federation/server` as dev dependencies. If an
+   exposed module imports `next/link`, add `next` as a dev dependency too (the validated remote
+   lists it, with `shared: { 'next/link': {} }`). Pin `react` and `react-dom` to one exact version
+   ([React versions](../../README.md)).
+6. **oxlint** (the `lint` script and `.oxlintrc.json`) is independent of the build; keep it or
+   delete it. Its `react/only-export-components` rule exists for Fast Refresh, which exposed modules
+   do not use.
+7. **TypeScript: `types: true` needs TypeScript 5 or 6 for now** (peer range `>=5.0.0 <7`).
+   create-vite installs TypeScript 7; with it the build succeeds but publishes no types and warns
+   `NF-002`, naming `npm install -D typescript@6`. Pin `typescript@~6` in the remote. The plugin
+   reads the project's root `tsconfig.json`; create-vite's references-only file worked as it is.
+
 ## Remote: build it
 
 ```ts
@@ -48,6 +76,12 @@ export default defineConfig({
   copy (`remoteEntry.ssr.js` and its `.cjs` chunks), served under the immutable
   `https://shop.example.com/b/<buildId>/`, and, with `types: true`, `@mf-types/`: the exposed
   modules' type declarations and their index (see [Types](#types)).
+- **Everything else under `client/` is served to anyone** by `nf-serve`, at `/b/<buildId>/…`, with
+  `Access-Control-Allow-Origin: *`. `client/` also holds build bookkeeping: `.vite/manifest.json`,
+  `.vite/mf-preload.json` and `mf-stats.json` (relative source paths and shared package versions, no
+  code). Nothing reads them at runtime, and `nf-serve` answers `404` for them (any dot folder or
+  file, and `mf-stats.json`). On another static host, leave them out of the upload or block them.
+  Never put anything in `client/` that you would not publish.
 - `nf-components.json`: the build descriptor: `buildId`, the manifest URL, the **sha384 of every
   server file** and the **browser files** of each exposed module (its stylesheets and JS chunks, as
   absolute `/b/<buildId>/…` URLs) and, with types, the URL and sha384 of the declarations index,
@@ -241,16 +275,20 @@ signature, as hosts do; **without one the signature is not checked**, and the ou
 
 ## Host: configure the remote
 
+Put the federation in its own file with no Next.js imports, so `nf-types` can load it
+([Types](#types)); `lib/federation.ts` imports it ([Getting started](getting-started-app-router.md#3-define-the-federation)).
+
 ```ts
-// lib/federation.ts (server)
+// lib/federation.config.ts
 import { defineFederation } from '@next-federation/core'
 
 export const federation = defineFederation({
   remotes: {
     shop: {
-      origin: 'https://shop.example.com',
+      origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com',
       components: {
-        ssr: { publicKeys: [SHOP_PUBLIC_JWK] }, // see Integrity
+        // The public JWK printed by "Key generation" below (see Integrity):
+        ssr: { publicKeys: [JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)] },
         // descriptor: 'https://shop.example.com/_nf/components.json' (default)
         // revalidate: 60      seconds the descriptor is cached (default islands.revalidate)
         // maxBuilds: 5        distinct builds a process keeps loaded
@@ -314,13 +352,20 @@ from Next) and reads no wall clock.
 ### Pages Router
 
 ```tsx
+// pages/cart.tsx
+import type { GetServerSideProps } from 'next'
 import { getComponentDescriptor } from '@next-federation/next/pages/server'
+import type { RemoteComponentDescriptor } from '@next-federation/next/pages/server'
+import { federation } from '../lib/federation.config'
+import { Cart } from '../lib/cart'
 
-export const getServerSideProps = async () => ({
+type Props = { descriptor: RemoteComponentDescriptor | null }
+
+export const getServerSideProps: GetServerSideProps<Props> = async () => ({
   props: { descriptor: await getComponentDescriptor(federation, 'shop') },
 })
 
-export default function Page({ descriptor }) {
+export default function Page({ descriptor }: Props) {
   return <Cart descriptor={descriptor} items={3} />
 }
 ```
@@ -337,6 +382,17 @@ each router's own entry point on its own routes, as above: `@next-federation/nex
 `@next-federation/next/server` under `app/`, `@next-federation/next/pages/components` and
 `@next-federation/next/pages/server` under `pages/`. Nothing else changes, and both routers
 server-render remote components.
+
+**Links between the two routers reload the page.** A link from an `app/` route to a `pages/` route
+(or the other way) is a full page load, not a client-side navigation, for a plain `<Link>` and for a
+remote `next/link` (a components remote's link) alike. The navigation still arrives; it only costs a
+reload. Client-side navigation and prefetching work inside each router.
+
+**In `next dev`, a Pages Router page that links to an App Router route logs a `404` in the browser
+console** (`Failed to load resource: the server responded with a status of 404`), seen when a remote
+`next/link` on a `pages/` route pointed at an `app/` route. The validation's production run (`next
+start`) had a clean console for the same navigation. It is a dev-time message about the prefetch of
+a route the other router owns.
 
 The two routers run two Reacts in one server process: the App Router uses Next's vendored copy,
 the Pages Router the one in `node_modules`. A remote component must render on the React of the
@@ -465,7 +521,8 @@ console.log('public key for the host: ' + JSON.stringify(pub))
 ```
 
 Set `NF_COMPONENTS_SIGNING_KEY` (the private JWK) in the remote's build environment only (a CI
-secret); it never leaves the build. Put the public JWK in the host's `components.ssr.publicKeys`.
+secret); it never leaves the build. Put the public JWK in the host's `components.ssr.publicKeys` (the
+config above reads it from `NF_COMPONENTS_PUBLIC_KEY`, as a JSON string in `.env.local`).
 
 ### Rotation
 
@@ -623,13 +680,33 @@ without `types` and refuses a build that has them (`NF-027`, rendered in the bro
 current build into the project and writes `next-federation-types/index.d.ts`:
 
 ```sh
-nf-types --config lib/federation.mjs           # every remote with `components`
-nf-types --config lib/federation.mjs --remote shop --out next-federation-types
+node --env-file=.env.local node_modules/@next-federation/next/dist/types/cli.js \
+  --config lib/federation.config.ts
 ```
 
+That is `nf-types --config lib/federation.config.ts` with the environment loaded. Options:
+`--remote shop` (repeatable) limits it to some remotes, `--out next-federation-types` sets the
+folder. Add it to your scripts, for example `"types": "node --env-file=.env.local
+node_modules/@next-federation/next/dist/types/cli.js --config lib/federation.config.ts"`.
+
 `--config` names a module that exports your `defineFederation(...)` result as `federation` (or as
-its default export). Node runs it as is, so use `.mjs`/`.js`, or a `.ts` file on a Node version that
-strips types. For each remote, `nf-types`:
+its default export): `lib/federation.config.ts` from [Host: configure the
+remote](#host-configure-the-remote). Three things to know:
+
+- **The config is loaded with plain Node, not Next.js.** It must not import `next/*`,
+  `server-only` or `@/` aliases. The guides' layout keeps those in `lib/federation.ts` for this
+  reason; pointing `--config` at a file that imports `next/headers` fails.
+- **`nf-types` does not read `.env.local`.** A config that reads `process.env` sees nothing, and
+  `JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)` fails with `SyntaxError: "undefined" is not
+  valid JSON`. Load the file with Node's `--env-file=.env.local` as above (or `set -a; . ./.env.local;
+  set +a` in a shell, then `nf-types ...`). The `cli.js` path above is what the `nf-types` bin runs,
+  so it works with any package manager.
+- **`.ts` configs need a Node that strips types** (Node 24 in the validation), and print
+  `[MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of .../federation.config.ts is not specified`
+  when `package.json` has no `"type"`. The warning is harmless (Node re-parses the file as an ES
+  module). A `.mjs` config avoids both, on every Node.
+
+For each remote, `nf-types`:
 
 1. fetches the descriptor from the remote's configured descriptor URL (no credentials, no
    redirects), and refuses a build served outside the remote's origins (`NF-005`);
@@ -666,9 +743,24 @@ export const Cart = createRemoteComponent<RemoteProps<'shop', './Cart'>>({
 `RemoteProps<remote, expose>` reads the props of the expose's default export from the global
 `NextFederationRemoteComponents` interface that `index.d.ts` fills (remote key -> expose -> module
 type). A remote or expose that `nf-types` did not download is a type error. The types are those of
-the build that was current when `nf-types` ran: run it in CI before `tsc`/`next build`, and commit
-the folder or not as you prefer (it is regenerated on every run). Modules the declarations import
-(`react`, shared packages) resolve from the host's own dependencies.
+the build that was current when `nf-types` ran: **run `nf-types` before `tsc` and before `next build`**
+(in CI, and after you change a remote), and commit the folder or not as you prefer (it is
+regenerated on every run). Modules the declarations import (`react`, shared packages) resolve from
+the host's own dependencies.
+
+**If you skip it**, `RemoteProps` has nothing to read, and TypeScript (so `next build`, which type
+checks) fails on the line that uses it with an error that does not mention `nf-types`:
+
+```
+error TS2344: Type '"widgets"' does not satisfy the constraint 'never'.
+```
+
+`never` means the interface is empty: there is no `next-federation-types/index.d.ts` yet. Run
+`nf-types` and the error goes. When the folder exists but the expose is wrong, the constraint lists
+the exposes it knows (`Type '"./Cart"' does not satisfy the constraint '"./Greeting" | "./NavLink"'`).
+`nf-types` needs the remote running and reachable (`NF-029` otherwise, and it keeps the types it
+had). `RemoteProps` is optional: `createRemoteComponent<{ items: number }>` works without
+`nf-types`, with the props typed by hand.
 
 ## Client-only Next.js apps
 
@@ -817,7 +909,7 @@ differ until it hydrates.
 - **Edge runtime**: no server rendering (no Node built-ins); components render in the browser.
 - **Remote dev server**: `vite` (serve) answers `/_nf/components.json` with `ssr: null`, so hosts
   render a dev remote in the browser only. Use a build (`vite build` + `nf-serve`) to test server
-  rendering.
+  rendering. Edits do not hot-reload inside the host: reload the host page to see them.
 
 ## Content Security Policy
 

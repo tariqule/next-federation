@@ -99,14 +99,15 @@ export default withNextFederation({
 ### 4. Configure the remote
 
 ```ts
-// lib/federation.ts (import it only from getServerSideProps, getStaticProps and API routes)
+// lib/federation.config.ts (import it only from getServerSideProps, getStaticProps and API routes;
+// no Next.js imports here, so that `nf-types` can load it)
 import { defineFederation } from '@next-federation/core'
 
 export const federation = defineFederation({
   remotes: {
     shop: {
       origin: 'https://shop-remote.example.com',
-      components: { ssr: { publicKeys: [SHOP_PUBLIC_JWK] } },
+      components: { ssr: { publicKeys: [JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)] } },
     },
   },
 })
@@ -137,7 +138,7 @@ export const Cart = createRemoteComponent<{ items: number }>({
 ```tsx
 // pages/index.tsx
 import { getComponentDescriptor } from '@next-federation/next/pages/server'
-import { federation } from '../lib/federation'
+import { federation } from '../lib/federation.config'
 import { Cart } from '../lib/cart'
 
 export const getServerSideProps = async () => ({

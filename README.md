@@ -14,6 +14,14 @@ only; Next 14 is not supported), Node.js 20.9 or newer (server rendering of remo
 components needs Node 20.16 or newer; older Node renders them in the browser only). Remotes build
 with Vite 8.
 
+**React versions:** every package in this repo is tested on React and React DOM **19.3.1**
+(`react-server-dom-webpack` 19.3.1 in island remotes), plus one island remote on 19.3.0 to prove
+mixed versions. The peer range is `^19.0.0`, but React 19.1.0 (what some Next.js scaffolds install)
+is not covered by the tests: pin `react` and `react-dom` to the same exact version in the host and in
+each remote (`"react": "19.3.1"`, no `^`), and in an island remote pin `react-server-dom-webpack` to
+that exact version too. Fresh `create-next-app` and `create-vite` projects in 2026-11 installed
+React 19.1.0 or 19.3.0, so check `package.json` after scaffolding.
+
 ## Packages
 
 | Package                                          | Purpose                                                                                |
@@ -60,8 +68,8 @@ The wire contract is published at [`docs/protocol/v1.md`](docs/protocol/v1.md).
   copy in the remote. Built on the Module Federation 2.0 runtime.
 - **Islands (React Server Components):** remotes run **real React Server Components** on their own
   servers. Your app embeds the result as a self-contained, server-rendered, hydrated island. It
-  supports per-user content, remotes on any origin, and smooth client-side navigation. Server
-  Actions are not supported in islands (`NF-019`).
+  supports per-user content, remotes on any origin, smooth client-side navigation and Server
+  Actions that run on the remote ([Server Actions in islands](docs/guides/server-actions.md)).
 
 ## Principles
 

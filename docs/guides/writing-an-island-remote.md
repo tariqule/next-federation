@@ -5,10 +5,42 @@ requests. Hosts embed the result. This guide builds one with `@next-federation/v
 
 Requires Node `^20.19.0 || >=22.12.0` (Vite 8's floor).
 
+## Start from create-vite
+
+`npm create vite@latest shop -- --template react-ts` gives you a Vite 8 project, but it is a browser
+app and a remote is not. These are the edits that made the scaffold work (checked against Vite 8.3.8):
+
+1. **Remove `@vitejs/plugin-react`** (and `@vitejs/plugin-react-swc`) from `package.json` and from
+   `vite.config.ts`. The build fails with `NF-002` while either is present: Fast Refresh needs a
+   preamble that only a Vite-served page has. Vite's own compiler handles JSX without them.
+2. **Delete what only a browser app uses:** `index.html`, `src/main.tsx`, `src/App.tsx`,
+   `src/App.css`, `src/index.css` and `src/assets/`. A remote has no page. The island handler answers
+   `/_nf/*` and the build serves `dist/<buildId>/client/assets/`.
+3. **Replace `vite.config.ts`** with the config in step 2 below, and put your islands in
+   `src/islands/`.
+4. **Change the build script** from `tsc -b && vite build` to `vite build`, and add
+   `"start": "nf-serve --dir dist --port 4100"`. If you keep `tsc -b` as a type check, delete
+   `src/main.tsx` first: with `index.html` gone it is the file that no longer type-checks. `vite
+   preview` does not serve a remote: use `nf-serve`.
+5. **Pin React** ([React versions](../../README.md)). The scaffold installs a caret range and
+   `react-server-dom-webpack` is not in it: add it at the same exact version as `react`.
+6. **oxlint** (the scaffold's `lint` script and `.oxlintrc.json`) is independent of the build. Keep
+   it or delete it; nothing in next-federation reads it. Its `react/only-export-components` rule
+   protects Fast Refresh, which a remote does not have, so you can turn it off.
+7. **TypeScript:** create-vite currently installs TypeScript 7. A components remote with
+   `types: true` ([Remote components](remote-components.md#types)) needs TypeScript 5 or 6 for now
+   (`@next-federation/vite`'s peer range is `>=5.0.0 <7`): with 7 the build still succeeds but
+   publishes no types and warns `NF-002`, naming `npm install -D typescript@6`. An island remote does
+   not use `types`, so any version works.
+
 ## 1. Install
 
+Pin React and React DOM to one exact version (the repo's tests run 19.3.1) and
+`react-server-dom-webpack` to the same one:
+
 ```sh
-pnpm add @next-federation/island react react-dom react-server-dom-webpack
+pnpm add --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@19.3.1
+pnpm add @next-federation/island
 pnpm add -D @next-federation/vite @next-federation/server vite
 ```
 
@@ -42,6 +74,36 @@ export default defineConfig({
 | `hosts`     | Exact browser origins allowed to embed (CORS and `Origin` check). No `*`.              |
 | `issuers`   | Trusted token issuers: exact `iss` value to JWKS URL. Needed for private islands.      |
 | `islands`   | Island name to entry file, or `{ entry, private }`.                                    |
+
+### Host origins and issuers must match exactly
+
+`hosts` and `issuers` are compared as strings, and they are part of the build (they live in the
+remote's server bundle). Three things to get right:
+
+- **`hosts` are origins:** scheme, host and port, no path and no trailing slash. A host with a
+  `basePath` of `/app` is still `https://www.example.com`.
+- **`issuers` are the host's `identity.issuer`, character for character, and include the
+  `basePath`.** The JWKS URL includes it too. For a host at `https://www.example.com/app`:
+
+  ```ts
+  // remote vite.config.ts
+  hosts: ['https://www.example.com'],
+  issuers: {
+    'https://www.example.com/app': 'https://www.example.com/app/api/next-federation/jwks',
+  },
+  ```
+
+  ```ts
+  // host lib/federation.config.ts
+  identity: { issuer: 'https://www.example.com/app', signingKeys: process.env.NF_SIGNING_KEY! },
+  ```
+
+  A mismatch answers `401` with [`NF-016`](../errors/issuer-not-allowed.md) (a host origin that is not
+  listed is `403` [`NF-022`](../errors/origin-not-allowed.md)). `http://127.0.0.1:3000` and
+  `http://localhost:3000` are different origins, and so are `www.example.com` and `example.com`.
+- **Every new host origin needs a rebuild of the remote.** A preview deployment, a staging domain
+  or a new dev port is a new origin: add it to `hosts` and `issuers` and run `vite build` again (a
+  new build id). Build the lists from an environment variable if you deploy to many origins.
 
 The full option list is in the [`@next-federation/vite` README](../../packages/vite/README.md).
 `@vitejs/plugin-rsc` is pinned to exactly 0.5.39. Any other version fails with `NF-025`, unless
@@ -97,7 +159,7 @@ export default async function MyOrders() {
 ```
 
 A `private: true` island is never rendered without a verified token. `getIdentity()` works in Server
-Components and (later) Server Actions. In client code it throws `NF-002`: pass what the client needs
+Components and in [Server Actions](server-actions.md). In client code it throws `NF-002`: pass what the client needs
 as props. See [Identity](identity.md).
 
 ## 5. Links
@@ -120,6 +182,36 @@ nf-serve --dir dist --port 4100             # from @next-federation/server
 
 `vite` serves the remote in development. See [Deployment](deployment.md) for production, including
 build retention.
+
+`vite build` prints `[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use
+client" ... may not be preserved when bundling` once per client component, including the ones in
+`@next-federation/island`. They are harmless. They come from the client build, where Rolldown
+drops the directive from a file it bundles; the client references were already found in the
+earlier "analyze client references" pass. Islands built with these warnings hydrated, ran their
+actions and loaded their CSS in every validation run. Ignore them.
+
+## Develop against a host
+
+Run the remote with `vite` and point the host at it (`origin: 'http://localhost:4100'`, with the
+dev server on that port). The loop is manual:
+
+- **Edit, then reload the host page.** Nothing refreshes by itself: there is no Fast Refresh, and
+  the host does not know the remote changed.
+- **A static public island stays stale for `revalidate` seconds**, even in `next dev`, because the
+  host caches the envelope (60 seconds by default). Use `dynamic` on the island while you work on it
+  (see [Caching](caching.md)):
+
+  ```tsx
+  <RemoteIsland remote="shop" island="ProductPanel" dynamic fallback={<p>loading…</p>} />
+  ```
+
+  Remove it before you ship: `dynamic` fetches on every request and makes the route dynamic.
+- Private islands are never cached, so they show your edits on reload.
+- The first host load against a remote with a cold Vite cache hydrates with one React: the plugin
+  pre-bundles React and never pre-bundles `@next-federation/island`. If a package your own island
+  client components import still triggers `optimized dependencies changed`, add it to
+  `optimizeDeps.include` in the remote's Vite config.
+- To test the real server build, use `vite build` and `nf-serve`.
 
 ## Rules and limits
 

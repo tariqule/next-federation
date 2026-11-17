@@ -27,8 +27,14 @@ Remote components: see [Remote components](remote-components.md).
 ## 1. Install
 
 ```sh
-pnpm add @next-federation/core @next-federation/next @next-federation/react react react-dom
+pnpm add @next-federation/core @next-federation/next @next-federation/react server-only
+pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 ```
+
+`server-only` is imported by `lib/federation.ts` below and is not part of a `create-next-app`
+project. Pin React to one exact version, the one the repo's tests run (19.3.1): `create-next-app`
+scaffolds 19.1.0 or 19.3.0, and the remotes you embed should run the same version to share one copy
+of React.
 
 ## 2. Wrap `next.config.ts`
 
@@ -46,20 +52,52 @@ export default withNextFederation({
 The wrapper records whether `cacheComponents` is on, so the adapter picks the matching cache
 implementation. See [Caching](caching.md).
 
+### The Next 16 scaffold turns on `cacheComponents` and `partialPrefetching`
+
+A project from `create-next-app` 16.4.6 has `cacheComponents: true` and `partialPrefetching: true` in
+`next.config.ts`. For islands that means:
+
+- Public islands are cached with `'use cache'`, and a page with only public islands stays static
+  (`○` in the build output). A failed island becomes a dynamic hole instead of being baked in
+  ([Caching](caching.md)).
+- A private island is always a dynamic hole inside the island's own `<Suspense>`. Put your own
+  `'use cache'` components around a `RemoteIsland` only inside `<Suspense>`.
+- Next 16 keeps routes you visited mounted but hidden (the validation saw this with the scaffold
+  defaults), so an island on a route you navigated away from can stay mounted in the background.
+- `partialPrefetching: true` works with private islands: a signed-in private island renders with no
+  "unstable value `Date.now()`" log in `next dev` or `next start`.
+
+Next 15 has neither option, and the adapter uses the legacy cache there.
+
 ## 3. Define the federation
+
+Use two files. The first is the federation config and imports nothing from Next.js. The second
+creates the island components and may import `server-only` and `next/*`.
+
+```ts
+// lib/federation.config.ts
+import { defineFederation } from '@next-federation/core'
+
+// No Next.js imports in this file: `nf-types` (remote components) loads it with plain Node.
+export const federation = defineFederation({
+  remotes: { shop: { origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com' } },
+})
+```
 
 ```ts
 // lib/federation.ts
 import 'server-only'
-import { defineFederation } from '@next-federation/core'
 import { createIslands } from '@next-federation/next/server'
+import { federation } from './federation.config'
 
-export const federation = defineFederation({
-  remotes: { shop: { origin: 'https://shop.example.com' } },
-})
-
+export { federation }
 export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(federation)
 ```
+
+Every other guide uses this layout ([Identity](identity.md) adds the `identity` block to the config file
+and `getIdentity` to `lib/federation.ts`). Environment variables the config reads come from
+`.env.local` under `next dev` and `next build`, but not under plain Node: see
+[Remote components](remote-components.md#types) for `nf-types`.
 
 A remote is an origin, not a path. The host fetches envelopes only from this origin (and from
 `assetOrigins`, if you list any), and it refuses redirects.
@@ -95,7 +133,8 @@ export default function Home() {
 ## 5. Per-user islands (optional)
 
 A private island renders for the signed-in user. Add `identity` to `defineFederation`, a `getIdentity`
-function, and the token routes. See [Identity](identity.md) for the full setup and key rotation.
+function, and the token routes. See [Identity](identity.md) for the full setup, a sign-in and
+sign-out example, and key rotation.
 
 ```tsx
 <RemoteIsland remote="shop" island="MyOrders" private fallback={<p>loading orders…</p>} />
@@ -105,7 +144,8 @@ Without `cacheComponents`, a private island makes the route dynamic.
 
 ## 6. Open the CSP
 
-Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.md).
+Add each remote origin to `script-src`, `connect-src` and `style-src`. Next.js needs more than that
+to run under a CSP at all: [CSP](csp.md) has a complete policy for dev and production.
 
 ## What to know
 
