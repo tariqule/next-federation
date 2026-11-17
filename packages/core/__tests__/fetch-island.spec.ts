@@ -3,6 +3,7 @@ import {
   MAX_ENVELOPE_BYTES,
   eventFor,
   fetchIsland,
+  islandFailureDetail,
   islandTags,
 } from '../src/index.ts'
 import type { IslandResult, IslandTarget } from '../src/index.ts'
@@ -515,5 +516,109 @@ describe('envelope size limit', () => {
     expect(r).toMatchObject({ ok: false, code: 'NF-008' })
     expect(seen).toBeDefined()
     expect(f).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('B5: a failure names its URL, and hints when the origin is no island remote', () => {
+  const html = (status: number) =>
+    new Response('<!doctype html><title>404</title>', {
+      status,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    })
+
+  test('a 404 HTML page: the URL without its query, and the hint', async () => {
+    const f = rs.fn(async () => html(404))
+    const r = await fetchIsland(target, {
+      island: 'Cart',
+      props: { secret: 'p-value' },
+      token: 'SECRET',
+      fetch: asFetch(f),
+    })
+    expect(r).toMatchObject({
+      ok: false,
+      code: 'NF-007',
+      status: 404,
+      url: 'https://shop.example.com/_nf/island/Cart',
+      hint: 'not-an-island-remote',
+    })
+    const detail = islandFailureDetail(r)
+    expect(detail).toContain('https://shop.example.com/_nf/island/Cart')
+    expect(detail).toContain('HTTP 404')
+    expect(detail).toMatch(/answered HTML \/ 404: is it an island remote/)
+    expect(detail).toContain('/_nf/island')
+    expect(detail).toContain('sharing-components-from-a-next-app.md')
+    for (const leak of ['SECRET', 'p-value', '?p=']) {
+      expect(JSON.stringify(r)).not.toContain(leak)
+      expect(detail).not.toContain(leak)
+    }
+  })
+
+  test("a plain 404 hints; an island remote's JSON 404 and a 503 do not", async () => {
+    const text404 = await fetchIsland(target, {
+      island: 'Cart',
+      fetch: asFetch(
+        rs.fn(
+          async () =>
+            new Response('Not Found', {
+              status: 404,
+              headers: { 'content-type': 'text/plain' },
+            })
+        )
+      ),
+    })
+    expect(text404).toMatchObject({ hint: 'not-an-island-remote' })
+    // An island remote that does not expose this island (NF-021).
+    const r404 = await fetchIsland(target, {
+      island: 'Cart',
+      fetch: asFetch(
+        rs.fn(
+          async () =>
+            new Response(JSON.stringify({ error: 'NF-021' }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            })
+        )
+      ),
+    })
+    expect(r404).toMatchObject({ code: 'NF-007', status: 404 })
+    expect(r404).not.toHaveProperty('hint')
+    const f = rs.fn(async () => json('', 503))
+    const p = fetchIsland(target, { island: 'Cart', fetch: asFetch(f) })
+    await rs.advanceTimersByTimeAsync(100)
+    const r503 = await p
+    expect(r503).toMatchObject({
+      ok: false,
+      code: 'NF-007',
+      url: 'https://shop.example.com/_nf/island/Cart',
+    })
+    expect(r503).not.toHaveProperty('hint')
+    expect(islandFailureDetail(r503)).toBe(
+      'at https://shop.example.com/_nf/island/Cart (HTTP 503)'
+    )
+  })
+
+  test('an HTML 200 (a catch-all page) is NF-004 with the hint', async () => {
+    const r = await fetchIsland(target, {
+      island: 'Cart',
+      fetch: asFetch(rs.fn(async () => html(200))),
+    })
+    expect(r).toMatchObject({
+      ok: false,
+      code: 'NF-004',
+      hint: 'not-an-island-remote',
+    })
+  })
+
+  test('a timeout (NF-008) and a network error name the URL', async () => {
+    const p = fetchIsland(target, { island: 'Cart', fetch: hanging() })
+    await rs.advanceTimersByTimeAsync(3000)
+    const timedOut = await p
+    expect(timedOut).toMatchObject({
+      code: 'NF-008',
+      url: 'https://shop.example.com/_nf/island/Cart',
+    })
+    expect(islandFailureDetail(timedOut)).toBe(
+      'at https://shop.example.com/_nf/island/Cart'
+    )
   })
 })

@@ -470,6 +470,10 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     ])
   )
   let instance: FederationInstance | null = null
+  // Server: the loader plugin of the current instance (its manifest check).
+  let loaderPlugin: {
+    preflight?: (manifestUrl: string) => Promise<void>
+  } | null = null
   // Server: this runtime's own MF state (one per Next layer). Its number is
   // process-wide: each layer bundles its own copy of this module.
   const layer = deps.isServer
@@ -575,17 +579,16 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
 
   function getInstance(): FederationInstance {
     if (instance) return instance
+    const plugin =
+      scope && deps.serverPlugin ? deps.serverPlugin(integrityFor, scope) : null
+    loaderPlugin = plugin as typeof loaderPlugin
     instance = deps.createInstance({
       // Server: one name per runtime. MF keeps a host's snapshot by name
       // process-wide, and two layers must never share one.
       name: scope ? `nf_host_${scope.id}` : 'nf_host',
       remotes: [],
       shared: toMfShared(deps.hostShared),
-      plugins: scope
-        ? deps.serverPlugin
-          ? [deps.serverPlugin(integrityFor, scope)]
-          : []
-        : [retryEntryPlugin],
+      plugins: scope ? (plugin ? [plugin] : []) : [retryEntryPlugin],
     })
     for (const shared of extraShared) {
       instance.registerShared(toMfShared(shared))
@@ -625,6 +628,10 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     const mf = getInstance()
     const current = registered.get(d.name)
     if (current !== d.base || fresh) {
+      // Server: the loader checks the manifest first, so its refusal
+      // (NF-028) or a failed fetch is thrown here, never inside the MF
+      // runtime (which logs what its hooks throw, with a stack).
+      await loaderPlugin?.preflight?.(d.manifest)
       mf.registerRemotes([{ name: d.name, entry: d.manifest }], {
         // Always: MF keeps remote state by name process-wide, and an earlier
         // copy of this runtime (a dev server reload) may have registered
@@ -980,12 +987,18 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
           ready(blockedNow ? 'refused' : 'loaded')
           return blockedNow ? null : mod
         }
+        // A load the loader refused: recorded at once, so a static
+        // regeneration is not deferred for it again.
+        const failed = (): null => {
+          if (refusal(d.base)) ready('refused')
+          return null
+        }
         if (load.status === 'fulfilled') {
           result = resolved(after(load.value!))
         } else if (load.status === 'rejected') {
-          result = resolved(null)
+          result = resolved(failed())
         } else {
-          result = load.then(after, () => null) as Thenable<RemoteModule | null>
+          result = load.then(after, failed) as Thenable<RemoteModule | null>
           result.status = 'pending'
           const r = result
           void r.then((value) => {

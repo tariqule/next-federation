@@ -810,3 +810,33 @@ describe('bounded response bodies', () => {
     expect(await readBodyLimited(new Response(bytes), 4)).toEqual(bytes)
   })
 })
+
+test('B5: a components.json 404 or HTML page hints that the origin is no components remote', async () => {
+  const target = federationWith({}).componentTarget('components')
+  const run = (respond: () => Response) =>
+    fetchComponentDescriptor(target, { fetch: async () => respond() })
+  const html = (status: number) =>
+    new Response('<!doctype html><p>Not found</p>', {
+      status,
+      headers: { 'content-type': 'text/html' },
+    })
+  for (const result of [
+    await run(() => html(404)),
+    await run(() => new Response('Not Found', { status: 404 })),
+    // A catch-all page answering 200.
+    await run(() => html(200)),
+  ]) {
+    expect(result).toMatchObject({ ok: false, code: 'NF-029' })
+    const detail = (result as { detail: string }).detail
+    expect(detail).toContain(`${ORIGIN}/_nf/components.json`)
+    expect(detail).toMatch(
+      /the origin answered HTML \/ 404: is it a components remote \(does it serve \/_nf\/components\.json\)\?/i
+    )
+    expect(detail).toContain('sharing-components-from-a-next-app.md')
+  }
+  // A real outage gets no such hint.
+  const down = await run(() => new Response('x', { status: 503 }))
+  expect((down as { detail: string }).detail).toBe(
+    `${ORIGIN}/_nf/components.json answered HTTP 503.`
+  )
+})

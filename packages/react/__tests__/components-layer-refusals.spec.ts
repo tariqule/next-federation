@@ -184,6 +184,12 @@ afterEach(() => {
   rs.restoreAllMocks()
 })
 
+/** Lines the Module Federation runtime logged itself. */
+const mfLines = () =>
+  [...warn.mock.calls, ...error.mock.calls]
+    .map((c) => c.map(String).join(' '))
+    .filter((l) => l.includes('[ Federation Runtime ]'))
+
 const codeOf = async (p: Promise<unknown>) =>
   p.then(
     () => 'loaded',
@@ -283,6 +289,9 @@ describe('I-2: unlisted builds server-render in one layer per process', () => {
       .filter((l) => l.startsWith('[ next-federation ]') && l.includes(x.base))
     expect(lines).toHaveLength(1)
     expect(lines[0]).toMatch(/NF-028.*cannot be kept apart/)
+    // B4: the loader's refusal never reaches the MF runtime, which would
+    // log it again with a stack (RUNTIME-003).
+    expect(mfLines()).toEqual([])
   })
 })
 
@@ -421,10 +430,20 @@ describe('M-2: what the server never evaluates', () => {
     expect(await l.runtime.serverLoad(x.descriptor, './Probe')).toBeNull()
     expect(requests).toEqual([`${x.base}mf-manifest.json`])
     expect(l.runtime.serverBlock(x.descriptor)).toBe('nested-remotes')
+    // B4: recorded at once, so the next static regeneration is not deferred.
+    expect(componentTrustRegistry().serverReady?.get(x.base)).toBe('refused')
     expect(error).not.toHaveBeenCalled()
-    expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(
-      /NF-028.*lists remotes of its own/
-    )
+    // B4: one NF-028 line, and nothing from the MF runtime.
+    const lines = warn.mock.calls.map((c) => c.join(' '))
+    expect(lines.filter((l) => /NF-028/.test(l))).toHaveLength(1)
+    expect(lines.join('\n')).toMatch(/NF-028.*lists remotes of its own/)
+    expect(mfLines()).toEqual([])
+    // Rendering it again logs nothing more.
+    clock += 5_000
+    expect(
+      await l.runtime.serverLoad({ ...x.descriptor }, './Probe')
+    ).toBeNull()
+    expect(warn.mock.calls).toHaveLength(lines.length)
   })
 
   test("the MF runtime's own Node script loader fails closed", () => {

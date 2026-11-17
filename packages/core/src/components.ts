@@ -10,6 +10,7 @@ import {
   parseComponentBuildDescriptor,
   verifiedKey,
   parseComponentDescriptorFile,
+  sha384Integrity,
 } from '@next-federation/protocol'
 import type {
   ComponentBuildDescriptor,
@@ -17,6 +18,7 @@ import type {
   ComponentTrustKind,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
+import { DOCS_BASE } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
 import { compactVerify, decodeProtectedHeader, importJWK } from 'jose'
 import type { ComponentPublicKey, ComponentTarget } from './config.ts'
@@ -44,6 +46,14 @@ export type FetchComponentDescriptorOptions = {
 
 /** A descriptor body larger than this is refused (NF-029). */
 export const MAX_DESCRIPTOR_BYTES: number = 1024 * 1024
+
+/** An HTML page, or a 404: the origin is probably not a components remote. */
+function notAComponentsRemote(response: Response): boolean {
+  const type = response.headers.get('content-type') ?? ''
+  return response.status === 404 || /^\s*text\/html\b/i.test(type)
+}
+
+const NOT_A_COMPONENTS_REMOTE = ` The origin answered HTML / 404: is it a components remote (does it serve /_nf/components.json)? A Next.js app can't be a remote (see ${DOCS_BASE.replace(/\/errors\/$/, '/guides/')}sharing-components-from-a-next-app.md).`
 
 function errorName(error: unknown): string {
   return typeof error === 'object' && error !== null
@@ -82,6 +92,7 @@ export async function fetchComponentDescriptor(
     controller.abort()
   }, target.timeoutMs)
   let text: string
+  let hint = ''
   try {
     const response = await doFetch(target.descriptorUrl, {
       ...options.init,
@@ -89,10 +100,11 @@ export async function fetchComponentDescriptor(
       redirect: 'error',
       signal: controller.signal,
     })
+    if (notAComponentsRemote(response)) hint = NOT_A_COMPONENTS_REMOTE
     if (!response.ok) {
       return fail(
         'NF-029',
-        `${target.descriptorUrl} answered HTTP ${response.status}.`,
+        `${target.descriptorUrl} answered HTTP ${response.status}.${hint}`,
         response.status
       )
     }
@@ -130,7 +142,7 @@ export async function fetchComponentDescriptor(
   try {
     json = JSON.parse(text)
   } catch {
-    return fail('NF-029', `${target.descriptorUrl} is not JSON.`)
+    return fail('NF-029', `${target.descriptorUrl} is not JSON.${hint}`)
   }
   const file = parseComponentDescriptorFile(json)
   if (!file) {
@@ -425,9 +437,85 @@ export async function fetchVerifiedComponentDescriptor(
 ): Promise<VerifiedDescriptorResult> {
   const result = await fetchComponentDescriptor(target, options)
   if (!result.ok) return result
+  const verified = await verifyComponentDescriptor(target, result.file)
   return {
     ok: true,
-    verified: await verifyComponentDescriptor(target, result.file),
+    verified: await refuseUnloadableManifest(target, verified, options),
     ms: result.ms,
+  }
+}
+
+/** Largest manifest the check reads (the server loader's own file limit). */
+const MAX_MANIFEST_BYTES = 10 * 1024 * 1024
+
+/**
+ * A verified build the server loader would refuse anyway, decided from its
+ * verified Module Federation manifest before any render: one that lists
+ * remotes of its own (their code would load outside the loader), has no
+ * remotes list, or whose manifest is not JSON. It comes back browser-only
+ * (NF-028), so the host never defers a static page waiting for it nor asks
+ * the loader to load it. A manifest that cannot be fetched or does not match
+ * its sha384 decides nothing: the loader verifies every file again.
+ */
+async function refuseUnloadableManifest(
+  target: ComponentTarget,
+  verified: VerifiedComponentDescriptor,
+  options: FetchComponentDescriptorOptions
+): Promise<VerifiedComponentDescriptor> {
+  const { descriptor } = verified
+  if (verified.trust === null || !descriptor.ssr) return verified
+  const { base, manifest } = descriptor
+  const expected = manifest.startsWith(base)
+    ? descriptor.ssr.integrity[manifest.slice(base.length)]
+    : undefined
+  if (expected === undefined) return verified
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), target.timeoutMs)
+  let body: Uint8Array | null
+  try {
+    const response = await (options.fetch ?? globalThis.fetch)(manifest, {
+      ...options.init,
+      credentials: 'omit',
+      redirect: 'error',
+      signal: controller.signal,
+    })
+    if (!response.ok) return verified
+    body = await readBodyLimited(response, MAX_MANIFEST_BYTES)
+  } catch (error) {
+    if (error instanceof TypeError || controller.signal.aborted) {
+      return verified
+    }
+    // Anything else (for example a framework control-flow error) propagates.
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!body || (await sha384Integrity(body)) !== expected) return verified
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(body))
+  } catch {
+    parsed = null
+  }
+  const remotes =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { remotes?: unknown }).remotes
+      : null
+  let detail: string | null = null
+  if (parsed === null || typeof parsed !== 'object') {
+    detail = `The build at ${base} has no Module Federation manifest the server loader could check (nested remotes, plugin version), so its server code is not evaluated.`
+  } else if (!Array.isArray(remotes)) {
+    detail = `The manifest of the build at ${base} has no remotes list, so nested remotes cannot be ruled out and its server code is not evaluated.`
+  } else if (remotes.length > 0) {
+    detail = `The build at ${base} lists remotes of its own: their code would load outside the server loader (unverified, on the real global), so its server code is not evaluated.`
+  }
+  if (detail === null) return verified
+  const browserOnly = { ...descriptor }
+  delete browserOnly.jws
+  return {
+    descriptor: { ...browserOnly, ssr: null },
+    trust: null,
+    code: 'NF-028',
+    detail,
   }
 }

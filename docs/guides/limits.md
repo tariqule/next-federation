@@ -32,7 +32,14 @@ Next 14 (React 18) is not supported: islands and remote components need React 19
 - **Props are plain JSON.** No functions, `Date`, `Map`, class instances or cycles (`NF-009`).
 - **React context does not cross into an island.** The island is a separate React tree. Pass what it
   needs as props.
-- **No nested islands.** An island cannot embed another island.
+- **Nested islands are not supported, but they are not blocked.** An island's server code can
+  render another remote's island (it fetches that envelope itself, server to server), and it works,
+  silently, with no warning. The inner island is outside everything the host gives an island: it
+  gets no identity (the host's token is minted for the outer remote's audience, so a private inner
+  island is refused with `401` and a public one renders anonymously), it sits outside the host's cache and tags (`revalidateIsland` on the host
+  does not reach it) and outside its skew handling (the outer remote decides which build it gets),
+  and it adds a second server hop to every render of the outer island. Embed each island from the
+  host instead, side by side, and pass data between them as props.
 - **No CSS isolation.** There is no Shadow DOM. Remotes scope their own class names.
 - **Island CSS sorts after Next's CSS in the App Router.** Island stylesheets are React stylesheet
   resources in their own group (`data-precedence="next-federation"`), placed after Next's own group,
@@ -86,7 +93,8 @@ Next 14 (React 18) is not supported: islands and remote components need React 19
   `@module-federation/enhanced` 2.9.2 and 2.9.3 builds server-render in both layers; all other
   builds server-render in one layer per process, the first in which one of them evaluated. A
   build whose manifest lists `remotes` of its own, or that has no manifest the server loader could
-  check, never server-renders. The layers are kept apart, not
+  check, never server-renders (the host decides it when it fetches the build's descriptor, before
+  any render: `NF-028` once). The layers are kept apart, not
   sandboxed: a verified remote runs with the host process's rights
   ([Remote components](remote-components.md#mixed-router-hosts)).
 - **No top-level `let`/`const` named `document`, `window` or `self` in server chunks.** The
@@ -166,7 +174,11 @@ The host trusts the remote's HTML and scripts. Only configure remotes you trust.
 
 <!-- numbers: Task 24 (measured 2026-11-16) -->
 Measured in production builds (`docs/measurements.json`, written by `test/e2e/measure.spec.ts`), two
-remotes on React 19.3.1, gzip:
+remotes on React 19.3.1. Every size below is **gzip on the wire**: `nf-serve` compresses JavaScript,
+CSS, JSON and other text assets (brotli when the browser accepts it, which is smaller still; gzip
+otherwise). Uncompressed, the same JavaScript is about three times larger (round 3 measured a first
+island remote at 253 KB raw against 81 KB gzip). On any other static host or CDN, turn compression on
+for these types, or these numbers do not hold ([Deployment](deployment.md#compression)).
 
 - **About 75 KB of JavaScript per distinct remote without sharing** (`share: false`): React, React
   DOM, the RSC client and island code. Several islands from one remote share that cost.
@@ -191,8 +203,14 @@ remotes on React 19.3.1, gzip:
   refused, but only after it was downloaded. With `cacheComponents`, and for private islands, the
   limit applies as the body arrives. To bound what the host downloads in every case, cap response
   sizes at the remote or at a proxy in front of it.
-- **Each island costs a host-to-remote server hop.** Use caching, `preloadIsland` and co-locate the
-  regions of host and remote.
+- **Each island costs a host-to-remote server hop.** Measured in validation round 3 (a laptop, remotes
+  on localhost): about 2 to 15 ms at the median per envelope from a co-located remote (2 to 7 ms for
+  most islands and descriptors on an idle host, 15 ms for a private island on a host under load), and
+  9 to 22 ms at p95. A remote in another region adds its network round trip to that. The island
+  timeout (`islands.timeoutMs`, 3 s by default) bounds the worst case: a slow remote never holds a
+  render longer than the timeout, after which the island renders its fallback (`NF-008`). A cached
+  public island costs no hop until its entry is revalidated. Use caching, `preloadIsland` and
+  co-locate the regions of host and remote.
 
 ## Cache and retention
 

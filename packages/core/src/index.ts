@@ -13,11 +13,13 @@ export {
   MAX_ENVELOPE_BYTES,
   eventFor,
   fetchIsland,
+  islandFailureDetail,
   islandTags,
 } from './fetch-island.ts'
 export type {
   FetchIslandRequest,
   IslandFailureCode,
+  IslandFailureHint,
   IslandFetchMeta,
   IslandResult,
 } from './fetch-island.ts'

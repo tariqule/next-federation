@@ -1,4 +1,4 @@
-import { eventFor } from '@next-federation/core'
+import { eventFor, islandFailureDetail } from '@next-federation/core'
 import type {
   Federation,
   IslandResult,
@@ -20,10 +20,12 @@ export function reportIsland(
 ): void {
   federation.emit(eventFor(target, island, result))
   if (!result.ok) {
-    const status = result.status === undefined ? '' : ` (HTTP ${result.status})`
+    // The URL (never its query), the status, and a hint for an origin that
+    // is not an island remote.
+    const detail = islandFailureDetail(result)
     logger.error(
       result.code,
-      `Island "${island}" from remote "${target.remote}" failed${status}; rendering its fallback.`
+      `Island "${island}" from remote "${target.remote}" failed${detail ? ` ${detail}` : ''}; rendering its fallback.`
     )
     return
   }

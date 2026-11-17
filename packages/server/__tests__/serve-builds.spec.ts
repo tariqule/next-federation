@@ -3,6 +3,7 @@ import { request } from 'node:http'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { brotliDecompressSync, gunzipSync } from 'node:zlib'
 import { serveBuilds } from '../src/node/serve-builds.ts'
 import type { ServedBuilds } from '../src/node/serve-builds.ts'
 
@@ -12,6 +13,19 @@ const HANDLER = `export default async (req) => {
   if (p.endsWith('/crash')) setTimeout(() => process.exit(3), 10)
   // Refused on its headers, the body never read (as the island handler's 413).
   if (req.headers.get('x-refuse')) return new Response(null, { status: 413 })
+  // A large public envelope, a per-user one, and a body the build encoded itself.
+  if (p.endsWith('/island/big')) {
+    return new Response(JSON.stringify({ html: '<p>hello</p>'.repeat(500), auth: req.headers.get('authorization') }), {
+      headers: { 'content-type': 'application/json', vary: 'Origin, Authorization', etag: '"e1"',
+        'cache-control': req.headers.get('authorization') ? 'private, no-store' : 'public, max-age=60' },
+    })
+  }
+  if (p.endsWith('/island/pre-encoded')) {
+    const { gzipSync } = await import('node:zlib')
+    return new Response(gzipSync(JSON.stringify({ html: 'x'.repeat(5000) })), {
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+    })
+  }
   const text = await req.text()
   return new Response(JSON.stringify({
     buildId: BUILD, pid: process.pid, nodeEnv: process.env.NODE_ENV,
@@ -31,6 +45,12 @@ function alive(marker: string): string {
   }
 }
 
+// Compressible (repetitive text) and not (an image), both above 1 KB.
+const BIG_JS = 'export function f(a) { return a + 1 }\n'.repeat(400)
+const BIG_PNG = Buffer.from(
+  Array.from({ length: 4096 }, (_, i) => (i * 7919) % 256)
+)
+
 let root: string
 let served: ServedBuilds | undefined
 const base = () => `http://127.0.0.1:${served!.port}`
@@ -45,6 +65,8 @@ function makeBuild(id: string, hoursAgo: number) {
   )
   writeFileSync(join(dir, 'client', 'assets', 'app.js'), `console.log("${id}")`)
   writeFileSync(join(dir, 'client', 'assets', 'sub', 'a.css'), 'a{}')
+  writeFileSync(join(dir, 'client', 'assets', 'big.js'), BIG_JS)
+  writeFileSync(join(dir, 'client', 'assets', 'logo.png'), BIG_PNG)
   writeFileSync(
     join(dir, 'rsc', 'index.js'),
     `const BUILD = ${JSON.stringify(id)}\n${HANDLER}`
@@ -358,4 +380,165 @@ test("a build's early 413 leaves nf-serve's upstream connection usable", async (
     const next = await fetch(`${base()}/b/v1/_nf/x`)
     expect(next.status, `after ${size} bytes`).toBe(200)
   }
+})
+
+function getRaw(
+  path: string,
+  headers: Record<string, string> = {},
+  method = 'GET'
+): Promise<{
+  status: number
+  headers: Record<string, string | string[] | undefined>
+  body: Buffer
+}> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      // A fresh connection: a pooled one may have been closed by the server.
+      {
+        host: '127.0.0.1',
+        port: served!.port,
+        path,
+        method,
+        headers,
+        agent: false,
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            headers: res.headers,
+            body: Buffer.concat(chunks),
+          })
+        )
+      }
+    )
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+describe('B3: compressed assets', () => {
+  const asset = '/b/v1/assets/big.js'
+
+  test('brotli when accepted, preferred over gzip; the bytes decompress to the file', async () => {
+    const res = await getRaw(asset, { 'accept-encoding': 'gzip, deflate, br' })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-encoding']).toBe('br')
+    expect(res.headers.vary).toBe('Accept-Encoding')
+    expect(Number(res.headers['content-length'])).toBe(res.body.length)
+    expect(res.body.length).toBeLessThan(BIG_JS.length / 4)
+    expect(brotliDecompressSync(res.body).toString()).toBe(BIG_JS)
+    // The immutable asset keeps its caching and CORS headers.
+    expect(res.headers['cache-control']).toBe(
+      'public, max-age=31536000, immutable'
+    )
+    expect(res.headers['access-control-allow-origin']).toBe('*')
+    expect(res.headers['content-type']).toBe('text/javascript; charset=utf-8')
+  })
+
+  test('gzip when brotli is refused or not offered (q-values)', async () => {
+    for (const accept of ['gzip', 'br;q=0, gzip', 'br;q=0.2, gzip;q=0.9']) {
+      const res = await getRaw(asset, { 'accept-encoding': accept })
+      expect(res.headers['content-encoding'], accept).toBe('gzip')
+      expect(gunzipSync(res.body).toString()).toBe(BIG_JS)
+    }
+  })
+
+  test('identity when nothing usable is accepted', async () => {
+    for (const accept of [undefined, 'identity', 'deflate', '*;q=0']) {
+      const res = await getRaw(
+        asset,
+        accept === undefined ? {} : { 'accept-encoding': accept }
+      )
+      expect(res.headers['content-encoding'], accept).toBeUndefined()
+      expect(res.headers.vary).toBe('Accept-Encoding')
+      expect(res.body.toString()).toBe(BIG_JS)
+      expect(Number(res.headers['content-length'])).toBe(BIG_JS.length)
+    }
+  })
+
+  test('small files, images and range requests are sent as they are', async () => {
+    const small = await getRaw('/b/v1/assets/app.js', {
+      'accept-encoding': 'br',
+    })
+    expect(small.headers['content-encoding']).toBeUndefined()
+    expect(small.body.toString()).toBe('console.log("v1")')
+    const png = await getRaw('/b/v1/assets/logo.png', {
+      'accept-encoding': 'br, gzip',
+    })
+    expect(png.headers['content-encoding']).toBeUndefined()
+    expect(png.headers.vary).toBeUndefined()
+    expect(png.body.equals(BIG_PNG)).toBe(true)
+    const ranged = await getRaw(asset, {
+      'accept-encoding': 'br',
+      range: 'bytes=0-9',
+    })
+    expect(ranged.headers['content-encoding']).toBeUndefined()
+    expect(ranged.body.toString()).toBe(BIG_JS)
+  })
+
+  test('HEAD: no body, the same encoding headers as GET', async () => {
+    const get = await getRaw(asset, { 'accept-encoding': 'br' })
+    const head = await getRaw(asset, { 'accept-encoding': 'br' }, 'HEAD')
+    expect(head.status).toBe(200)
+    expect(head.body.length).toBe(0)
+    expect(head.headers['content-encoding']).toBe('br')
+    expect(head.headers.vary).toBe('Accept-Encoding')
+    // Compressed already (cached): its length is known.
+    expect(head.headers['content-length']).toBe(get.headers['content-length'])
+  })
+
+  test('every live build compresses its assets', async () => {
+    const res = await getRaw('/b/v2/assets/big.js', {
+      'accept-encoding': 'gzip',
+    })
+    expect(res.headers['content-encoding']).toBe('gzip')
+    expect(gunzipSync(res.body).toString()).toBe(BIG_JS)
+  })
+})
+
+describe('B3: proxied island envelopes', () => {
+  test('a public JSON envelope is compressed, its other headers kept', async () => {
+    for (const path of ['/_nf/island/big', '/b/v1/_nf/island/big']) {
+      const res = await getRaw(path, { 'accept-encoding': 'br, gzip' })
+      expect(res.status).toBe(200)
+      expect(res.headers['content-encoding']).toBe('br')
+      expect(res.headers.vary).toBe('Origin, Authorization, Accept-Encoding')
+      expect(res.headers['cache-control']).toBe('public, max-age=60')
+      // The build's strong ETag names its exact bytes: weak once encoded.
+      expect(res.headers.etag).toBe('W/"e1"')
+      const json = JSON.parse(brotliDecompressSync(res.body).toString())
+      expect(json.html).toBe('<p>hello</p>'.repeat(500))
+    }
+    const gz = await getRaw('/_nf/island/big', { 'accept-encoding': 'gzip' })
+    expect(gz.headers['content-encoding']).toBe('gzip')
+    expect(JSON.parse(gunzipSync(gz.body).toString()).html).toContain('hello')
+    const plainRes = await getRaw('/_nf/island/big')
+    expect(plainRes.headers['content-encoding']).toBeUndefined()
+    expect(plainRes.headers.etag).toBe('"e1"')
+    expect(plainRes.headers.vary).toBe('Origin, Authorization, Accept-Encoding')
+    expect(JSON.parse(plainRes.body.toString()).html).toContain('hello')
+  })
+
+  test('a per-user envelope, a pre-encoded body and a small one are passed through', async () => {
+    const mine = await getRaw('/_nf/island/big', {
+      'accept-encoding': 'br',
+      authorization: 'Bearer t',
+    })
+    expect(mine.headers['content-encoding']).toBeUndefined()
+    expect(JSON.parse(mine.body.toString()).auth).toBe('Bearer t')
+    const pre = await getRaw('/_nf/island/pre-encoded', {
+      'accept-encoding': 'br',
+    })
+    // The build's own gzip, once: never encoded twice.
+    expect(pre.headers['content-encoding']).toBe('gzip')
+    expect(JSON.parse(gunzipSync(pre.body).toString()).html).toBe(
+      'x'.repeat(5000)
+    )
+    const small = await getRaw('/_nf/x', { 'accept-encoding': 'br' })
+    expect(small.headers['content-encoding']).toBeUndefined()
+    expect(JSON.parse(small.body.toString()).buildId).toBe('v2')
+  })
 })

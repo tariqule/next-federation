@@ -48,6 +48,6 @@ pnpm add @next-federation/island react react-dom
 
 ## Constraints
 
-Props are plain JSON, React context does not cross into an island, islands cannot be nested, and
-there is no CSS isolation. See [Limits](../../docs/guides/limits.md) and
+Props are plain JSON, React context does not cross into an island, nested islands are unsupported
+(they render, but without identity, cache or skew handling), and there is no CSS isolation. See [Limits](../../docs/guides/limits.md) and
 [Writing an island remote](../../docs/guides/writing-an-island-remote.md).

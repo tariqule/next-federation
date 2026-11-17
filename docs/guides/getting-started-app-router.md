@@ -231,7 +231,8 @@ to run under a CSP at all: [CSP](csp.md) has a complete policy for dev and produ
 ## What to know
 
 - Island HTML is stored about three times in the page. Keep islands small ([Limits](limits.md)).
-- React context does not cross into an island, and islands cannot be nested.
+- React context does not cross into an island. Do not nest islands: an inner island works but has no
+  identity and is outside the host's cache ([Limits](limits.md#what-an-island-cannot-do)).
 - App Router hosts never provide their React to islands, because Next runs its own React build. Each
   distinct remote downloads its own React.
 - Remote components (client components, with SSR): see [Remote components](remote-components.md).

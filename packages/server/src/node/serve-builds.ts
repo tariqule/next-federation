@@ -24,8 +24,19 @@ import {
   HEALTH_PATH,
 } from '@next-federation/protocol'
 import { NFError, logger } from '@next-federation/sdk'
+import {
+  CompressionCache,
+  MAX_CACHED_FILE_BYTES,
+  MIN_COMPRESS_BYTES,
+  addVary,
+  compressStream,
+  isCompressibleFile,
+  isCompressibleResponse,
+  negotiateEncoding,
+} from './compress.ts'
 import { DEFAULT_RETENTION, planRetention } from './retention.ts'
 import type { BuildInfo, Retention } from './retention.ts'
+import type { Encoding, FileVersion } from './compress.ts'
 
 export type ServeBuildsOptions = {
   dir: string
@@ -42,6 +53,11 @@ export type ServeBuildsOptions = {
   maxActionBodyBytes?: number
   /** Max wait for a build's response headers, in ms. Default 30000. Exceeded: 504. */
   upstreamTimeoutMs?: number
+  /**
+   * Byte cap of the in-memory cache of compressed static files (brotli and
+   * gzip, per file version). Default 64 MiB.
+   */
+  compressionCacheBytes?: number
   /**
    * Called when a build's process exits while the server is running (a crash).
    * The server keeps running and answers 502 for that build; a supervisor-friendly
@@ -196,6 +212,7 @@ export async function serveBuilds(
   const maxBody = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   const maxActionBody = opts.maxActionBodyBytes ?? DEFAULT_MAX_ACTION_CEILING
   const builds = await readBuilds(root)
+  const compressed = new CompressionCache(opts.compressionCacheBytes)
   const plan = planRetention(builds, Date.now(), retention, opts.current)
   const liveSet = new Set(plan.live)
   const componentBuilds = new Set(
@@ -289,19 +306,76 @@ export async function serveBuilds(
       if (isBuildBookkeeping(rel)) return plain(res, 404)
       const info = await stat(file)
       if (!info.isFile()) return plain(res, 404)
-      res.writeHead(200, {
-        'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
-        'content-length': info.size,
-        'cache-control': cacheControl,
-        'access-control-allow-origin': '*',
-      })
-      if (req.method === 'HEAD') return res.end()
-      createReadStream(file)
-        .on('error', () => res.destroy())
-        .pipe(res)
+      await sendFile(
+        req,
+        res,
+        { path: file, mtimeMs: info.mtimeMs, size: info.size },
+        {
+          'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
+          'cache-control': cacheControl,
+          'access-control-allow-origin': '*',
+        }
+      )
     } catch {
       plain(res, 404)
     }
+  }
+
+  /**
+   * Sends a file, brotli- or gzip-encoded when it is text of at least
+   * MIN_COMPRESS_BYTES and the request accepts it. A range request gets the
+   * whole file unencoded (as every request did before compression). HEAD
+   * sends GET's headers; its Content-Length only when the encoded body is
+   * cached already.
+   */
+  async function sendFile(
+    req: IncomingMessage,
+    res: ServerResponse,
+    file: FileVersion,
+    headers: Record<string, string>
+  ) {
+    const compressible =
+      isCompressibleFile(file.path) && file.size >= MIN_COMPRESS_BYTES
+    const encoding =
+      compressible && req.headers.range === undefined
+        ? negotiateEncoding(req.headers['accept-encoding'])
+        : null
+    const out: Record<string, string | number> = {
+      ...headers,
+      ...(compressible ? { vary: 'Accept-Encoding' } : {}),
+    }
+    const head = req.method === 'HEAD'
+    if (!encoding) {
+      res.writeHead(200, { ...out, 'content-length': file.size })
+      if (head) return res.end()
+      createReadStream(file.path)
+        .on('error', () => res.destroy())
+        .pipe(res)
+      return
+    }
+    out['content-encoding'] = encoding
+    if (file.size > MAX_CACHED_FILE_BYTES) {
+      res.writeHead(200, out)
+      if (head) return res.end()
+      const zip = compressStream(encoding)
+      zip.on('error', () => res.destroy())
+      createReadStream(file.path)
+        .on('error', () => res.destroy())
+        .pipe(zip)
+        .pipe(res)
+      return
+    }
+    if (head) {
+      const cached = compressed.peek(file, encoding)
+      res.writeHead(
+        200,
+        cached ? { ...out, 'content-length': cached.length } : out
+      )
+      return res.end()
+    }
+    const body = await compressed.get(file, encoding, () => readFile(file.path))
+    res.writeHead(200, { ...out, 'content-length': body.length })
+    res.end(body)
   }
 
   async function serveDescriptor(
@@ -312,17 +386,67 @@ export async function serveBuilds(
   ) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return plain(res, 405)
     try {
-      const body = await readFile(join(root, id, COMPONENTS_DESCRIPTOR_FILE))
-      res.writeHead(200, {
-        'content-type': 'application/json',
-        'content-length': body.length,
-        'cache-control': cacheControl,
-        'access-control-allow-origin': '*',
-      })
-      res.end(req.method === 'HEAD' ? undefined : body)
+      const path = join(root, id, COMPONENTS_DESCRIPTOR_FILE)
+      const info = await stat(path)
+      await sendFile(
+        req,
+        res,
+        { path, mtimeMs: info.mtimeMs, size: info.size },
+        {
+          'content-type': 'application/json',
+          'cache-control': cacheControl,
+          'access-control-allow-origin': '*',
+        }
+      )
     } catch {
       plain(res, 404)
     }
+  }
+
+  /**
+   * Streams a build's response encoded, once it is known to be at least
+   * MIN_COMPRESS_BYTES (a smaller one is sent as it is).
+   */
+  function sendCompressed(
+    res: ServerResponse,
+    up: IncomingMessage,
+    status: number,
+    headers: Record<string, string | string[]>,
+    encoding: Encoding
+  ) {
+    const head: Buffer[] = []
+    let size = 0
+    const plainBody = () => {
+      up.off('data', onData)
+      const body = Buffer.concat(head)
+      res.writeHead(status, {
+        ...headers,
+        'content-length': String(body.length),
+      })
+      res.end(body)
+    }
+    const onData = (chunk: Buffer) => {
+      head.push(chunk)
+      size += chunk.length
+      if (size < MIN_COMPRESS_BYTES) return
+      up.off('data', onData)
+      up.off('end', plainBody)
+      up.pause()
+      delete headers['content-length']
+      // A strong validator names exact bytes, which these are not.
+      const etag = headers.etag
+      if (typeof etag === 'string' && !etag.startsWith('W/')) {
+        headers.etag = `W/${etag}`
+      }
+      res.writeHead(status, { ...headers, 'content-encoding': encoding })
+      const zip = compressStream(encoding)
+      zip.on('error', () => res.destroy())
+      zip.pipe(res)
+      for (const buffered of head) zip.write(buffered)
+      up.pipe(zip)
+    }
+    up.on('data', onData)
+    up.once('end', plainBody)
   }
 
   function proxy(
@@ -346,9 +470,22 @@ export async function serveBuilds(
         headers: stripHopByHop(req.headers),
       },
       (up) => {
-        res.writeHead(up.statusCode ?? 502, stripHopByHop(up.headers))
-        up.pipe(res)
+        const status = up.statusCode ?? 502
+        const headers = stripHopByHop(up.headers)
         up.on('error', () => res.destroy())
+        if (!isCompressibleResponse(req.method, status, headers, req.headers)) {
+          res.writeHead(status, headers)
+          up.pipe(res)
+          return
+        }
+        headers.vary = addVary(headers.vary)
+        const encoding = negotiateEncoding(req.headers['accept-encoding'])
+        if (!encoding) {
+          res.writeHead(status, headers)
+          up.pipe(res)
+          return
+        }
+        sendCompressed(res, up, status, headers, encoding)
       }
     )
     let timedOut = false
