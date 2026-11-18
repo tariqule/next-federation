@@ -52,7 +52,15 @@ for your React version.
 Use a version patched for
 [GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3): 19.0.9, 19.1.10, 19.2.9 or
 19.3.1, or a later patch of the same minor. Older versions let an unauthenticated request run code
-on the remote's server. `vite build` refuses them with `NF-041`; the dev server warns.
+on the remote's server. `vite build` refuses them with `NF-041`; the dev server warns. React canaries
+(every `19.3.0-canary-*`, even those published after the fix) and experimental builds (`0.0.0-*`)
+are refused too: use a patched stable release.
+
+If you upgrade from an affected version, also remove every build made with it once the patched
+build is deployed: `nf-serve` keeps earlier builds running and answering `/b/<build>/_nf/*`, and
+Vercel keeps earlier deployments. Delete those build folders and restart `nf-serve` (or restart it
+once with `--max-builds 1 --min-age-hours 0`); on Vercel, delete those deployments. The steps are in
+[NF-041](../errors/vulnerable-react-server-dom.md#then-remove-every-build-made-with-an-affected-version).
 
 ```sh
 pnpm add --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@19.3.1

@@ -55,6 +55,14 @@ deploy restarts it.
 longest expected open browser tab. Raise `--min-age-hours` if tabs stay open for days. Delete a build
 folder before rebuilding into it.
 
+**Security advisories.** Old builds keep running, so upgrading away from a vulnerable dependency
+means removing the builds made with it. For `react-server-dom-webpack` and
+[GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), `nf-serve` refuses builds
+that record an affected version (`NF-041`); delete the others made with an affected version, or
+restart once with
+`--max-builds 1 --min-age-hours 0`. On Vercel, delete the older deployments. See
+[NF-041](../errors/vulnerable-react-server-dom.md).
+
 **Supervision.** If a build process dies after startup, `nf-serve` logs it (`NF-012`) and exits
 non-zero. Run it under Docker, systemd or Kubernetes so it restarts.
 

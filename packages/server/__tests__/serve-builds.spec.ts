@@ -542,3 +542,86 @@ describe('B3: proxied island envelopes', () => {
     expect(JSON.parse(small.body.toString()).buildId).toBe('v2')
   })
 })
+
+describe('builds with a react-server-dom-webpack affected by GHSA-xqc2-xf4c-x3h3 (NF-041)', () => {
+  let dir: string
+  let handle: ServedBuilds | undefined
+  // An island build; `rsdw` is what nf-build.json records (omitted: an older plugin).
+  const build = (id: string, hoursAgo: number, rsdw?: unknown) => {
+    mkdirSync(join(dir, id, 'rsc'), { recursive: true })
+    writeFileSync(
+      join(dir, id, 'nf-build.json'),
+      JSON.stringify({
+        buildId: id,
+        builtAt: Date.now() - hoursAgo * 3_600_000,
+        ...(rsdw === undefined ? {} : { reactServerDomWebpack: rsdw }),
+      })
+    )
+    writeFileSync(
+      join(dir, id, 'rsc', 'index.js'),
+      `const BUILD = ${JSON.stringify(id)}\n${HANDLER}`
+    )
+  }
+  const logged = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map((c) => c.join(' ')).join('\n')
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'nf-serve-advisory-'))
+  })
+  afterEach(async () => {
+    await handle?.close()
+    handle = undefined
+    rs.restoreAllMocks()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test('an affected or experimental older build is retired: never started, 410 NF-023, logged NF-041', async () => {
+    const error = rs.spyOn(console, 'error').mockImplementation(() => {})
+    build('v3', 0, ['19.3.1'])
+    build('v2', 1, ['19.3.0'])
+    build('v1', 2, ['19.3.1', '0.0.0-experimental-abc'])
+    handle = await serveBuilds({ dir, port: 0 })
+    expect(handle.live).toEqual(['v3'])
+    expect([...handle.retired].sort()).toEqual(['v1', 'v2'])
+    expect(alive(join(dir, 'v2'))).toBe('')
+    expect(alive(join(dir, 'v1'))).toBe('')
+    for (const id of ['v1', 'v2']) {
+      const res = await fetch(`http://127.0.0.1:${handle.port}/b/${id}/_nf/x`)
+      expect(res.status).toBe(410)
+      expect(await res.json()).toEqual({ error: 'NF-023' })
+    }
+    const ok = await fetch(`http://127.0.0.1:${handle.port}/b/v3/_nf/x`)
+    expect((await ok.json()).buildId).toBe('v3')
+    const log = logged(error)
+    expect(log).toMatch(/NF-041.*"v2".*19\.3\.0.*GHSA-xqc2-xf4c-x3h3.*19\.3\.1/)
+    expect(log).toMatch(/NF-041.*"v1".*0\.0\.0-experimental-abc/)
+  }, 20000)
+
+  test('an affected current build: nf-serve refuses to start (NF-041) and starts no process', async () => {
+    rs.spyOn(console, 'error').mockImplementation(() => {})
+    build('v2', 0, ['19.2.0'])
+    build('v1', 1, ['19.2.9'])
+    let thrown: unknown
+    try {
+      handle = await serveBuilds({ dir, port: 0 })
+    } catch (error) {
+      thrown = error
+    }
+    expect((thrown as { code?: string }).code).toBe('NF-041')
+    expect(String((thrown as Error).message)).toMatch(
+      /"v2".*19\.2\.0.*GHSA-xqc2-xf4c-x3h3.*19\.2\.9/
+    )
+    expect(alive(dir)).toBe('')
+  }, 20000)
+
+  test('builds that record no version (an older plugin) keep working, with one warning', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    build('v2', 0)
+    build('v1', 1, 'not a list')
+    handle = await serveBuilds({ dir, port: 0 })
+    expect(handle.live).toEqual(['v2', 'v1'])
+    const res = await fetch(`http://127.0.0.1:${handle.port}/b/v1/_nf/x`)
+    expect((await res.json()).buildId).toBe('v1')
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(logged(warn)).toMatch(/NF-041.*"v2", "v1".*GHSA-xqc2-xf4c-x3h3/)
+  }, 20000)
+})

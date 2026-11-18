@@ -3,10 +3,10 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { NFError } from '@next-federation/sdk'
 import {
-  assertPatchedFlightClient,
-  assertPluginRscVersion,
-  patchedFlightClientVersion,
-} from '../checks.ts'
+  RSC_ADVISORY,
+  checkFlightClientVersion,
+} from '@next-federation/protocol'
+import { assertPatchedFlightClient, assertPluginRscVersion } from '../checks.ts'
 import { packageVersionReader } from '../share.ts'
 
 export { SUPPORTED_PLUGIN_RSC_VERSION } from './constants.ts'
@@ -74,10 +74,11 @@ export function assertFlightClientInstalled(
   } catch {
     // React itself is missing: Vite reports that.
   }
-  const patched = patchedFlightClientVersion(react)
-  const install = patched
-    ? `react ${react} is affected by GHSA-xqc2-xf4c-x3h3, so upgrade all three to its patched version: npm install --save-exact react@${patched} react-dom@${patched} ${FLIGHT_CLIENT}@${patched}`
-    : `npm install --save-exact ${FLIGHT_CLIENT}@${react}`
+  const check = checkFlightClientVersion(react)
+  const install =
+    check.status === 'affected'
+      ? `react ${react} is affected by ${RSC_ADVISORY.id}, so upgrade all three to its patched version: npm install --save-exact react@${check.patched} react-dom@${check.patched} ${FLIGHT_CLIENT}@${check.patched}`
+      : `npm install --save-exact ${FLIGHT_CLIENT}@${react}`
   throw new NFError(
     'NF-002',
     `${FLIGHT_CLIENT} is not installed. An island remote needs it, at exactly the version of react (${react}): ${install} (pnpm add --save-exact, yarn add --exact). Only components remotes (nextFederationComponents) can do without it.`
@@ -85,25 +86,70 @@ export function assertFlightClientInstalled(
 }
 
 /**
- * NF-041 when a copy of `react-server-dom-webpack` that Vite would use is
- * affected by GHSA-xqc2-xf4c-x3h3: a build fails, the dev server warns. Also
- * checks the copy found from the working directory, where plugin-rsc looks
- * for the project's own copy.
+ * Every place a copy of `react-server-dom-webpack` that the build may use is
+ * found from: this package and the project root (as for NF-002), the working
+ * directory (where plugin-rsc looks for the project's own copy), and
+ * `@vitejs/plugin-rsc`'s own folder, from which it resolves
+ * `react-server-dom-webpack/server.edge` for the server bundle (hoisted in
+ * npm or yarn workspaces, it may sit next to another copy than this package).
+ * `resolveFromHere` resolves from this package (a parameter for tests).
+ */
+export function flightClientCheckResolvers(
+  root: string,
+  resolveFromHere: Resolver = createRequire(import.meta.url).resolve
+): Resolver[] {
+  const resolvers: Resolver[] = [
+    resolveFromHere,
+    createRequire(join(root, 'package.json')).resolve,
+    createRequire(join(process.cwd(), 'package.json')).resolve,
+  ]
+  try {
+    const pluginRsc = resolveFromHere('@vitejs/plugin-rsc/package.json')
+    resolvers.push(createRequire(pluginRsc).resolve)
+  } catch {
+    // assertInstalledPluginRsc reports a missing plugin-rsc.
+  }
+  return resolvers
+}
+
+/** Each copy the resolvers find, with its version (null when it has none). */
+function flightClientCopies(
+  resolvers: ReadonlyArray<Resolver>
+): { dir: string; version: string | null }[] {
+  return flightClientManifests(resolvers).map((manifest) => {
+    const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as {
+      version?: unknown
+    }
+    return {
+      dir: dirname(manifest),
+      version: typeof version === 'string' ? version : null,
+    }
+  })
+}
+
+/**
+ * The versions of the copies of `react-server-dom-webpack` the build may use,
+ * sorted and deduplicated: `nf-build.json` records them for nf-serve.
+ */
+export function installedFlightClientVersions(
+  root: string,
+  resolvers: ReadonlyArray<Resolver> = flightClientCheckResolvers(root)
+): string[] {
+  const versions = flightClientCopies(resolvers).map((c) => c.version ?? '')
+  return [...new Set(versions)].sort()
+}
+
+/**
+ * NF-041 when a copy of `react-server-dom-webpack` that the build may use is
+ * affected by GHSA-xqc2-xf4c-x3h3 or cannot be checked against it: a build
+ * fails, the dev server warns.
  */
 export function assertFlightClientPatched(
   root: string,
   command: 'build' | 'serve',
-  resolvers: ReadonlyArray<Resolver> = [
-    ...flightClientResolvers(root),
-    createRequire(join(process.cwd(), 'package.json')).resolve,
-  ]
+  resolvers: ReadonlyArray<Resolver> = flightClientCheckResolvers(root)
 ): void {
-  for (const manifest of flightClientManifests(resolvers)) {
-    const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as {
-      version?: unknown
-    }
-    if (typeof version === 'string') {
-      assertPatchedFlightClient(version, dirname(manifest), command)
-    }
+  for (const { dir, version } of flightClientCopies(resolvers)) {
+    assertPatchedFlightClient(version ?? '', dir, command)
   }
 }

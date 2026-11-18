@@ -24,6 +24,7 @@ import {
   assertFlightClientInstalled,
   assertFlightClientPatched,
   assertInstalledPluginRsc,
+  installedFlightClientVersions,
 } from './version.ts'
 import {
   VIRTUAL_BOOTSTRAP,
@@ -37,6 +38,11 @@ export type BuildInfo = {
   buildId: string
   builtAt: number
   base: string
+  /**
+   * The versions of the `react-server-dom-webpack` copies the build may use
+   * (nf-serve refuses a build whose versions are affected by an advisory).
+   */
+  reactServerDomWebpack: string[]
 }
 
 // This package's own entries: `.tsx` sources when run from `src`, `.js` from `dist`.
@@ -211,6 +217,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
   let viteConfig: ResolvedConfig | undefined
   const serverActionFiles = new Set<string>()
   let builtAt = 0
+  let flightClientVersions: string[] = []
   const current = (): ResolvedOptions => {
     if (!resolved) {
       throw new NFError('NF-002', 'next-federation options were not resolved.')
@@ -232,6 +239,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
       const root = resolve(user.root ?? process.cwd())
       assertFlightClientInstalled(root)
       assertFlightClientPatched(root, env.command)
+      flightClientVersions = installedFlightClientVersions(root)
       builtAt = Date.now()
       resolved = resolveOptions(options, {
         command: env.command,
@@ -296,6 +304,7 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
           buildId: opts.buildId,
           builtAt,
           base: opts.publicBase,
+          reactServerDomWebpack: flightClientVersions,
         }
         await mkdir(outDir, { recursive: true })
         // Node < 22 loads `rsc/index.js` as CommonJS unless the nearest

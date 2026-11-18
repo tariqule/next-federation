@@ -5,7 +5,7 @@ import { HOST_SPA, REMOTE_A, REMOTE_A_RETIRED } from './servers.ts'
 // (self-hosted, build-pinned asset paths). Runs with NF_SUITE=skew, where
 // remote A serves builds v1 and v2 with v2 current, and a second serve of the
 // same builds on 4103 has retired v1.
-// Servers: NF_APPS=fake-remote,remote-a,remote-b,remote-a-retired,host-spa
+// Servers: NF_APPS=fake-remote,remote-a,remote-b,remote-a-retired,host-spa,components-remote
 test.skip(process.env.NF_SUITE !== 'skew', 'needs NF_SUITE=skew')
 
 const SKEW = `${HOST_SPA}/skew`

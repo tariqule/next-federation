@@ -103,6 +103,53 @@ describe('react-server-dom-webpack affected by GHSA-xqc2-xf4c-x3h3 (NF-041)', ()
     ).toBe('NF-041')
   })
 
+  test('a 19.3.0 canary fails, even one published after the fix', () => {
+    // React keeps naming canaries `19.3.0-canary-*`: no release line covers them.
+    expect(
+      codeOf(() =>
+        assertPatchedFlightClient(
+          '19.3.0-canary-df6aa4ec-20261120',
+          '/app',
+          'build'
+        )
+      )
+    ).toBe('NF-041')
+  })
+
+  test.each([
+    '0.0.0-experimental-df6aa4ec-20261112',
+    '0.0.0-df6aa4ec-20261112',
+  ])(
+    'build: the experimental %s fails (it cannot be checked against the advisory)',
+    (version) => {
+      let thrown: unknown
+      try {
+        assertPatchedFlightClient(version, '/app/node_modules', 'build')
+      } catch (error) {
+        thrown = error
+      }
+      expect((thrown as { code?: string }).code).toBe('NF-041')
+      const message = String((thrown as Error).message)
+      expect(message).toContain(`react-server-dom-webpack ${version}`)
+      expect(message).toContain('GHSA-xqc2-xf4c-x3h3')
+      expect(message).toMatch(/experimental builds cannot be checked/i)
+      expect(message).toContain('/app/node_modules')
+    }
+  )
+
+  test('dev server: an experimental build warns NF-041 and goes on', () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      codeOf(() =>
+        assertPatchedFlightClient('0.0.0-experimental-abc', '/app', 'serve')
+      )
+    ).toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.join(' '))).toMatch(
+      /NF-041.*0\.0\.0-experimental-abc.*experimental builds cannot be checked/i
+    )
+  })
+
   test.each([
     '19.0.9',
     '19.0.10',
@@ -114,7 +161,6 @@ describe('react-server-dom-webpack affected by GHSA-xqc2-xf4c-x3h3 (NF-041)', ()
     '19.4.0',
     '18.3.1',
     '20.0.0',
-    '0.0.0-experimental-abc',
   ])('%s passes', (version) => {
     const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
     expect(

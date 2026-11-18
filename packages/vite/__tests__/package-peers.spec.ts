@@ -19,6 +19,8 @@ import { nextFederationIslands } from '../src/index.ts'
 import {
   assertFlightClientInstalled,
   assertFlightClientPatched,
+  flightClientCheckResolvers,
+  installedFlightClientVersions,
 } from '../src/plugin-rsc/version.ts'
 
 const pkg = JSON.parse(
@@ -191,6 +193,55 @@ describe('island remotes refuse a react-server-dom-webpack affected by GHSA-xqc2
     }
     return undefined
   }
+
+  test('the copy next to a hoisted @vitejs/plugin-rsc is checked (npm or yarn workspaces)', () => {
+    // plugin-rsc (hoisted) resolves react-server-dom-webpack/server.edge from
+    // its own folder: an affected copy there is what the server bundle gets,
+    // while @next-federation/vite (nested) sees a patched one.
+    const manifest = (dir: string, json: object): string => {
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(json))
+      return join(dir, 'package.json')
+    }
+    const hoisted = join(root, 'workspace', 'node_modules')
+    const pluginRsc = manifest(join(hoisted, '@vitejs', 'plugin-rsc'), {
+      name: '@vitejs/plugin-rsc',
+      version: '0.5.39',
+    })
+    manifest(join(hoisted, 'react-server-dom-webpack'), {
+      name: 'react-server-dom-webpack',
+      version: '19.3.0',
+    })
+    const nested = manifest(
+      join(
+        root,
+        'workspace',
+        'remote',
+        'node_modules',
+        'react-server-dom-webpack'
+      ),
+      { name: 'react-server-dom-webpack', version: '19.3.1' }
+    )
+    const fromVite = (id: string): string => {
+      if (id === '@vitejs/plugin-rsc/package.json') return pluginRsc
+      if (id === 'react-server-dom-webpack/package.json') return nested
+      throw Object.assign(new Error(`Cannot find module '${id}'`), {
+        code: 'MODULE_NOT_FOUND',
+      })
+    }
+    // Control: from @next-federation/vite alone, only the patched copy shows.
+    expect(
+      codeOf(() => assertFlightClientPatched(root, 'build', [fromVite]))
+    ).toBeUndefined()
+    const resolvers = flightClientCheckResolvers(root, fromVite)
+    expect(installedFlightClientVersions(root, resolvers)).toEqual([
+      '19.3.0',
+      '19.3.1',
+    ])
+    expect(
+      codeOf(() => assertFlightClientPatched(root, 'build', resolvers))
+    ).toBe('NF-041')
+  })
 
   test('the copy in the project root is checked: 19.3.0 fails the build', () => {
     install('19.3.0')

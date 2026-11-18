@@ -28,7 +28,13 @@ An island remote runs `react-server-dom-webpack` on its server, so use a version
 (unauthenticated remote code execution in React Server Components): 19.0.9, 19.1.10, 19.2.9 or
 19.3.1, or a later patch of the same minor. The peer range excludes the affected versions, and
 `nextFederationIslands` checks the installed copy: `vite build` fails with `NF-041` on an affected
-version, and the dev server logs `NF-041` as a warning.
+version, and the dev server logs `NF-041` as a warning. Island remotes cannot build on React
+canaries until a release line covers them: every `19.3.0-canary-*` is refused, even one published
+after the fix (React keeps that name for every canary), and so is every experimental build
+(`0.0.0-*`). Use a patched stable release. `nf-build.json` records the versions a build used
+(`reactServerDomWebpack`), and `nf-serve` refuses a build whose versions are affected. After
+upgrading, remove every build made with an affected version: see
+[NF-041](../../docs/errors/vulnerable-react-server-dom.md).
 
 ## Usage
 
