@@ -25,4 +25,21 @@ What changes for callers:
 - Props become plain JSON, and the island is a separate server hop.
 - Navigation goes through `Link` from `@next-federation/island`.
 
+## Another option: a remote-components remote
+
+For a small interactive client component that must read the host's React context or use its
+router, share it as a remote component instead. It is still a separate build, with Vite and
+`nextFederationComponents` or with Rspack and `nf-describe`; the Next app itself cannot be the
+remote. The host renders it with `createRemoteComponent` and it runs on the host's React.
+
+- Only `next/link`, `next/navigation` and `next/router` can be shared, and the host provides
+  them (which ones depends on its router). Other `next/*` modules (`next/image`, `next/head`, …) cannot be shared
+  ([NF-002](../errors/invalid-config.md)): pass what the component needs as props.
+- Next.js hosts server-render it only when the remote's build is signed or pinned. Any other
+  build renders in the browser only.
+
+Keep the island path for anything the remote should render on its own server. See
+[Remote components](remote-components.md) and its
+[Islands or remote components?](remote-components.md#islands-or-remote-components) table.
+
 See [Limits](limits.md).

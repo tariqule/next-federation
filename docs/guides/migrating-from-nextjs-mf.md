@@ -1,8 +1,11 @@
 # Migrating from nextjs-mf
 
-`@module-federation/nextjs-mf` is in maintenance mode (module-federation/core#3153). It works only
-with the Pages Router, only with webpack (`NEXT_PRIVATE_LOCAL_WEBPACK`), and it makes Next apps
-expose and consume each other's code. next-federation keeps runtime composition but changes who
+`@module-federation/nextjs-mf` is in maintenance mode
+([module-federation/core#3153](https://github.com/module-federation/core/issues/3153)). As of
+nextjs-mf 8.9.0, it works only with the Pages Router and only with webpack
+(`NEXT_PRIVATE_LOCAL_WEBPACK`); its
+[plugin source](https://github.com/module-federation/core/blob/8a9677f3ea8515a5d81d729a0381955624e1e72b/packages/nextjs-mf/src/plugins/NextFederationPlugin/index.ts)
+rejects the App Router. It makes Next apps expose and consume each other's code. next-federation keeps runtime composition but changes who
 builds what: **remotes are Vite builds** (remote components can also come from Rspack), and **Next
 apps are hosts only**. This guide maps the
 concepts, then walks a Pages Router app from nextjs-mf to next-federation.
@@ -127,7 +130,7 @@ After:
 ```tsx
 // lib/cart.tsx
 import * as HostContext from '@acme/host-context'
-import { createRemoteComponent } from '@next-federation/react/components'
+import { createRemoteComponent } from '@next-federation/next/pages/components'
 
 export const Cart = createRemoteComponent<{ items: number }>({
   expose: './Cart',
