@@ -2,14 +2,39 @@ import './global.css'
 import type { Metadata } from 'next'
 import { RootProvider } from 'fumadocs-ui/provider/next'
 import type { ReactNode } from 'react'
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, TAGLINE } from '@/lib/seo'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: 'next-federation',
-    template: '%s | next-federation',
+    default: `${SITE_NAME}: ${TAGLINE}`,
+    template: `%s | ${SITE_NAME}`,
   },
-  description:
-    'Runtime UI federation for Next.js: render UI from separately deployed apps, as islands or remote components.',
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    'Next.js micro-frontends',
+    'module federation Next.js',
+    'Next.js 16',
+    'App Router',
+    'React Server Components',
+    'runtime UI composition',
+    'islands',
+  ],
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    siteName: SITE_NAME,
+    locale: 'en_US',
+    title: `${SITE_NAME}: ${TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    url: '/',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${SITE_NAME}: ${TAGLINE}`,
+    description: SITE_DESCRIPTION,
+  },
 }
 
 export default function Layout({ children }: { children: ReactNode }) {

@@ -179,8 +179,8 @@ function firstParagraph(lines) {
     out.push(line)
   }
   const text = plain(out.join(' '))
-  if (text.length <= 200) return text
-  const cut = text.slice(0, 200)
+  if (text.length <= 155) return text
+  const cut = text.slice(0, 155)
   return cut.slice(0, cut.lastIndexOf(' ')).replace(/[,;:]$/, '') + '...'
 }
 
