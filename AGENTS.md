@@ -92,8 +92,8 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 
 ## Hard rules
 
-These rules are enforced by ESLint, `pnpm guardrail` and the tests. Do not weaken a check to make a
-change pass.
+ESLint and `pnpm guardrail` enforce the import and API rules; the e2e suites and review cover the
+trust, globals and sharing rules. Do not weaken a check to make a change pass.
 
 ### Next.js internals
 
@@ -108,7 +108,7 @@ change pass.
   - Route Handlers, Pages API routes, `getServerSideProps`, `getStaticProps`
   - `next.config` keys `env`, `turbopack.resolveAlias` and `webpack`
 - No `require.cache` patching, no React monkey-patching, no forcing `--webpack`, and no dependence on
-  unreleased Next or Vercel changes.
+  Next or Vercel upstream changes.
 - Never silently make a static or ISR page dynamic. In `@next-federation/next`, every `catch`
   around a Next call or a fetch calls `unstable_rethrow(error)` from `next/navigation` first, so
   Next's control-flow errors are never swallowed.
@@ -152,9 +152,10 @@ change pass.
 
 - The library creates exactly one browser global: `globalThis.__nf_rsc__`, the flight-scope registry
   keyed by a build's absolute base URL. No other `globalThis` or `window` writes in library code.
-- Third-party globals the library permits: the Module Federation runtime's `__FEDERATION__`, and the
-  ones Module Federation and `@module-federation/vite` remote code create (`__mf_module_cache__`
-  and the `__mf_init__*` entries).
+- Third-party globals the library permits: the Module Federation runtime's `__FEDERATION__` (island
+  React sharing and remote components), and, for remote components only, the ones Module Federation
+  and `@module-federation/vite` remote code create (`__mf_module_cache__` and the `__mf_init__*`
+  entries).
 - Server-side slots the library creates, each keyed by a global symbol so that duplicate copies of a
   package share it:
   - `Symbol.for('next-federation.identity')` (`@next-federation/server`, `identity-context.ts`): the
