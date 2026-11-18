@@ -49,6 +49,11 @@ as an optional peer dependency (a components remote never uses it), so npm does 
 you: an island remote without it fails at `vite` startup with `NF-002`, naming the install command
 for your React version.
 
+Use a version patched for
+[GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3): 19.0.9, 19.1.10, 19.2.9 or
+19.3.1, or a later patch of the same minor. Older versions let an unauthenticated request run code
+on the remote's server. `vite build` refuses them with `NF-041`; the dev server warns.
+
 ```sh
 pnpm add --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@19.3.1
 pnpm add @next-federation/island

@@ -22,6 +22,7 @@ import { islandCssPlugin } from './island-css.ts'
 import { flightScopePlugin } from './scope.ts'
 import {
   assertFlightClientInstalled,
+  assertFlightClientPatched,
   assertInstalledPluginRsc,
 } from './version.ts'
 import {
@@ -228,14 +229,16 @@ export function nextFederationIslands(options: IslandRemoteOptions): Plugin[] {
     // Before plugin-rsc's config hook, which reads the environment outDirs.
     enforce: 'pre',
     config(user, env) {
-      assertFlightClientInstalled(resolve(user.root ?? process.cwd()))
+      const root = resolve(user.root ?? process.cwd())
+      assertFlightClientInstalled(root)
+      assertFlightClientPatched(root, env.command)
       builtAt = Date.now()
       resolved = resolveOptions(options, {
         command: env.command,
         env: process.env,
         now: builtAt,
         // Checked again, as Vite resolves them, when the client build starts.
-        readVersion: packageVersionReader(resolve(user.root ?? process.cwd())),
+        readVersion: packageVersionReader(root),
       })
       return remoteViteConfig(resolved, user)
     },

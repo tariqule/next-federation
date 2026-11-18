@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { NFError } from '@next-federation/sdk'
-import { assertPluginRscVersion } from '../checks.ts'
+import {
+  assertPatchedFlightClient,
+  assertPluginRscVersion,
+  patchedFlightClientVersion,
+} from '../checks.ts'
 import { packageVersionReader } from '../share.ts'
 
 export { SUPPORTED_PLUGIN_RSC_VERSION } from './constants.ts'
@@ -24,6 +29,33 @@ export function assertInstalledPluginRsc(
 
 const FLIGHT_CLIENT = 'react-server-dom-webpack'
 
+type Resolver = (id: string) => string
+
+/**
+ * Where Vite resolves `react-server-dom-webpack`: from this package (the
+ * bootstrap's import) and from the project root (plugin-rsc's server
+ * environments use the root's copy, else the one it vendors).
+ */
+function flightClientResolvers(root: string): Resolver[] {
+  return [
+    createRequire(import.meta.url).resolve,
+    createRequire(join(root, 'package.json')).resolve,
+  ]
+}
+
+/** The `package.json` of every copy the resolvers find (deduplicated). */
+function flightClientManifests(resolvers: ReadonlyArray<Resolver>): string[] {
+  const found = new Set<string>()
+  for (const resolve of resolvers) {
+    try {
+      found.add(resolve(`${FLIGHT_CLIENT}/package.json`))
+    } catch {
+      // Not installed there: try the next location.
+    }
+  }
+  return [...found]
+}
+
 /**
  * NF-002 unless `react-server-dom-webpack` (the browser flight client every
  * island bootstrap imports) resolves from this package, where Vite resolves
@@ -33,27 +65,45 @@ const FLIGHT_CLIENT = 'react-server-dom-webpack'
  */
 export function assertFlightClientInstalled(
   root: string,
-  resolvers: ReadonlyArray<(id: string) => string> = [
-    createRequire(import.meta.url).resolve,
-    createRequire(join(root, 'package.json')).resolve,
-  ]
+  resolvers: ReadonlyArray<(id: string) => string> = flightClientResolvers(root)
 ): void {
-  for (const resolve of resolvers) {
-    try {
-      resolve(`${FLIGHT_CLIENT}/package.json`)
-      return
-    } catch {
-      // Try the next location.
-    }
-  }
+  if (flightClientManifests(resolvers).length > 0) return
   let react = '<your react version>'
   try {
     react = packageVersionReader(root)('react')
   } catch {
     // React itself is missing: Vite reports that.
   }
+  const patched = patchedFlightClientVersion(react)
+  const install = patched
+    ? `react ${react} is affected by GHSA-xqc2-xf4c-x3h3, so upgrade all three to its patched version: npm install --save-exact react@${patched} react-dom@${patched} ${FLIGHT_CLIENT}@${patched}`
+    : `npm install --save-exact ${FLIGHT_CLIENT}@${react}`
   throw new NFError(
     'NF-002',
-    `${FLIGHT_CLIENT} is not installed. An island remote needs it, at exactly the version of react (${react}): npm install --save-exact ${FLIGHT_CLIENT}@${react} (pnpm add --save-exact, yarn add --exact). Only components remotes (nextFederationComponents) can do without it.`
+    `${FLIGHT_CLIENT} is not installed. An island remote needs it, at exactly the version of react (${react}): ${install} (pnpm add --save-exact, yarn add --exact). Only components remotes (nextFederationComponents) can do without it.`
   )
+}
+
+/**
+ * NF-041 when a copy of `react-server-dom-webpack` that Vite would use is
+ * affected by GHSA-xqc2-xf4c-x3h3: a build fails, the dev server warns. Also
+ * checks the copy found from the working directory, where plugin-rsc looks
+ * for the project's own copy.
+ */
+export function assertFlightClientPatched(
+  root: string,
+  command: 'build' | 'serve',
+  resolvers: ReadonlyArray<Resolver> = [
+    ...flightClientResolvers(root),
+    createRequire(join(process.cwd(), 'package.json')).resolve,
+  ]
+): void {
+  for (const manifest of flightClientManifests(resolvers)) {
+    const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as {
+      version?: unknown
+    }
+    if (typeof version === 'string') {
+      assertPatchedFlightClient(version, dirname(manifest), command)
+    }
+  }
 }

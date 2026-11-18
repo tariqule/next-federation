@@ -6,8 +6,8 @@
     "build": "node ../island-remote/node_modules/vite/bin/vite.js build"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "react-server-dom-webpack": "19.3.0"
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "react-server-dom-webpack": "19.2.9"
   }
 }

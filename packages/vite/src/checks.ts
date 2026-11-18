@@ -20,6 +20,53 @@ export function assertPluginRscVersion(
   throw new NFError('NF-025', detail)
 }
 
+const RSC_ADVISORY = 'GHSA-xqc2-xf4c-x3h3'
+const RSC_ADVISORY_URL = `https://github.com/advisories/${RSC_ADVISORY}`
+// The first patched patch release of each affected React 19 minor line.
+const RSC_PATCHED: Readonly<Record<string, number>> = {
+  '19.0': 9,
+  '19.1': 10,
+  '19.2': 9,
+  '19.3': 1,
+}
+
+/**
+ * The first patched release of `version`'s minor line when `version` is
+ * affected by GHSA-xqc2-xf4c-x3h3 (unauthenticated remote code execution in
+ * React Server Components), else null. A prerelease of an affected line below
+ * its patched release counts as affected.
+ */
+export function patchedFlightClientVersion(version: string): string | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\+.*)?$/.exec(version)
+  if (!m) return null
+  const line = `${m[1]}.${m[2]}`
+  const fixed = RSC_PATCHED[line]
+  if (fixed === undefined) return null
+  const patch = Number(m[3])
+  const affected = patch < fixed || (patch === fixed && m[4] !== undefined)
+  return affected ? `${line}.${fixed}` : null
+}
+
+/**
+ * NF-041 when the `react-server-dom-webpack` installed at `location` is
+ * affected by GHSA-xqc2-xf4c-x3h3: an island remote runs it on its server.
+ * A build fails; the dev server logs NF-041 as a warning and goes on.
+ */
+export function assertPatchedFlightClient(
+  version: string,
+  location: string,
+  command: 'build' | 'serve'
+): void {
+  const patched = patchedFlightClientVersion(version)
+  if (!patched) return
+  const detail = `react-server-dom-webpack ${version} (${location}) is affected by ${RSC_ADVISORY}, unauthenticated remote code execution in React Server Components (${RSC_ADVISORY_URL}). Install ${patched} or later, with react and react-dom at the same exact version: npm install --save-exact react@${patched} react-dom@${patched} react-server-dom-webpack@${patched}.`
+  if (command === 'serve') {
+    logger.warn('NF-041', `${detail} A production build refuses it.`)
+    return
+  }
+  throw new NFError('NF-041', detail)
+}
+
 // @vitejs/plugin-react's Babel and Fast Refresh plugins (6.x names), and
 // @vitejs/plugin-react-swc (`vite:react-swc`, `vite:react-swc:resolve-runtime`).
 const FAST_REFRESH_PLUGIN =
