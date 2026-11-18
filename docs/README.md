@@ -39,8 +39,8 @@ Build the app that provides the UI.
 - [Deployment](guides/deployment.md): serving remotes, compression and CORS.
 - [Self-hosted skew](guides/self-hosted-skew.md): build retention so open tabs keep working after a
   deploy.
-- [Deploying a remote on Vercel](guides/deploying-a-remote-on-vercel.md): production domains and
-  skew behavior on Vercel.
+- [Deploying an island remote on Vercel](guides/deploying-a-remote-on-vercel.md): production domains
+  and skew behavior on Vercel.
 
 ## Reference
 

@@ -14,8 +14,14 @@ uses webpack unless you pass `--turbopack`; both work.
 
 This guide sets up islands. A remote can also ship remote components, and a host can use both.
 
+Both come from a remote: a separate app that another team builds and deploys. The difference is
+where the remote's code runs. An island renders on the remote's server; the host embeds the HTML, and
+the island then hydrates in the browser as its own React root inside the host page. A remote
+component is code the remote ships that runs inside the host's own React tree.
+
 | | Remote components | Islands |
 | --- | --- | --- |
+| Where the remote's code runs | Inside the host's React tree: in the browser, and on the host's server for signed or pinned builds | On the remote's server, then in the browser (its own React root in the host page) |
 | What the remote ships | A client component module | Server-rendered HTML from its own server |
 | React | The host's | The remote's own |
 | Host context and router | Readable; `next/link` and the router come from the host | Do not cross in; pass data as props |
@@ -83,8 +89,9 @@ throws [`NF-002`](../errors/invalid-config.md) on Next 15 when either of them, o
 
 ## 3. Define the federation
 
-Use two files. The first is the federation config and imports nothing from Next.js. The second
-creates the island components and may import `server-only` and `next/*`.
+Use two files. The first is the federation config and imports nothing from Next.js, so that
+`nf-types` (the command that downloads the prop types of remote components) can load it with plain
+Node. The second creates the island components and may import `server-only` and `next/*`.
 
 ```ts
 // lib/federation.config.ts

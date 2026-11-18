@@ -25,7 +25,8 @@ adds a hint:
 
 - The request failed with a network error or a non-success status: the remote may be down,
   unreachable from the host, or returning an error. `502`, `503` and `504` and network errors are
-  retried once within the timeout; other statuses are not.
+  retried once by default (`retries`, per remote or `islands.retries`) within the timeout; other
+  statuses are not.
 - The remote redirected. Redirects are refused, so they count as a failed fetch.
 - A response body larger than the remote's `maxBytes` (`islands.maxBytes`, 5 MiB by default). The
   host stops reading it and does not retry.

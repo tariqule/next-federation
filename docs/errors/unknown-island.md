@@ -12,8 +12,8 @@ The remote answers `404` with `{"error":"NF-021"}`, so NF-021 is in the remote's
 log. The host's log line shows [NF-007](island-fetch-failed.md) with `(HTTP 404)` and never names
 NF-021. The host renders the island's fallback at once. A JSON 404 from the remote counts as a
 deliberate removal, whatever its body (this one, or a gateway's `{"message":"Not Found"}`), so it is
-not served from the island's last good envelope. An HTML 404 from a proxy or a CDN is still served
-stale
+not served from the island's last good envelope. A 404 that is not JSON (an HTML page from a proxy or CDN, for
+example) is still served stale
 ([stale-if-error](../guides/caching.md#stale-if-error)).
 
 ## How to fix

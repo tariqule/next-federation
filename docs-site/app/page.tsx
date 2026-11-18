@@ -45,8 +45,8 @@ export default function HomePage() {
           provides UI that your host app renders at runtime. Embed
           server-rendered React Server Component islands, or load client
           components through Module Federation 2.0 into your host&apos;s own
-          React tree. It uses public Next.js APIs only, so Next.js upgrades do
-          not break it.
+          React tree. It calls only public Next.js APIs, never Next.js
+          internals.
         </p>
         <section className="flex flex-col gap-2">
           <h2 className="text-xl font-semibold">Install</h2>

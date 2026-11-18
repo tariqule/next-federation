@@ -9,6 +9,8 @@ A Next.js 16 App Router host on port 3301.
 - `/orders`: the private `MyOrders` island, for the signed-in user.
 - `lib/federation.ts`: `defineFederation` (both remotes, identity), `createIslands` and the token
   routes, mounted at `app/api/next-federation/[...nf]/route.ts`.
+  The guides keep `defineFederation` in a separate `lib/federation.config.ts` so `nf-types` can load
+  it. This example does not run `nf-types`, so it keeps everything in one file.
 - `app/api/session/route.ts`: demo-only sign-in (any name, a plain cookie, no password).
   Replace it with your real authentication; the library only needs `getIdentity`.
 

@@ -48,8 +48,8 @@ export default withNextFederation({
 
 ## 3. Define the federation (server-side only)
 
-Use two files. The config imports nothing from Next.js, so `nf-types` (remote components) can load it
-with plain Node.
+Use two files. The config imports nothing from Next.js, so `nf-types` (the command that downloads the
+prop types of remote components) can load it with plain Node.
 
 ```ts
 // lib/federation.config.ts

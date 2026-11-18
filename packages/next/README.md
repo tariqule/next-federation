@@ -192,7 +192,7 @@ export default createFederationApiHandler(federation, {
 
 The token endpoint authenticates with your own same-origin session through `getIdentity`; the library never
 reads or sets a cookie. No session (an anonymous visitor): `200 {"token":null}`, so the island sends its
-requests without `Authorization` (hosts before this release answered `401`, which the island client still
+requests without `Authorization` (an older host answered `401`, which the island client still
 accepts). `aud` not a configured remote or missing: `400`. A request whose
 `Sec-Fetch-Site` header is present and not `same-origin`: `403` (`getIdentity` is not called).
 
@@ -294,7 +294,7 @@ loses its previous ones and its `index.d.ts` entry. Guide: [Types](https://githu
 | `createPagesIslands(federation, { getIdentity? })`        | `@next-federation/next/pages/server`                                         | `getIslandProps` (Pages Router, server only).                     |
 | `createFederationApiHandler(federation, { getIdentity })` | `@next-federation/next/pages/server`                                         | JWKS and token API route (Pages Router).                          |
 | `RemoteIsland`, `IslandProps`                             | `@next-federation/next/pages`                                                | Render an island in a page component.                             |
-| `getComponentDescriptor(federation, remote, options?)`    | `@next-federation/next/server`, `@next-federation/next/pages/server`         | Remote components: the build to render, for `RemoteComponent`.    |
+| `getComponentDescriptor(federation, remote, options?)`    | `@next-federation/next/server`, `@next-federation/next/pages/server`         | Remote components: the build to render (the `descriptor` prop).   |
 | `createRemoteComponent`, `registerSharedModules`, …       | `@next-federation/next/components`, `@next-federation/next/pages/components` | Remote components with the host's `next/*` modules.               |
 
 `@next-federation/next/island-cache` and its `/legacy` and `/cache-components` variants are internal:

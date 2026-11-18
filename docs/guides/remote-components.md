@@ -6,13 +6,20 @@ Runnable example: [examples/components-remote](../../examples/components-remote)
 A remote component is a remote's client component, loaded at runtime through the Module
 Federation 2.0 runtime and rendered inside the host's own React tree. The component runs on the
 host's React, reads the host's React context, and can take any props, including functions and
-children. Next.js hosts (App Router and Pages Router) **server-render** it and the browser hydrates
-it. SPA hosts render it in the browser.
+children. Next.js hosts (App Router and Pages Router) **server-render** it when the remote's build
+is signed or pinned (or `ssr.integrity: 'unsafe-dev'` in development or test) (see [Integrity](#integrity-server-rendering)), and the browser hydrates it.
+Any other build, and every SPA host, renders it in the browser only.
 
 ## Islands or remote components?
 
+Both come from a remote: a separate app that another team builds and deploys. The difference is
+where the remote's code runs. An island renders on the remote's server; the host embeds the HTML, and
+the island then hydrates in the browser as its own React root inside the host page. A remote
+component is code the remote ships that runs inside the host's own React tree.
+
 | | Islands | Remote components |
 | --- | --- | --- |
+| Where the remote's code runs | On the remote's server, then in the browser (its own React root in the host page) | Inside the host's React tree: in the browser, and on the host's server for signed or pinned builds |
 | What the remote ships | Server-rendered HTML + its own React tree | A client component module |
 | React | The remote's own (shared between islands when versions match) | Always the host's |
 | Host React context | Does not cross into the island | Readable (shared context modules) |
@@ -357,7 +364,7 @@ export const federation = defineFederation({
         ssr: { publicKeys: [JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)] },
         // descriptor: 'https://shop.example.com/_nf/components.json' (default)
         // revalidate: 60      seconds the descriptor is cached (default islands.revalidate)
-        // maxBuilds: 5        distinct builds a process keeps loaded
+        // maxBuilds: 5        distinct builds kept loaded per router layer (see Mixed-router hosts)
       },
     },
   },
@@ -554,7 +561,7 @@ renders every other build in the browser only (secure by default, `NF-028` logge
 1. **Signed descriptor** (recommended): the remote build signs its descriptor with an ES256 key.
 2. **Pinned builds**: the host lists allowed `buildId → digest` pairs, for teams that deploy host
    and remote together.
-3. **`integrity: 'unsafe-dev'`**: trusts the descriptor as served. Allowed only when `NODE_ENV` is
+3. **`ssr: { integrity: 'unsafe-dev' }`**: trusts the descriptor as served. Allowed only when `NODE_ENV` is
    `development` or `test` (`NF-002` at `defineFederation` otherwise).
 
 Optional checks: `components.name` (the expected container name; a descriptor naming another is

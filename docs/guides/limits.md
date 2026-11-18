@@ -1,14 +1,16 @@
 # Limits
 
-What islands do not do, and what they cost. Read this before you choose between islands and a
+What islands and remote components do not do, and what they cost. Read this before you choose between islands and a
 different approach.
 
 ## Supported
 
 React 19 (required). Next.js 16 or 15 (`>=15.5.28 <17`) App Router and Pages Router, with Turbopack
 or webpack, on Node 20.9 or newer (server rendering of remote components needs Node 20.16 or newer).
-React Router hosts are planned after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
-fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
+React Router hosts are planned after 1.0. Remotes build with Vite 8, which needs Node
+`^20.19.0 || >=22.12.0`. An island remote uses `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
+fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set). A Vite components remote uses
+`@module-federation/vite` 1.24.0 (pinned; `NF-026`).
 
 ### Next.js 15
 
@@ -78,8 +80,9 @@ Next 14 (React 18) is not supported: islands and remote components need React 19
   `@module-federation/vite`'s module cache by its name and bundled version, and the host seeds its
   own copy under that key when it satisfies the range. In the browser the key is page-wide: any
   other `@module-federation/vite` app on the page that bundles the same version reads the host's
-  copy, even when its own range is narrower. On the server it belongs to one router layer's runtime
-  (never the process-wide cache), and every remote component of that layer shares it. If two
+  copy, even when its own range is narrower. On the server it belongs to the runtime of one router layer (the App Router and the Pages
+  Router run separate copies of React, so each is a layer; never the process-wide cache), and every
+  remote component of that layer shares it. If two
   remotes bundle the same version with different ranges, they share whichever copy loaded first.
   On the server, when a layer's cache holds under a fallback key another object than the host copy
   that satisfies the range (a bundled copy cached before the host registered its own, or a module
