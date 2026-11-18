@@ -1,6 +1,18 @@
 import Link from 'next/link'
 import { HomeLayout } from 'fumadocs-ui/layouts/home'
 import { baseOptions } from '@/lib/layout.shared'
+import { REPO_URL, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/seo'
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareSourceCode',
+  name: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  url: SITE_URL,
+  codeRepository: REPO_URL,
+  programmingLanguage: 'TypeScript',
+  license: 'https://opensource.org/licenses/MIT',
+}
 
 const links = [
   { href: '/docs/getting-started/app-router', label: 'App Router host' },
@@ -21,6 +33,12 @@ export default function HomePage() {
   return (
     <HomeLayout {...baseOptions()}>
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-16">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+          }}
+        />
         <h1 className="text-4xl font-bold tracking-tight">next-federation</h1>
         <p className="text-lg text-fd-muted-foreground">
           Runtime UI federation for Next.js. A remote app, deployed on its own,

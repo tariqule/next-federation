@@ -8,6 +8,7 @@ import {
 import { notFound } from 'next/navigation'
 import { getMDXComponents } from '@/mdx-components'
 import type { Metadata } from 'next'
+import { SITE_NAME } from '@/lib/seo'
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>
@@ -40,8 +41,27 @@ export async function generateMetadata(props: {
   const page = source.getPage(params.slug)
   if (!page) notFound()
 
+  const title = page.data.title
+  const description = page.data.description
+  const image = { url: `/og${page.url}`, width: 1200, height: 630, alt: title }
   return {
-    title: page.data.title,
-    description: page.data.description,
+    title,
+    description,
+    alternates: { canonical: page.url },
+    openGraph: {
+      type: 'article',
+      siteName: SITE_NAME,
+      locale: 'en_US',
+      title,
+      description,
+      url: page.url,
+      images: [image],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [image.url],
+    },
   }
 }
