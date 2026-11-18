@@ -44,8 +44,9 @@ export default function HomePage() {
           Runtime UI federation for Next.js. A remote app, deployed on its own,
           provides UI that your host app renders at runtime. Embed
           server-rendered React Server Component islands, or load client
-          components into your host&apos;s own React tree. It uses public
-          Next.js APIs only, so Next.js upgrades do not break it.
+          components through Module Federation 2.0 into your host&apos;s own
+          React tree. It uses public Next.js APIs only, so Next.js upgrades do
+          not break it.
         </p>
         <section className="flex flex-col gap-2">
           <h2 className="text-xl font-semibold">Install</h2>

@@ -1,7 +1,7 @@
 {
   "name": "@next-federation/vite",
   "version": "0.1.1",
-  "description": "Vite plugins that build next-federation island remotes and remote components remotes.",
+  "description": "Vite plugins that build next-federation island remotes and Module Federation 2.0 remote components remotes.",
   "license": "MIT",
   "author": "tariqule",
   "homepage": "https://next-federation-docs.vercel.app/docs/api/vite",
