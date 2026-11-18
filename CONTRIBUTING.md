@@ -35,6 +35,24 @@ pnpm build
 - Update the docs (guides, package READMEs, error pages) when behavior changes.
 - Run format, lint, typecheck, build and tests before you push.
 
+## Try a pull request before it's released
+
+Every pull request, and every push to `main`, gets installable preview packages from
+[pkg.pr.new](https://pkg.pr.new) (the "Preview packages" workflow). Nothing is published to npm. The
+pkg.pr.new bot comments on the pull request with the exact install commands. They look like this:
+
+```sh
+npm i https://pkg.pr.new/@next-federation/next@<pull-request-number>
+# or a single commit: https://pkg.pr.new/@next-federation/next@<commit-sha>
+```
+
+Install every `@next-federation/*` package you use from its own URL, so they all come from the same
+preview. Pull requests from forks get previews too, after a maintainer approves the workflow run.
+
+A preview contains the pull request author's code. Maintainers have not reviewed or released it, and
+a preview URL, including a commit-SHA URL, can be replaced. Use previews to try a change, never in
+production or as a pinned dependency.
+
 ## Reporting problems
 
 Bugs and feature requests go through the issue templates. Security problems go through
