@@ -11,7 +11,10 @@ Versioning is automatic. Publishing is manual.
 - `.github/workflows/preview-packages.yml` ("Preview packages") publishes installable previews of every
   package for each pull request and each push to `main` through [pkg.pr.new](https://pkg.pr.new),
   never to npm: `npm i https://pkg.pr.new/@next-federation/<name>@<pull-request-number-or-commit-sha>`.
-  It needs the pkg.pr.new GitHub App installed on the repository, and no secret.
+  It needs the pkg.pr.new GitHub App installed on the repository, and no secret. A preview is the pull
+  request author's unreviewed code, and its URLs can be replaced, so it is never a release. Before
+  approving a workflow run for a fork, review its changes to `.github/`, package scripts and build
+  configuration.
 
 ## Flow
 

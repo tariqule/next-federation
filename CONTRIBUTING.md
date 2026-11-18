@@ -47,8 +47,11 @@ npm i https://pkg.pr.new/@next-federation/next@<pull-request-number>
 ```
 
 Install every `@next-federation/*` package you use from its own URL, so they all come from the same
-preview. Preview packages are for trying a change, not for production. Pull requests from forks get
-them too.
+preview. Pull requests from forks get previews too, after a maintainer approves the workflow run.
+
+A preview contains the pull request author's code. Maintainers have not reviewed or released it, and
+a preview URL, including a commit-SHA URL, can be replaced. Use previews to try a change, never in
+production or as a pinned dependency.
 
 ## Reporting problems
 
