@@ -15,6 +15,23 @@ with what it shows, how to run it and the guide that explains it.
 Hosts are opened as `localhost` and remotes as `127.0.0.1`, so a host and a remote are different
 sites, as in production. Ports 3300-3304 must be free.
 
+## Live demo
+
+The same five apps run on Vercel, deployed from `main`. Try them without cloning:
+
+| App               | URL                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| App Router host   | <https://next-federation-example-app-router.vercel.app>                            |
+| Pages Router host | <https://next-federation-example-pages-router.vercel.app/shop/fr>                  |
+| React SPA host    | <https://next-federation-example-react-spa.vercel.app>                             |
+| Island remote     | <https://next-federation-example-vite-remote.vercel.app/_nf/health>                |
+| Components remote | <https://next-federation-example-components-remote.vercel.app/_nf/components.json> |
+
+[What to click](#what-to-click) applies there too, with these URLs (the redeploy step is local only). The sign-in is a demo: any name, no password, and
+the orders it shows are made up. Each project's `vercel.json` holds its install and build commands;
+the island remote is deployed as in [Deploying an island remote on Vercel](../docs/guides/deploying-a-remote-on-vercel.md).
+Maintainers: [docs/maintainers/live-demo.md](../docs/maintainers/live-demo.md).
+
 ## Run them all
 
 From the repository root, after `pnpm install` and `pnpm build`:
@@ -65,6 +82,9 @@ Never commit them. In production, keep each private key in a secret store (see
 [Identity](../docs/guides/identity.md) and [Remote components](../docs/guides/remote-components.md)).
 `pnpm examples:keys --force` replaces them.
 
+`pnpm examples:demo-keys` prints new keys and the URLs as the environment variables of each live demo
+project, and writes nothing to disk ([docs/maintainers/live-demo.md](../docs/maintainers/live-demo.md)).
+
 ## Checks
 
 - `pnpm examples:smoke` builds and starts everything, then checks the remote's `/_nf/health`, the
@@ -79,6 +99,9 @@ App logs of both go to `examples/.logs/`.
 ## Copying an example
 
 The examples import only published entry points (`@next-federation/*`), linked from this repository
-with `workspace:*`. In your own app, use version ranges instead, and replace the hard-coded
-`localhost` origins with your own. Each remote keeps every build in `dist/<buildId>/`; delete old
-folders when you no longer need them.
+with `workspace:*`. In your own app, use version ranges instead. The origins default to the local
+ports above; set them with environment variables (`SHOP_ORIGIN`, `CART_ORIGIN`, `APP_ROUTER_ORIGIN`,
+`PAGES_ROUTER_ORIGIN`, `SPA_ORIGIN`; `VITE_SHOP_ORIGIN` and `VITE_CART_ORIGIN` in the SPA), as the
+live demo does (on Vercel a missing one fails the build). Each remote's `base` is its own URL: on
+Vercel, the build reads it from `NF_PUBLIC_ORIGIN`, else `VERCEL_PROJECT_PRODUCTION_URL`. Each
+remote keeps every build in `dist/<buildId>/`; delete old folders when you no longer need them.

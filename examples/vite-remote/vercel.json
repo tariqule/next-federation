@@ -1,0 +1,24 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile --filter example-vite-remote...",
+  "buildCommand": "pnpm --filter \"example-vite-remote^...\" build && node scripts/vercel-build.ts",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] && exit 1 || exit 0",
+  "outputDirectory": "dist/vercel/static",
+  "rewrites": [
+    { "source": "/_nf/:path*", "destination": "/api/nf" },
+    { "source": "/b/:build/_nf/:path*", "destination": "/api/nf" }
+  ],
+  "headers": [
+    {
+      "source": "/b/:build/assets/:file*",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}

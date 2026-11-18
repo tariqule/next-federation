@@ -12,3 +12,10 @@ header {
 .cart-count {
   margin-left: auto;
 }
+
+.demo-banner {
+  margin: 0 -24px;
+  padding: 6px 24px;
+  background: #f4f4f8;
+  font-size: 14px;
+}

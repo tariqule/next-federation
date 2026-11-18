@@ -6,6 +6,9 @@
 
 **Documentation: <https://next-federation-docs.vercel.app>**
 
+**Live demo: <https://next-federation-example-app-router.vercel.app>** (the
+[examples](examples/README.md#live-demo) on Vercel: three hosts, two remotes)
+
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
 renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App
 Router and Pages Router (Turbopack or webpack) and client-side React hosts, and remotes built with
