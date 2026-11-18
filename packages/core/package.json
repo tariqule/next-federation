@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Host configuration, island fetching and identity tokens for next-federation, independent of any framework.",
   "license": "MIT",
   "author": "tariqule",

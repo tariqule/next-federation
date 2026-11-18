@@ -1,5 +1,15 @@
 # @next-federation/next
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [2628599]
+  - @next-federation/protocol@0.1.2
+  - @next-federation/sdk@0.1.2
+  - @next-federation/core@0.1.2
+  - @next-federation/react@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes
