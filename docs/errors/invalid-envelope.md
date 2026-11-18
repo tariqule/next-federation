@@ -11,3 +11,5 @@ The body failed schema validation: it may be truncated, produced by something ot
 ## How to fix
 
 Request the island URL directly and inspect the body. Confirm the remote route is mounted and the proxy in front of it is not rewriting responses.
+
+See the [island protocol](../protocol/v1.md).

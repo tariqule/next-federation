@@ -1,12 +1,19 @@
-# Upstream issue draft: one `globalThis.__mf_init__…` key per loaded build
+# Module Federation Vite: one `__mf_init__` global per loaded build
 
-Draft only (not filed). Target: `module-federation/vite`, version 1.24.0.
+Maintainer note. Read it when you bump `@module-federation/vite` (pinned in
+`packages/vite`) or change how the host server loads remote components.
 
-## Title
+The server-side loader for remote components evaluates a remote's server build inside the host
+process. Remote code built with `@module-federation/vite` leaves one `globalThis.__mf_init__...` key
+per distinct build and writes shared modules into a process-wide `__mf_module_cache__`. This note
+records what we observed and how the library works around it. The rest of the page is the text of an
+upstream issue we may file against `module-federation/vite` (version 1.24.0); it has not been filed.
+
+## Issue title
 
 SSR: every distinct remote build loaded into a long-running server adds a `globalThis` key that is never removed
 
-## Body
+## Issue body
 
 **Setup.** A host server (Node) loads many builds of the same remote over its lifetime (each deploy
 of the remote is a new build under its own URL). The remote is built with `@module-federation/vite`

@@ -3,6 +3,9 @@
 A **private island** renders for the signed-in user. The host signs a short-lived token for one
 remote, the remote verifies it, and the island reads the user with `getIdentity()`.
 
+Runnable example: [examples/next-app-router](../../examples/next-app-router) (host) and
+[examples/vite-remote](../../examples/vite-remote) (the private `MyOrders` island).
+
 ## How it works
 
 - The host signs tokens with ES256. The token's audience (`aud`) is the remote's name. The default
@@ -99,7 +102,7 @@ than one host (several entries in `issuers`) should key its data by `(iss, sub)`
 alone. Decide permissions from the remote's own data for that key; treat claims such as `roles` as
 display hints unless the remote trusts that host to grant them.
 
-The library cannot add routes to your `app/`, so you create this file. It serves
+Create this file yourself: the library cannot add routes to your `app/`. It serves
 `GET <routesPath>/jwks` and `POST <routesPath>/token?aud=<remote>`. `routesPath` defaults to
 `/api/next-federation`.
 
@@ -204,7 +207,7 @@ export function SignOutButton() {
 }
 ```
 
-What happens after sign-out (checked on an App Router host in production):
+After sign-out on an App Router host in production:
 
 - **Islands:** the next render of a private island has no user, makes no request to the remote, and
   shows `errorFallback`. Until the page re-renders (`router.refresh()` or a navigation), the island
@@ -244,8 +247,8 @@ import { federation, getIdentity } from '../../../lib/federation'
 export default createFederationApiHandler(federation, { getIdentity })
 ```
 
-`getIdentity` takes the request. Sign-in and sign-out are API routes that set and clear the same cookie
-(`res.setHeader('Set-Cookie', ...)`); call `clearIslandTokens()` on sign-out as above. Use private
+`getIdentity` takes the request. Sign-in and sign-out are API routes that set and clear the same
+cookie (`res.setHeader('Set-Cookie', ...)`). Call `clearIslandTokens()` on sign-out as above. Use private
 islands from `getServerSideProps` only. A private island in `getStaticProps` throws `NF-002`,
 because there is no request to read the user from.
 
@@ -271,7 +274,7 @@ so does the JWKS URL:
 
 The remote's `hosts` list holds the host's **origin** (`'https://www.example.com'`, no `basePath`).
 
-**A remote knows its hosts and issuers at build time.** For every new host origin (a preview
+A remote knows its hosts and issuers at build time. For every new host origin (a preview
 deployment, a staging domain, a new dev port) add it to `hosts` and `issuers` and rebuild the remote
 ([Writing an island remote](writing-an-island-remote.md#host-origins-and-issuers-must-match-exactly)).
 In development, set `NF_ISSUER` (as in the `.env.local` above) to the origin the host actually runs
@@ -315,5 +318,5 @@ Remotes cache the JWKS for up to 10 minutes, and an unknown `kid` triggers at mo
 Rotation changes identity keys. The opaque per-user marker is derived from the first signing key, so
 it changes for every user at step 3. Anything cached per marker is refreshed once.
 
-Errors: [NF-013](../errors/identity-not-configured.md), [NF-014](../errors/invalid-token.md),
+Related errors: [NF-013](../errors/identity-not-configured.md), [NF-014](../errors/invalid-token.md),
 [NF-015](../errors/jwks-unavailable.md), [NF-016](../errors/issuer-not-allowed.md).

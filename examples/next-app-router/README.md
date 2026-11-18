@@ -1,6 +1,6 @@
 # example-next-app-router
 
-A Next.js 16 **App Router** host on port 3301.
+A Next.js 16 App Router host on port 3301.
 
 - `/` and `/products/[sku]` (`lib/ProductPage.tsx`): two public islands from the island remote
   (`ProductPanel`, `Links`), server-rendered and cached by the host, and the `CartButton` client
@@ -9,7 +9,7 @@ A Next.js 16 **App Router** host on port 3301.
 - `/orders`: the private `MyOrders` island, for the signed-in user.
 - `lib/federation.ts`: `defineFederation` (both remotes, identity), `createIslands` and the token
   routes, mounted at `app/api/next-federation/[...nf]/route.ts`.
-- `app/api/session/route.ts`: **demo-only** sign-in (any name, a plain cookie, no password).
+- `app/api/session/route.ts`: demo-only sign-in (any name, a plain cookie, no password).
   Replace it with your real authentication; the library only needs `getIdentity`.
 
 ## Run it

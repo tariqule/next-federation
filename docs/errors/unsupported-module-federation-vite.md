@@ -16,3 +16,5 @@ this is a documented option, so the plugin is pinned to exactly one version: **1
 Remove any override or resolution that replaces `@module-federation/vite`, and let
 `@next-federation/vite` install its own pinned copy. A CI canary job testing a newer version can
 set `NF_ALLOW_MF_VITE=1` to log this as a warning instead of failing; do not use it for releases.
+
+See [Remote components](../guides/remote-components.md#remote-build-it).

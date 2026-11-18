@@ -17,3 +17,5 @@ Replace `<form action={...}>` with `<Form action={...}>` imported from `@next-fe
 A `formAction` button written inside `<Form>` in the same component is not reported. One rendered by
 another component cannot be checked: the warning is then a false alarm if that component always
 renders inside `<Form>`.
+
+See [Server Actions: forms](../guides/server-actions.md#forms-no-progressive-enhancement).

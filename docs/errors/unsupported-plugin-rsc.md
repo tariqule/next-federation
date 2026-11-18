@@ -16,3 +16,5 @@ Remove any override or resolution that replaces `@vitejs/plugin-rsc`, and let
 `@next-federation/vite` install its own pinned copy. A CI canary job testing a newer plugin-rsc can
 set `NF_ALLOW_PLUGIN_RSC=1` to log this as a warning instead of failing; do not use it for
 releases.
+
+See [Writing an island remote](../guides/writing-an-island-remote.md).

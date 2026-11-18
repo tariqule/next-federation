@@ -17,3 +17,5 @@ other script, including one that resembles it, is warned about.
 ## How to fix
 
 Move head metadata to the host page and load code through the island bootstrap instead of inline scripts.
+
+See [Writing an island remote](../guides/writing-an-island-remote.md).

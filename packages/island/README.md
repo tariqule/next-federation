@@ -1,6 +1,15 @@
 # @next-federation/island
 
-Remote-side runtime for `next-federation` islands. Peer dependencies: `react ^19` and `react-dom ^19`.
+Remote-side runtime for `next-federation` islands: the host-aware `Link`, `getIdentity()` and
+the browser bootstrap. Peer dependencies: `react ^19` and `react-dom ^19`.
+
+## Install
+
+```sh
+pnpm add @next-federation/island react react-dom
+```
+
+## Usage
 
 ```tsx
 import { Link, getIdentity } from '@next-federation/island'
@@ -30,12 +39,6 @@ Use `<Form action={action}>` instead of `<form action>`: its fields stay disable
 has hydrated (islands have no progressive enhancement). Wrap an action in
 `requireIdentity(fn)` to refuse calls without a verified token (`401 NF-014`).
 
-## Install
-
-```sh
-pnpm add @next-federation/island react react-dom
-```
-
 ## API
 
 | Export                                              | Entry                                 | Purpose                                                  |
@@ -43,11 +46,20 @@ pnpm add @next-federation/island react react-dom
 | `Link`, `LinkProps`                                 | `@next-federation/island`             | Host-aware link.                                         |
 | `useIslandBridge`, `BridgeProvider`, `serverBridge` | `@next-federation/island`             | The bridge to the host (navigation, `basePath`, locale). |
 | `getIdentity()`                                     | `@next-federation/island`             | Verified identity; throws `NF-002` in client code.       |
+| `Form`, `FormProps`                                 | `@next-federation/island`             | `<form>` whose fields stay disabled until hydration.     |
+| `requireIdentity(fn)`                               | `@next-federation/island`             | Refuse an action call without a verified token.          |
 | `createIslandBootstrap`, `registerFlightScope`      | `@next-federation/island/bootstrap`   | Browser runtime wired by `@next-federation/vite`.        |
 | `initIslandShareScope(shared, options?)`            | `@next-federation/island/share-scope` | Join the page's island share scope.                      |
 
 ## Constraints
 
 Props are plain JSON, React context does not cross into an island, nested islands are unsupported
-(they render, but without identity, cache or skew handling), and there is no CSS isolation. See [Limits](../../docs/guides/limits.md) and
-[Writing an island remote](../../docs/guides/writing-an-island-remote.md).
+(they render, but without identity, cache or skew handling), and there is no CSS isolation.
+
+## Learn more
+
+- [Writing an island remote](https://github.com/tariqule/next-federation/blob/main/docs/guides/writing-an-island-remote.md)
+- [Server Actions](https://github.com/tariqule/next-federation/blob/main/docs/guides/server-actions.md)
+- [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md)
+
+License: MIT

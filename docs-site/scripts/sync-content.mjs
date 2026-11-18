@@ -34,6 +34,8 @@ if (!existsSync(path.join(repoRoot, 'docs', 'guides'))) {
 const entries = []
 const add = (src, slug) => entries.push({ src, slug })
 
+add('docs/README.md', 'index')
+add('docs/architecture.md', 'architecture')
 add('docs/guides/getting-started-app-router.md', 'getting-started/app-router')
 add(
   'docs/guides/getting-started-pages-router.md',
@@ -60,6 +62,10 @@ add(
 )
 add('docs/guides/deployment.md', 'deployment/overview')
 add('docs/guides/self-hosted-skew.md', 'deployment/self-hosted-skew')
+add(
+  'docs/guides/deploying-a-remote-on-vercel.md',
+  'deployment/deploying-a-remote-on-vercel'
+)
 add('docs/protocol/v1.md', 'protocol/v1')
 
 const errorFiles = readdirSync(path.join(repoRoot, 'docs/errors'))
@@ -98,6 +104,14 @@ function toGithub(abs) {
 }
 
 function rewriteTarget(target, srcAbs) {
+  // Package READMEs link to docs with absolute GitHub URLs (they must work on
+  // npm); on the site those go to the matching page.
+  const blob = `${GITHUB}/blob/main/`
+  if (target.startsWith(blob)) {
+    const [file, hash = ''] = target.slice(blob.length).split('#')
+    const url = urlBySource.get(path.join(repoRoot, file))
+    if (url) return url + (hash ? `#${hash}` : '')
+  }
   if (/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(target)) return target
   const hashAt = target.indexOf('#')
   const rawPath = hashAt === -1 ? target : target.slice(0, hashAt)
@@ -217,6 +231,8 @@ writeFileSync(
   JSON.stringify(
     {
       pages: [
+        'index',
+        'architecture',
         'getting-started',
         'guides',
         'remote-components',
@@ -237,6 +253,7 @@ meta('getting-started', 'Getting started', [
 ])
 meta('guides', 'Guides', [
   'writing-an-island-remote',
+  'server-actions',
   'caching',
   'identity',
   'csp',
@@ -247,7 +264,11 @@ meta('remote-components', 'Remote components', [
   'overview',
   'sharing-from-a-next-app',
 ])
-meta('deployment', 'Deployment', ['overview', 'self-hosted-skew'])
+meta('deployment', 'Deployment', [
+  'overview',
+  'self-hosted-skew',
+  'deploying-a-remote-on-vercel',
+])
 meta(
   'errors',
   'Error codes',

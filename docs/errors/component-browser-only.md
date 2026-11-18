@@ -4,7 +4,16 @@
 
 The host did not render a remote component on the server. It rendered the component's fallback in
 the server HTML and the browser rendered the component itself. The component still works; the page
-just has no server HTML for it. The message names the case:
+just has no server HTML for it. Each case below is logged once per build (and router layer), or
+once per process.
+
+A static regeneration that runs before the server process has loaded the build is not this code:
+the components still render on the server, at request time. See
+[NF-039](component-deferred.md).
+
+## Why
+
+The message names the case:
 
 - **Unverified build**: the build is neither signed by a key in `components.ssr.publicKeys` nor
   pinned in `components.ssr.pinned` (and `integrity: 'unsafe-dev'` is not set in development).
@@ -30,22 +39,16 @@ just has no server HTML for it. The message names the case:
   one registered twice, a fallback copy cached before the host registered its own, or a dev server
   such as `next dev --webpack` reloaded the host's modules).
 
-Each case is logged once per build (and router layer), or once per process.
-
-A static regeneration that runs before the server process has loaded the build is not this code:
-the components still render on the server, at request time. See
-[NF-039](component-deferred.md).
-
 ## How to fix
 
 - Sign the remote's descriptor (`NF_COMPONENTS_SIGNING_KEY` at build time, `publicKeys` in the
-  host) or pin its builds. See `docs/guides/remote-components.md`.
+  host) or pin its builds. See [Remote components: integrity](../guides/remote-components.md#integrity-server-rendering).
 - Pass the descriptor from `getComponentDescriptor` unchanged.
 - Run the host on Node.js 20.16 or newer.
 - Nested remotes: expose the nested components from their own remote and use them from the host
   directly.
 - Mixed App Router and Pages Router hosts: build remotes with a Module Federation plugin version the
-  library lists (see "Mixed-router hosts" in `docs/guides/remote-components.md`).
+  library lists (see [Mixed-router hosts](../guides/remote-components.md#mixed-router-hosts)).
 - Stale share cache in development: restart the dev server. In production, install one copy of
   each host-provided module and register it once.
 - `components.ssr: false` turns server rendering off for a remote without a warning.

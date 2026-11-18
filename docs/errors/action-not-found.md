@@ -17,3 +17,5 @@ did not register as a Server Action.
 Reload the page so the island and its action ids come from the same build. Check that the function
 is exported from a file that starts with `'use server'` and that the remote build in use contains
 it.
+
+See [Server Actions: errors](../guides/server-actions.md#errors).

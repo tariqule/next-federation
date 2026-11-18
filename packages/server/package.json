@@ -1,7 +1,7 @@
 {
   "name": "@next-federation/server",
   "version": "0.1.0",
-  "description": "Server-side helpers for next-federation islands: tokenizer-based SSR HTML cleanup.",
+  "description": "Server runtime for next-federation island remotes: the island request handler, identity verification, HTML cleanup and the nf-serve build server.",
   "license": "MIT",
   "author": "tariqule",
   "homepage": "https://github.com/tariqule/next-federation#readme",

@@ -36,3 +36,5 @@ look at the logged cause. When the remote comes back the host picks it up on its
 descriptor is fetched again, and a server-side failure is retried after one second. For `nf-types`,
 check the logged cause, fix the remote's build when it is the cause (fewer or smaller declaration
 files) and run `nf-types` again.
+
+See [Remote components: runtime behaviour](../guides/remote-components.md#runtime-behaviour) and [Content Security Policy](../guides/csp.md).

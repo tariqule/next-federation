@@ -15,3 +15,5 @@ served from a cache, across deploys).
 ## How to fix
 
 Open the bootstrap URL from the envelope in the browser. Allow the remote's origin in `script-src` and make sure the build is still deployed.
+
+See [Content Security Policy](../guides/csp.md) and [Self-hosted build retention](../guides/self-hosted-skew.md).

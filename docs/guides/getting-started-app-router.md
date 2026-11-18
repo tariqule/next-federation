@@ -1,5 +1,7 @@
 # Getting started: Next.js App Router host
 
+Runnable example: [examples/next-app-router](../../examples/next-app-router)
+
 This guide embeds an island from a remote app in a Next.js 16 or 15 App Router page. It covers the
 host only. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
 
@@ -22,7 +24,7 @@ This guide sets up islands. A remote can also ship remote components, and a host
 | Remote code on the host's server | Yes, for verified builds | Never |
 | Choose it for | Interactive pieces that must feel native: menus, carts, widgets in a client-heavy app | Server-rendered content the remote owns: product pages, data the remote fetches with its secrets |
 
-Remote components: see [Remote components](remote-components.md).
+For remote components, see [Remote components](remote-components.md).
 
 ## 1. Install
 
@@ -63,8 +65,8 @@ A project from `create-next-app` 16.4.6 has `cacheComponents: true` and `partial
 - A private island is a dynamic hole inside the island's own `<Suspense>`, unless you render it
   with [`blocking`](#private-content-in-the-first-html-blocking). Put your own `'use cache'`
   components around a `RemoteIsland` only inside `<Suspense>`.
-- Next 16 keeps routes you visited mounted but hidden (the validation saw this with the scaffold
-  defaults), so an island on a route you navigated away from can stay mounted in the background.
+- With these defaults Next 16 keeps routes you visited mounted but hidden, so an island on a route
+  you navigated away from can stay mounted in the background.
 - `partialPrefetching: true` works with private islands: a signed-in private island renders with no
   "unstable value `Date.now()`" log in `next dev` or `next start`.
 

@@ -1,6 +1,14 @@
 # @next-federation/server
 
-Server-side helpers for `next-federation` islands.
+Server-side runtime for `next-federation` island remotes. It provides the framework-free island
+handler, the identity verifier, HTML cleanup, and `nf-serve`, a self-hosted server that keeps
+retired builds online. `nf-describe` describes a Module Federation remote as a remote components build.
+
+## Install
+
+```sh
+pnpm add @next-federation/server
+```
 
 ## `stripIslandHtml(html)`
 
@@ -24,14 +32,14 @@ regular expression, so `<SCRIPT>`, a `>` inside an attribute value, `</script >`
 `<svg>` are handled. Escaped text such as `&lt;script&gt;` is never touched.
 
 This is cleanup of framework output, **not a security boundary**. Hosts only accept envelopes from
-allowlisted remotes; do not use it to sanitize untrusted HTML.
+allowlisted remotes. Do not use it to sanitize untrusted HTML.
 
 ## `createIslandHandler(options)`
 
 A framework-free `(req: Request) => Promise<Response>` that serves island envelopes at
 `GET|POST <prefix>/_nf/island/<name>` and `GET <prefix>/_nf/health`. It works with any server that
 speaks the Web `Request`/`Response` API. The wire contract is in
-[docs/protocol/v1.md](../../docs/protocol/v1.md); that document owns the status table.
+[docs/protocol/v1.md](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md); that document owns the status table.
 
 ```ts
 import { createIslandHandler } from '@next-federation/server'
@@ -145,8 +153,6 @@ keys keep verifying (and a revoked key keeps verifying until the cache expires).
 2. Wait at least the JWKS cache max age (10 minutes).
 3. Move the new key first, so it signs; keep the old key published until its last token expired.
 
-Install: `pnpm add @next-federation/server`. License: MIT
-
 ## `@next-federation/server/node` and `nf-serve`
 
 A self-hosted production server that keeps every retained build of a remote online, so pages and
@@ -199,7 +205,7 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
   `/b/<build>/nf-components.json` its descriptor, `/_nf/components.json` the current build's
   descriptor (`no-store`), and `/_nf/health` answers itself. Retention and `410` apply unchanged.
 
-See [docs/guides/self-hosted-skew.md](../../docs/guides/self-hosted-skew.md) for the operator rule.
+See [docs/guides/self-hosted-skew.md](https://github.com/tariqule/next-federation/blob/main/docs/guides/self-hosted-skew.md) for the operator rule.
 
 ## `nf-describe`
 
@@ -221,7 +227,7 @@ nf-describe --dir dist/<buildId> --verify [--public-key <JWK JSON | JWK file>]..
   index only when the descriptor signs one, so an older build with an unsigned `@mf-types/` folder
   still verifies.
 
-See [Remote components](../../docs/guides/remote-components.md) for the full workflow.
+See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md) for the full workflow.
 
 ## API
 
@@ -231,6 +237,7 @@ See [Remote components](../../docs/guides/remote-components.md) for the full wor
 | `stripIslandHtml(html)`                                   | `@next-federation/server`      | Remove hoistable and script tags from island HTML.         |
 | `createIdentityVerifier(options)`                         | `@next-federation/server`      | Verify host tokens against an issuer map (`NF-014/15/16`). |
 | `getIdentity()`, `runWithIdentity(identity, fn)`          | `@next-federation/server`      | Read or set the verified identity for one render.          |
+| `requireIdentity(fn)`                                     | `@next-federation/server`      | Refuse a Server Action call without a verified token.      |
 | `serveBuilds`, `planRetention`, `toNodeListener`          | `@next-federation/server/node` | Self-hosted multi-build server (also the `nf-serve` CLI).  |
 
 ## Constraints
@@ -240,4 +247,13 @@ See [Remote components](../../docs/guides/remote-components.md) for the full wor
 - The token `aud` is this remote's `name`; tokens are ES256 only.
 - Stripping island HTML is cleanup, not a security boundary.
 
-Guides: [Writing an island remote](../../docs/guides/writing-an-island-remote.md), [Identity](../../docs/guides/identity.md), [Deployment](../../docs/guides/deployment.md).
+## Learn more
+
+- [Writing an island remote](https://github.com/tariqule/next-federation/blob/main/docs/guides/writing-an-island-remote.md)
+- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md)
+- [Deployment](https://github.com/tariqule/next-federation/blob/main/docs/guides/deployment.md)
+- [Self-hosted skew](https://github.com/tariqule/next-federation/blob/main/docs/guides/self-hosted-skew.md)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
+- [Island protocol v1](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md)
+
+License: MIT

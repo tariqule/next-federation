@@ -1,6 +1,9 @@
 # Remote components
 
-A remote component is a remote's **client component**, loaded at runtime through the Module
+Runnable example: [examples/components-remote](../../examples/components-remote) (shared context:
+[examples/cart-context](../../examples/cart-context))
+
+A remote component is a remote's client component, loaded at runtime through the Module
 Federation 2.0 runtime and rendered inside the host's own React tree. The component runs on the
 host's React, reads the host's React context, and can take any props, including functions and
 children. Next.js hosts (App Router and Pages Router) **server-render** it and the browser hydrates
@@ -25,12 +28,12 @@ router and event handlers.
 ## Start from create-vite
 
 `npm create vite@latest widgets -- --template react-ts` gives you a Vite 8 project with things a
-components remote does not need. These are the edits that worked in the validation:
+components remote does not need. Make these edits:
 
 1. **`@vitejs/plugin-react`:** remove it, or exclude your exposed files from it
    (`react({ exclude: [/src\/Cart\.tsx$/] })`). An exposed module compiled with Fast Refresh fails
-   the build with `NF-002`, because a host page has no Vite preamble. The validated remote removed
-   the plugin: Vite compiles JSX without it.
+   the build with `NF-002`, because a host page has no Vite preamble. Vite compiles JSX without the
+   plugin.
 2. **`index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/assets/`:** the remote
    build only reads the files in `exposes`, so the scaffold's page is unused. Delete them, or keep
    the app running on its own with a second Vite config
@@ -44,9 +47,8 @@ components remote does not need. These are the edits that worked in the validati
    The scaffold's `tsc -b && vite build` still works as a type check when every file in `src`
    compiles. `vite preview` does not serve a remote: use `nf-serve`.
 5. **Dependencies:** `@next-federation/vite` and `@next-federation/server` as dev dependencies. If an
-   exposed module imports `next/link`, add `next` as a dev dependency too (the validated remote
-   lists it, with `shared: { 'next/link': {} }`). Pin `react` and `react-dom` to one exact version
-   ([React versions](../../README.md)).
+   exposed module imports `next/link`, add `next` as a dev dependency too and list it with `shared: { 'next/link': {} }`. Pin `react` and `react-dom` to one exact version
+   ([React versions](../../README.md#status-and-compatibility)).
 6. **oxlint** (the `lint` script and `.oxlintrc.json`) is independent of the build; keep it or
    delete it. Its `react/only-export-components` rule exists for Fast Refresh, which exposed modules
    do not use.
@@ -54,7 +56,7 @@ components remote does not need. These are the edits that worked in the validati
    `types` the version does not matter. create-vite installs TypeScript 7; with it the build
    succeeds, warns `NF-002` naming `npm install -D typescript@6`, and publishes no types. Pin
    `typescript@~6` in a remote that publishes types. The plugin
-   reads the project's root `tsconfig.json`; create-vite's references-only file worked as it is.
+   reads the project's root `tsconfig.json`; create-vite's references-only file works as it is.
 
 ## Remote: build it
 
@@ -103,10 +105,9 @@ Serve it with `nf-serve --dir dist --port 4110`: `/_nf/components.json` is the c
 descriptor (`Cache-Control: no-store`), `/b/<buildId>/…` serves every build kept by retention, and
 a retired build answers `410` (`NF-023`), exactly as for islands.
 
-Exposed modules must not be compiled with Fast Refresh (a host page has no Vite preamble). Without
-`@vitejs/plugin-react` nothing is needed (Vite compiles JSX). The build fails with `NF-002` when an
-exposed module contains Fast Refresh code. A standalone app of the same project keeps the plugin in
-its own config (next section).
+The build fails with `NF-002` when an exposed module contains Fast Refresh code (a host page has no
+Vite preamble), so leave `@vitejs/plugin-react` out of this config. A standalone app of the same
+project keeps the plugin in its own config (next section).
 
 ### Keeping a standalone app
 
@@ -160,9 +161,7 @@ export default defineConfig({
 The app and the remote build the same component files: `npm run dev` and `npm run build` are the
 app (its own React, `dist/`), `npm run build:remote` and `npm run start:remote` are the remote
 (host-provided React, `dist-remote/`). Use a separate `outDir` so neither build empties the other's
-folder. This is the setup the validation ran: a create-vite app served by `vite preview` and, from
-the same source, a signed components remote that App Router, Pages Router and Next 15 hosts
-server-render.
+folder.
 
 `@module-federation/vite` is pinned to exactly **1.24.0** (`NF-026` otherwise; `NF_ALLOW_MF_VITE=1`
 for a canary job only).
@@ -287,8 +286,8 @@ export default [
 Then describe the build (`NF_COMPONENTS_SIGNING_KEY` set signs it) and serve it:
 
 ```sh
-NF_BUILD_ID=2026-11-16a rspack build
-nf-describe --dir dist/2026-11-16a --ssr-entry server/remoteEntry.js
+NF_BUILD_ID=v1 rspack build
+nf-describe --dir dist/v1 --ssr-entry server/remoteEntry.js
 nf-serve --dir dist --port 4110
 ```
 
@@ -461,9 +460,9 @@ Client-side navigation and prefetching work inside each router.
 
 **In `next dev`, a Pages Router page that links to an App Router route logs a `404` in the browser
 console** (`Failed to load resource: the server responded with a status of 404`), seen when a remote
-`next/link` on a `pages/` route pointed at an `app/` route. The validation's production run (`next
-start`) had a clean console for the same navigation. It is a dev-time message about the prefetch of
-a route the other router owns.
+`next/link` on a `pages/` route pointed at an `app/` route. A production run (`next start`) logs
+nothing for the same navigation. It is a dev-time message about the prefetch of a route the other
+router owns.
 
 The two routers run two Reacts in one server process: the App Router uses Next's vendored copy,
 the Pages Router the one in `node_modules`. A remote component must render on the React of the
@@ -774,7 +773,7 @@ remote](#host-configure-the-remote). Three things to know:
   valid JSON`. Load the file with Node's `--env-file=.env.local` as above (or `set -a; . ./.env.local;
   set +a` in a shell, then `nf-types ...`). The `cli.js` path above is what the `nf-types` bin runs,
   so it works with any package manager.
-- **`.ts` configs need a Node that strips types** (Node 24 in the validation), and print
+- **`.ts` configs need a Node that strips types**, and print
   `[MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of .../federation.config.ts is not specified`
   when `package.json` has no `"type"`. The warning is harmless (Node re-parses the file as an ES
   module). A `.mjs` config avoids both, on every Node.
@@ -822,7 +821,7 @@ checkout fails with `Cannot find name 'LayoutProps'`), and commit the folder or 
 regenerated on every run). Modules the declarations import (`react`, shared packages) resolve from
 the host's own dependencies.
 
-**If you skip it**, `RemoteProps` has nothing to read, and TypeScript (so `next build`, which type
+If you skip it, `RemoteProps` has nothing to read, and TypeScript (so `next build`, which type
 checks) fails on the line that uses it with an error that does not mention `nf-types`:
 
 ```
@@ -981,25 +980,21 @@ differ until it hydrates.
   module registered late) it removes the old one from the MF registry, and when a layer moves to a
   new scope ([Mixed-router hosts](#mixed-router-hosts)) it also drops the old scope's tagged
   registry entries, so neither stays alive. `@module-federation/vite` keeps one `__mf_init__…`
-  entry per distinct build (a settled promise and its resolvers), never removed (upstream draft:
-  `docs/upstream/mf-vite-init-keys.md`); the host keeps it in the layer's scope, not on
-  `globalThis`.
-- **Mixed-router hosts** (App Router and Pages Router routes in one host): both routers
-  server-render remote components, each on its own React, and each router layer loads its own copy
-  of a remote build ([Mixed-router hosts](#mixed-router-hosts)). Only builds the server loader
-  knows (`@module-federation/vite` 1.24.0, `@module-federation/enhanced` 2.9.2, 2.9.3) server-render in
-  both layers; all other builds server-render in one layer per process, the first in which one
-  of them evaluated. Tested: an App
-  Router host with a Pages route server-renders the Vite remote and the Rspack remote in both
-  layers, in either order, the one-React probe holds in each, and both hydrate without warnings.
+  entry per distinct build (a settled promise and its resolvers), never removed (see the
+  [maintainer note](../maintainers/mf-vite-init-keys.md)); the host keeps it in the layer's scope,
+  not on `globalThis`.
+- **Mixed-router hosts**: each router layer loads its own copy of a remote build, and only builds
+  the server loader knows server-render in both layers ([Mixed-router hosts](#mixed-router-hosts)).
+  Tested: an App Router host with a Pages route server-renders the Vite remote and the Rspack
+  remote in both layers, in either order, the one-React probe holds in each, and both hydrate
+  without warnings.
 - **First request after a deploy (App Router)**: the server streams the component (the shell has the
   fallback, the markup follows in the same response); later requests render it inline.
 - **Server logs**: when a build renders browser-only at request time (an integrity failure, for
   example), Next logs the error React reports for that Suspense boundary, besides the `NF-` line.
-- **`next dev --webpack`**: when the dev server compiles another route it re-creates the host's
-  server modules; the re-created runtime loads the remote's server code again and keeps
-  server-rendering ([Mixed-router hosts](#mixed-router-hosts)). A runtime whose own share cache
-  holds another instance of a host module renders browser-only (`NF-028`, "stale").
+- **`next dev --webpack`**: the dev server re-creates the host's server modules when it compiles
+  another route ([Mixed-router hosts](#mixed-router-hosts)). A runtime whose own share cache holds
+  another instance of a host module renders browser-only (`NF-028`, "stale").
 - **Load timeout**: one load attempt (manifest, entry and chunks) fails after 10 s, so a stalled
   remote never holds a server render; the server then renders the component in the browser only.
 - **Edge runtime**: no server rendering (no Node built-ins); components render in the browser.

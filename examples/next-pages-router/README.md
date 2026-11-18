@@ -1,6 +1,6 @@
 # example-next-pages-router
 
-A Next.js 16 **Pages Router** host on port 3302, with `basePath: '/shop'` and the locales `en`
+A Next.js 16 Pages Router host on port 3302, with `basePath: '/shop'` and the locales `en`
 (default) and `fr`.
 
 - `/shop`, `/shop/fr`, `/shop/products/[sku]` (`lib/ProductPage.tsx`, props from
@@ -12,7 +12,7 @@ A Next.js 16 **Pages Router** host on port 3302, with `basePath: '/shop'` and th
   `getServerSideProps`; the page props carry the rendered envelope only.
 - `lib/federation.ts`: imported from `getServerSideProps` and API routes only, so Next keeps it out
   of the browser bundle. The identity issuer includes the basePath.
-- `pages/api/session.ts`: **demo-only** sign-in (any name, a plain cookie, no password).
+- `pages/api/session.ts`: demo-only sign-in (any name, a plain cookie, no password).
 
 ## Run it
 

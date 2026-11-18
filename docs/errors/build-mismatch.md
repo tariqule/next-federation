@@ -11,3 +11,5 @@ The remote deployed a new build between the server render and the client load, s
 ## How to fix
 
 This is usually transient: reload to pick up the new build. Keep old builds available during rollout (see NF-023) so in-flight pages keep working.
+
+See [Self-hosted build retention](../guides/self-hosted-skew.md).

@@ -107,7 +107,7 @@ not per island.
 ## Errors
 
 - An action that throws rejects the caller's promise. In a production build the message is redacted:
-  the caller's `error.message` is **"Minified React error #441"** (the validation threw
+  the caller's `error.message` is **"Minified React error #441"** (in a test, an action threw
   `new Error('secret internal detail ...')` and the secret stayed on the remote), and the remote logs
   [`NF-033`](../errors/action-failed.md) with the real error. A user cannot act on #441, so **return
   an error state instead of throwing** for failures the user should see:

@@ -3,7 +3,7 @@
 //   NF_MEASURE=1 pnpm e2e:prod -- measure            (sharing on, the default)
 //   NF_MEASURE=1 NF_SHARE=0 pnpm e2e:prod -- measure (sharing off)
 // Each run records its own entry (`share: true` or `share: false`) in
-// docs/measurements.json and keeps the other one. The budgets below fail the
+// test/e2e/data/measurements.json and keeps the other one. The budgets below fail the
 // spec when exceeded, so a size regression is visible.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
@@ -24,7 +24,7 @@ test.skip(
 )
 
 const SHARE = process.env.NF_SHARE !== '0'
-const OUT = new URL('../../docs/measurements.json', import.meta.url)
+const OUT = new URL('./data/measurements.json', import.meta.url)
 const REMOTES = { a: REMOTE_A, b: REMOTE_B }
 const FIRST_LIVE = { timeout: 30_000 }
 const KB = 1024

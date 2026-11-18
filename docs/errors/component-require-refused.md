@@ -25,3 +25,5 @@ host-provided. List every other package the host owns (a context module, a desig
 remote's `shared` option and in the host's `createRemoteComponent({ shared })` (or
 `registerSharedModules`). A shared package with `fallback: true` is bundled into the remote's chunks
 as well. Packages the remote uses only itself are bundled into its chunks and never required.
+
+See [Remote components: sharing modules](../guides/remote-components.md#sharing-modules).

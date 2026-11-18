@@ -14,3 +14,5 @@ flight-client scope.
 ## How to fix
 
 Use a full URL, for example `https://shop.example.com/`.
+
+See [Writing an island remote](../guides/writing-an-island-remote.md#2-configure-vite).

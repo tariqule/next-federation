@@ -11,6 +11,7 @@ const links = [
     label: 'Writing an island remote',
   },
   { href: '/docs/remote-components/overview', label: 'Remote components' },
+  { href: '/docs/architecture', label: 'Architecture' },
   { href: '/docs/errors/unknown-island', label: 'Error codes' },
   { href: '/docs/protocol/v1', label: 'Island protocol v1' },
   { href: '/docs/api/core', label: 'Package API' },
@@ -22,13 +23,11 @@ export default function HomePage() {
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-16">
         <h1 className="text-4xl font-bold tracking-tight">next-federation</h1>
         <p className="text-lg text-fd-muted-foreground">
-          Runtime composition of React UI from separately deployed apps, for
-          Next.js 16 (App Router and Pages Router, Turbopack or webpack). Load
-          interactive components from a remote app at runtime, or embed
-          server-rendered React Server Component islands that run on the
-          remote&apos;s own server. It uses public framework APIs only, so Next
-          upgrades do not break it, and no build step is required in the host
-          app.
+          Runtime UI federation for Next.js. A remote app, deployed on its own,
+          provides UI that your host app renders at runtime. Embed
+          server-rendered React Server Component islands, or load client
+          components into your host&apos;s own React tree. It uses public
+          Next.js APIs only, so Next.js upgrades do not break it.
         </p>
         <section className="flex flex-col gap-2">
           <h2 className="text-xl font-semibold">Install</h2>
@@ -38,9 +37,6 @@ export default function HomePage() {
               @next-federation/react react react-dom
             </code>
           </pre>
-          <p className="text-sm text-fd-muted-foreground">
-            The packages are not yet published to npm.
-          </p>
         </section>
         <section className="flex flex-col gap-3">
           <h2 className="text-xl font-semibold">Start here</h2>

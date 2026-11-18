@@ -16,4 +16,6 @@ island's `errorFallback` renders. The page stays static either way and retries s
 
 ## How to fix
 
-Investigate remote latency first. If the render is legitimately slow, raise the remote's `timeoutMs` setting.
+Investigate remote latency first. If the render is legitimately slow, raise `timeoutMs` for that remote in `defineFederation()` (or `islands.timeoutMs` for all remotes; the default is 3000 ms).
+
+See [Getting started: App Router](../guides/getting-started-app-router.md#timeout-and-retries).

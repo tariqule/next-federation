@@ -305,7 +305,7 @@ for (const host of HOSTS) {
         const url = route.request().url()
         // The scripts are down; the stylesheet still loads: a streamed App
         // Router boundary whose stylesheet fails is client-rendered by React
-        // (documented in client-components.md).
+        // (documented in docs/guides/remote-components.md).
         if (url.endsWith('.css')) return route.continue()
         // One manifest request per attempt (the modulepreloads of the server
         // HTML are blocked too, but not counted).

@@ -1,7 +1,7 @@
 # Releasing
 
 Every `@next-federation/*` package is versioned together (see `fixed` in `.changeset/config.json`).
-Versioning is automatic; **publishing is manual**.
+Versioning is automatic. Publishing is manual.
 
 - `.github/workflows/release.yml` ("Version Packages") runs on every push to `main` and opens or
   updates a "Version Packages" pull request from the pending changesets. It never publishes.

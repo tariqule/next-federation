@@ -10,4 +10,6 @@ Builds are kept for a retention window and then retired; a page cached longer th
 
 ## How to fix
 
-Reload the page so it picks up the current build. If this happens often, lengthen the remote's build retention.
+Reload the page so it picks up the current build. If this happens often, lengthen the remote's build retention. `nf-serve` keeps the newest 3 builds and any build younger than 24 hours (`--max-builds`, `--min-age-hours`).
+
+See [Self-hosted build retention](../guides/self-hosted-skew.md).

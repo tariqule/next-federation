@@ -1,43 +1,52 @@
-# Engineering conventions for the main library
+# Code conventions
 
-These apply to the real `next-federation` packages, starting in Phase 1. The `spike/` folder is
-throwaway code and doesn't follow them.
+Conventions for the `next-federation` packages. Read [AGENTS.md](../AGENTS.md) for the repo map and
+the hard rules, and [CONTRIBUTING.md](../CONTRIBUTING.md) for the pull request process. The
+conventions follow the Next.js and Module Federation repositories.
 
-Sources: the Next.js repo (`vercel/next.js`) and the Module Federation repo
-(`module-federation/core`). Where they conflict, the user chose (2026-11-14) as noted.
+## Formatting and linting
 
-## Formatting and linting: Next.js style
-- Prettier, matching Next.js `.prettierrc.json`: `{ "trailingComma": "es5", "singleQuote": true, "semi": false }`.
-- ESLint flat config (`eslint.config.mjs`) with `typescript-eslint` recommended, as Next.js does.
-- `.editorconfig`: 2 spaces, UTF-8, final newline (both repos agree).
-- `.alexrc` inclusive-language lint for docs (Next.js).
-- Lint guardrail: `no-restricted-imports` bans `next/dist/**`. CI also greps for `__RSC_MANIFEST`,
-  `__next_*`, `__next_f` and `connection(` in adapters (design §11).
+- Prettier, with the Next.js settings: `{ "trailingComma": "es5", "singleQuote": true, "semi": false }`.
+- ESLint flat config (`eslint.config.mjs`) with the `typescript-eslint` recommended rules.
+- `.editorconfig`: 2 spaces, UTF-8, final newline.
+- `.alexrc` configures an inclusive-language lint for docs (`pnpm lint:docs`).
+- `no-restricted-imports` bans `next/dist/**`. CI also greps for `__RSC_MANIFEST`, `__next_*`,
+  `__next_f` and `connection(` in the adapters (`pnpm guardrail`).
 
 ## Tests
-- Unit tests use **rstest** (Module Federation), in `__tests__/*.spec.ts` beside each package's `src/`.
-- e2e tests use **Playwright**. Following Next.js, every e2e suite runs in **both development
-  (`next dev`) and production (`next build && next start`)**, under **both Turbopack and webpack**.
-- Test fixtures are real apps under `test/fixtures/` (App Router host, Pages Router host, Vite SPA
-  host, island remotes, a Mode A remote). The spike apps are the starting point.
-- No test may silently reuse a server on a busy port (`reuseExistingServer: false`).
 
-## Packages (Module Federation layout)
-- Scoped packages, `@next-federation/<name>` (mirrors `@module-federation/<name>`).
+- Unit tests use rstest, in `__tests__/*.spec.ts` beside each package's `src/`.
+- End-to-end tests use Playwright. Each suite runs in development (`next dev`) and production
+  (`next build && next start`), under Turbopack and webpack.
+- Test fixtures are real apps under `test/fixtures/`: an App Router host, a Pages Router host, a Vite
+  SPA host, island remotes and a components remote.
+- A test never silently reuses a server on a busy port (`reuseExistingServer: false`).
+
+## Packages
+
+- Scoped packages named `@next-federation/<name>`, like `@module-federation/<name>`.
 - Each package has `src/`, `__tests__/`, `README.md`, `CHANGELOG.md`, `tsconfig.json`,
-  `tsconfig.lib.json`, `tsdown.config.ts` (build to `dist/`), and an `exports` map.
-- Releases use **changesets**. Commits follow **conventional commits** (commitlint), as in Module Federation.
+  `tsconfig.lib.json`, `tsdown.config.ts` (builds to `dist/`) and an `exports` map.
+- Releases use changesets. Commits follow conventional commits (commitlint). See
+  [Releasing](releasing.md).
 
 ## Errors and logging
-- A category logger, `createLogger('[ next-federation ]')`, as Module Federation does for
-  `[ Federation Runtime ]`. No bare `console.*` in library code.
-- Numbered error codes (`NF-001`…) in an `error-codes` module, as Module Federation does (`RUNTIME-008`).
-- Every user-facing error message links a docs page, `docs/errors/<slug>.md`, as Next.js does with
-  `nextjs.org/docs/messages/<slug>`.
 
-## Docs for contributors (Next.js)
-- `AGENTS.md` at the root: structure, commands, conventions.
-- A `README.md` in every package folder. Read the READMEs on the path before editing a file.
+- Library code logs through a category logger, `createLogger('[ next-federation ]')`. No bare
+  `console.*`.
+- Errors have numbered codes (`NF-001` and up) in the `error-codes` module of
+  `@next-federation/sdk`.
+- Every user-facing error message links to a docs page, `docs/errors/<slug>.md`. Each page says what
+  happened, why, and how to fix it. `pnpm check:error-docs` fails when a code has no page.
+
+## Docs
+
+- Every package folder has a `README.md`. Read the READMEs on the path before you edit a file.
+- Write in plain, direct prose. Use the same terms throughout: islands, remote components, host,
+  remote, build, descriptor, envelope.
+- Change docs in the same pull request as the behavior they describe.
 
 ## Git
-- No tool attribution in commit messages, PR descriptions or repo descriptions.
+
+- Do not add tool attribution to commit messages, pull request descriptions or repository
+  descriptions.

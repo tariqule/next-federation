@@ -1,6 +1,7 @@
 {
   "name": "next-federation-workspace",
   "private": true,
+  "description": "Monorepo for next-federation, runtime UI federation for Next.js.",
   "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=24"

@@ -2,7 +2,7 @@
 
 ## What happened
 
-A remote component (Mode A) threw an error while it rendered. The host keeps running and the page
+A remote component threw an error while it rendered. The host keeps running and the page
 still answers 200; only that component is affected.
 
 - **On the server**: React error boundaries do not run during a server render, so the host catches
@@ -34,3 +34,5 @@ component it renders, or from a class, `memo` or `forwardRef` export, still reac
 renderer: at request time the browser renders that part, and `next build` fails a build-time
 prerender of a static page. Make such components safe to render on the server, or read the
 descriptor with `{ dynamic: true }` on that page so it is rendered per request.
+
+See [Remote components: runtime behaviour](../guides/remote-components.md#runtime-behaviour).

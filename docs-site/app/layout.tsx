@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: '%s | next-federation',
   },
   description:
-    'Runtime composition of React UI from separately deployed apps, for Next.js 16.',
+    'Runtime UI federation for Next.js: render UI from separately deployed apps, as islands or remote components.',
 }
 
 export default function Layout({ children }: { children: ReactNode }) {

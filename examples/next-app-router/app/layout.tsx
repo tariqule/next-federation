@@ -10,7 +10,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {/* Host state the remote CartButton reads (Mode A shares context). */}
+        {/* Host state the remote CartButton reads (remote components share context). */}
         <CartProvider>
           <header>
             <strong>App Router host</strong>

@@ -11,3 +11,5 @@ Mixing modes changes internal data structures and causes hydration errors that a
 ## How to fix
 
 Build and run the remote with the same `NODE_ENV` on server and client, and do not serve a development bootstrap against a production render.
+
+See [Writing an island remote](../guides/writing-an-island-remote.md).

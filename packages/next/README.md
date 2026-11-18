@@ -1,6 +1,14 @@
 # @next-federation/next
 
 Next.js adapter for `next-federation` (Next `>=15.5.28 <17`, React 19; `cacheComponents` needs Next 16).
+It embeds remote islands and remote components in an App Router or Pages Router host, caches
+them with Next's own caching, and serves the host's identity routes.
+
+## Install
+
+```sh
+pnpm add @next-federation/next @next-federation/core @next-federation/react
+```
 
 ## `withNextFederation(config)` (required)
 
@@ -78,7 +86,7 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(f
   and the page answers `200`. The route has no static shell: `next build` shows it as `ƒ`. With `cacheComponents` the
   page must export `instant = false`, or `next build` fails with Next's "runtime data during prerendering" error;
   without `cacheComponents` it needs nothing (Next refuses `instant` there). A `loading.tsx` or `<Suspense>` above the
-  island streams it again. Guide: [App Router](../../docs/guides/getting-started-app-router.md#private-content-in-the-first-html-blocking).
+  island streams it again. Guide: [App Router](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md#private-content-in-the-first-html-blocking).
 - `errorFallback` (default: `fallback`) is shown when the remote fails, times out or returns an invalid
   envelope, for an anonymous visitor on a private island, and after an uncaught island error. When the
   island's code cannot load in the browser (`NF-011`: remote down, build retired), an `errorFallback`
@@ -226,7 +234,7 @@ revalidate) })` with it (a failure gets the failure profile above: retried withi
 in-process cache and no wall-clock read; when the remote is down the last known descriptor is
 returned, and `null` (render the fallback) when none was ever fetched. Events:
 `component:descriptor`, `component:error`. `@next-federation/next/pages/server` also re-exports
-`preloadRemoteComponent`. Guide: [Remote components](../../docs/guides/remote-components.md).
+`preloadRemoteComponent`. Guide: [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md).
 
 ## Remote components with the host's `next/*` modules
 
@@ -271,7 +279,7 @@ body read with a size limit; nothing downloaded runs) into `next-federation-type
 writes `next-federation-types/index.d.ts`, which fills `RemoteProps`:
 `createRemoteComponent<RemoteProps<'shop', './Cart'>>({ expose: './Cart' })`. Exits 1 when a remote
 fails (it keeps its previous types); a remote whose current (verified) build publishes no types
-loses its previous ones and its `index.d.ts` entry. Guide: [Types](../../docs/guides/remote-components.md#types).
+loses its previous ones and its `index.d.ts` entry. Guide: [Types](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md#types).
 
 ## API
 
@@ -298,7 +306,14 @@ loses its previous ones and its `index.d.ts` entry. Guide: [Types](../../docs/gu
 - A `'use cache'` component around `RemoteIsland` must sit inside `<Suspense>`.
 - A Next app does not expose its `app/` folder: to share UI from one, publish an island remote.
 
-Guides: [App Router](../../docs/guides/getting-started-app-router.md),
-[Pages Router](../../docs/guides/getting-started-pages-router.md), [Caching](../../docs/guides/caching.md),
-[Identity](../../docs/guides/identity.md), [CSP](../../docs/guides/csp.md),
-[Sharing components from a Next app](../../docs/guides/sharing-components-from-a-next-app.md).
+## Learn more
+
+- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md)
+- [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.md)
+- [Caching](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching.md)
+- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md)
+- [CSP](https://github.com/tariqule/next-federation/blob/main/docs/guides/csp.md)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
+- [Sharing components from a Next app](https://github.com/tariqule/next-federation/blob/main/docs/guides/sharing-components-from-a-next-app.md)
+
+License: MIT

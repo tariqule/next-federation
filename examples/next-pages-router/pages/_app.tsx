@@ -13,7 +13,7 @@ export default function App({ Component, pageProps }: AppProps) {
   const { locale, asPath } = useRouter()
   const other = locale === 'fr' ? 'en' : 'fr'
   return (
-    // Host state the remote CartButton reads (Mode A shares context).
+    // Host state the remote CartButton reads (remote components share context).
     <CartProvider>
       <header>
         <strong>Pages Router host</strong>

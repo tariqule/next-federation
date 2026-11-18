@@ -3,11 +3,10 @@
 An island remote runs on Vercel as static files plus one Vercel Function. Hosts reach it at the
 project's **production domain**, never at a generated deployment URL.
 
-**Verified** on 2026-11-16 with Vercel CLI 65.16.0 on the **Hobby** plan: project
-`next-federation-island-remote` (production domain `https://next-federation-island-remote.vercel.app`),
-two production deployments, embedded by the e2e `host-app` (Next production build) running locally.
-`test/e2e/vercel.spec.ts` passed 4 of 4. Skew Protection is not available on Hobby, so nothing here
-verifies it.
+The steps and behaviour below were tested on 2026-11-16 with Vercel CLI 65.16.0 on the Hobby plan: a
+project with two production deployments, embedded by the e2e `host-app` (a Next production build)
+running locally. `test/e2e/vercel.spec.ts` passed 4 of 4. Skew Protection is not available on Hobby,
+so it was not tested.
 
 ## Layout
 
@@ -97,7 +96,7 @@ One deployment holds one build. The fixture `test/fixtures/island-remote` is a w
 - `vercel build` ran `pnpm install` for the whole workspace to build the Function, even with
   `"installCommand": ""`.
 
-## Observed behaviour (Hobby, 2026-11-16)
+## Observed behaviour on Hobby (2026-11-16)
 
 | Request                                                         | Answer                                                            |
 | --------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -142,17 +141,17 @@ id. On the production domain every request under that prefix reaches the new dep
 browser sees exactly what a cached page of the previous build sees. Requests for the previous build's
 real files also got `404`.
 
-The original plan expected the previous deployment to keep answering its build-pinned paths. On Hobby
-it does not: only its generated URL still answers, behind Vercel Authentication.
+The previous deployment does not keep answering its build-pinned paths on Hobby. Only its generated
+URL still answers, behind Vercel Authentication.
 
 ## Skew: choose one
 
-1. **Accept a short inert window** (what was verified). After a deploy, an island from a cached
+1. **Accept a short inert window** (the case that was tested). After a deploy, an island from a cached
    envelope stays inert until the host renders a fresh envelope: at most the host's island
    `revalidate` (60 seconds by default) plus one regeneration for ISR pages, or until an open tab
    navigates. Shorten it with `revalidateIsland` / `revalidateTag('nf:<remote>')` from a deploy
    hook. Works on every plan.
-2. **Skew Protection** (Pro and Enterprise). **Not verified by this project.** From Vercel's docs:
+2. **Skew Protection** (Pro and Enterprise). Not tested here. According to Vercel's docs,
    requests that carry the deployment id (`?dpl=` or `x-deployment-id`, or the `__vdpl` cookie for
    some frameworks) reach the deployment that rendered the page, but cross-origin requests ignore the
    deployment id unless the host's domain is listed under **Allowed Domains for Cross-Site Fetch**,
@@ -163,7 +162,7 @@ it does not: only its generated URL still answers, behind Vercel Authentication.
    deployment, such as Vercel Blob, S3 or a CDN bucket, and point `base` there (the host lists that
    origin in the remote's `assetOrigins`). A cached page of an earlier build then still hydrates: its
    payload is in the page and its assets still load. Its build-pinned island path still gets `410`,
-   because the earlier handler is gone. Not verified by this project. Delete old builds on the
+   because the earlier handler is gone. Not tested here. Delete old builds on the
    schedule `nf-serve` uses ([Self-hosted build retention](self-hosted-skew.md)).
 
 ## Deployment Protection
@@ -173,10 +172,10 @@ it does not: only its generated URL still answers, behind Vercel Authentication.
 - **All Deployments** protects the production domain too. Hosts then cannot fetch envelopes, and
   browsers cannot load assets. Do not use it for a remote.
 - A host pointed at a generated URL gets `401` on its server-side envelope fetch (observed with
-  `Accept: application/json`), so it would show the island's fallback (not run end to end). Use the
+  `Accept: application/json`), so it would show the island's fallback (not tested end to end). Use the
   production domain in the host's `remotes` config.
 - To test a preview deployment from a host, use a Protection Bypass for Automation secret. This
-  project did not test it.
+  was not tested.
 
 ## CI
 

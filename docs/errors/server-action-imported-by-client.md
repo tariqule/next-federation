@@ -15,3 +15,5 @@ reference that the remote cannot serve safely across the federation boundary.
 
 Import the action in a Server Component and pass it to the client component as a prop, for example
 `<AddToCart action={addToCart} />`. The error message names the importing module.
+
+See [Server Actions in islands](../guides/server-actions.md).

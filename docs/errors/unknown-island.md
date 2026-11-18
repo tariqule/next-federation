@@ -11,3 +11,5 @@ The island name is misspelled, was removed or renamed, or the remote build in us
 ## How to fix
 
 Check the island name against the remote's exposed islands and confirm the remote version that added it is deployed.
+
+See [Writing an island remote](../guides/writing-an-island-remote.md#3-write-an-island).

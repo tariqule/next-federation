@@ -1,10 +1,19 @@
 # example-cart-context
 
-A tiny React context package shared by the example hosts and the
-[components remote](../components-remote/README.md) (remote components): `CartProvider` (hosts)
-and `useCart()` (hosts and the remote's `CartButton`).
+A small React context package shared by the example hosts and the
+[components remote](../components-remote/README.md): `CartProvider` (used by the hosts) and
+`useCart()` (used by the hosts and by the remote's `CartButton`).
 
-It shows how a remote client component reads the **host's** React context. The remote lists this
-package in `shared`, so it is never bundled into the remote: at runtime the remote receives the
-host's own module (passed in `createRemoteComponent({ shared })`), and with it the host's context
-object. Plain JavaScript, so hosts can use it without a build step.
+## What it shows
+
+How a remote component reads the host's React context. The remote lists this package in `shared`,
+so it never bundles it. At runtime the remote receives the host's own module (passed in
+`createRemoteComponent({ shared })`), and with it the host's context object. The package is plain
+JavaScript, so hosts use it without a build step.
+
+## Run it
+
+It is a library, so nothing runs on its own. `pnpm examples:dev` from the repository root starts the
+hosts and the remote that use it.
+
+Guide: [Remote components](../../docs/guides/remote-components.md#sharing-modules).

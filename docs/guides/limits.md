@@ -7,7 +7,7 @@ different approach.
 
 React 19 (required). Next.js 16 or 15 (`>=15.5.28 <17`) App Router and Pages Router, with Turbopack
 or webpack, on Node 20.9 or newer (server rendering of remote components needs Node 20.16 or newer).
-React Router hosts come after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
+React Router hosts are planned after 1.0. Remotes build with Vite 8 and `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
 fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set).
 
 ### Next.js 15
@@ -36,8 +36,7 @@ Next 14 (React 18) is not supported: islands and remote components need React 19
   render another remote's island (it fetches that envelope itself, server to server), and it works,
   silently, with no warning. The inner island is outside everything the host gives an island: it
   gets no identity (the host's token is minted for the outer remote's audience, so a private inner
-  island is refused with `401` and a public one renders anonymously), it sits outside the host's cache and tags (`revalidateIsland` on the host
-  does not reach it) and outside its skew handling (the outer remote decides which build it gets),
+  island is refused with `401` and a public one renders anonymously), it sits outside the host's cache and tags (`revalidateIsland` on the host does not reach it) and outside its skew handling (the outer remote decides which build it gets),
   and it adds a second server hop to every render of the outer island. Embed each island from the
   host instead, side by side, and pass data between them as props.
 - **No CSS isolation.** There is no Shadow DOM. Remotes scope their own class names.
@@ -172,12 +171,12 @@ The host trusts the remote's HTML and scripts. Only configure remotes you trust.
 
 ## Cost
 
-<!-- numbers: Task 24 (measured 2026-11-16) -->
-Measured in production builds (`docs/measurements.json`, written by `test/e2e/measure.spec.ts`), two
-remotes on React 19.3.1. Every size below is **gzip on the wire**: `nf-serve` compresses JavaScript,
+Measured on 2026-11-16 in production builds, on a laptop with remotes on localhost, with two remotes on
+React 19.3.1. The numbers are in `test/e2e/data/measurements.json`, written by
+`test/e2e/measure.spec.ts`. Every size below is **gzip on the wire**: `nf-serve` compresses JavaScript,
 CSS, JSON and other text assets (brotli when the browser accepts it, which is smaller still; gzip
-otherwise). Uncompressed, the same JavaScript is about three times larger (round 3 measured a first
-island remote at 253 KB raw against 81 KB gzip). On any other static host or CDN, turn compression on
+otherwise). Uncompressed, the same JavaScript is about three times larger (a first island remote measured
+253 KB raw against 81 KB gzip). On any other static host or CDN, turn compression on
 for these types, or these numbers do not hold ([Deployment](deployment.md#compression)).
 
 - **About 75 KB of JavaScript per distinct remote without sharing** (`share: false`): React, React
@@ -203,8 +202,8 @@ for these types, or these numbers do not hold ([Deployment](deployment.md#compre
   refused, but only after it was downloaded. With `cacheComponents`, and for private islands, the
   limit applies as the body arrives. To bound what the host downloads in every case, cap response
   sizes at the remote or at a proxy in front of it.
-- **Each island costs a host-to-remote server hop.** Measured in validation round 3 (a laptop, remotes
-  on localhost): about 2 to 15 ms at the median per envelope from a co-located remote (2 to 7 ms for
+- **Each island costs a host-to-remote server hop.** Measured on a laptop with remotes
+  on localhost: about 2 to 15 ms at the median per envelope from a co-located remote (2 to 7 ms for
   most islands and descriptors on an idle host, 15 ms for a private island on a host under load), and
   9 to 22 ms at p95. A remote in another region adds its network round trip to that. The island
   timeout (`islands.timeoutMs`, 3 s by default) bounds the worst case: a slow remote never holds a

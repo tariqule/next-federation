@@ -13,4 +13,4 @@ releases do not raise this code.
 ## How to fix
 
 Rebuild and redeploy the remote with the current `@next-federation/vite` and
-`@next-federation/island`. See the Server Actions guide for how to write and pass actions.
+`@next-federation/island`. See [Server Actions in islands](../guides/server-actions.md) for how to write and pass actions.
