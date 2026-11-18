@@ -1,8 +1,8 @@
-// Mode A descriptor API, shared by both routers: which build of a components
-// remote this render uses. Resolved on the server (Server Component,
-// getServerSideProps or getStaticProps) and passed to the client
-// `RemoteComponent` as a prop, so the browser loads the build the server
-// rendered.
+// Remote components descriptor API, shared by both routers: which build of a
+// components remote this render uses. Resolved on the server (Server
+// Component, getServerSideProps or getStaticProps) and passed as a prop to a
+// component made with `createRemoteComponent`, so the browser loads the build
+// the server rendered.
 import type { ComponentTarget, Federation } from '@next-federation/core'
 import { fetchVerifiedComponentDescriptor } from '@next-federation/core/components'
 import type { VerifiedDescriptorResult } from '@next-federation/core/components'

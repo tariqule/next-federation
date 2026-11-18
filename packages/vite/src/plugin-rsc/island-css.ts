@@ -13,10 +13,10 @@ const APPENDED = `\nexport const ${ISLAND_CSS_EXPORT} = () => ${LOAD_CSS}()\n`
 
 /**
  * Gives every island module exactly one `import.meta.viteRsc.loadCss()` call,
- * exported as `__nf_css`. plugin-rsc 0.5.39 wires only the FIRST `loadCss`
- * call per module in builds (phase 0 finding 8), so one call per island module
- * is the only shape that works, and a module that already calls it is
- * rejected: its call would be the wired one and ours would break.
+ * exported as `__nf_css`. plugin-rsc 0.5.39 wires only the FIRST `loadCss` call
+ * per module in builds, so one call per island module is the only shape that
+ * works, and a module that already calls it is rejected: its call would be the
+ * wired one and ours would break.
  *
  * An island entry marked `'use client'` is rejected too (NF-002): plugin-rsc
  * would turn the module, and so the appended export, into a client reference,

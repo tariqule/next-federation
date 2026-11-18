@@ -50,7 +50,7 @@ type LoaderProps = {
 }
 
 /**
- * The App Router API (design §6):
+ * The App Router API:
  *
  * ```ts
  * export const { RemoteIsland, preloadIsland, revalidateIsland } =

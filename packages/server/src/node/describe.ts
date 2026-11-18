@@ -1,5 +1,5 @@
 // `nf-describe`: turns any built Module Federation 2.0 remote (Rspack,
-// webpack, Vite, ...) into a next-federation components (Mode A) build: the
+// webpack, Vite, ...) into a next-federation remote components build: the
 // descriptor `nf-components.json` (sha384 of every server file, signed with
 // NF_COMPONENTS_SIGNING_KEY when set) and `nf-build.json`, in nf-serve's
 // layout. The same code as @next-federation/vite's nextFederationComponents.

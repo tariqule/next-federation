@@ -1,4 +1,4 @@
-// The Mode A remotes of the e2e run (test/e2e/servers.ts starts this):
+// The components remotes of the e2e run (test/e2e/servers.ts starts this):
 // builds three remotes one after the other (Module Federation's Vite plugin
 // keeps generated files in node_modules, so builds of one folder must not
 // run in parallel), then serves each with nf-serve, in this process.

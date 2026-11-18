@@ -167,7 +167,7 @@ test.describe('island React sharing (nf-islands)', () => {
         2,
         FIRST_LIVE
       )
-      // Ruling 7: remote c really resolved the older React, server and browser.
+      // Remote c really resolved the older React, server and browser.
       await expect(page.locator('[data-remote="c"]')).toHaveAttribute(
         'data-react-version',
         '19.3.0'
@@ -387,7 +387,7 @@ test.describe('sharing measurements', () => {
     existsSync(CONTROL)
       ? (JSON.parse(readFileSync(CONTROL, 'utf8')) as Control)
       : {}
-  /** Budgets (Task 18B): first or mismatched remote, and a second same-React remote. */
+  /** Budgets: first or mismatched remote, and a second same-React remote. */
   const MAX_OVERHEAD = 8 * 1024
   const MAX_SECOND = 30 * 1024
 

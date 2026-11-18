@@ -20,7 +20,7 @@ export type FederationEvent =
       status?: number
     }
   | {
-      /** Mode A: a components remote's build descriptor was resolved. */
+      /** A components remote's build descriptor was resolved. */
       type: 'component:descriptor'
       remote: string
       buildId: string

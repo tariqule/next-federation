@@ -83,10 +83,10 @@ function viteConfig(
 }
 
 /**
- * A browser navigating to a page of the project (the B3 warning): a document
- * request (`Sec-Fetch-Dest: document`, or an HTML `Accept` from a client that
- * does not send it) for a path that is not a file. A tab opened on
- * `/mf-manifest.json`, the descriptor or a module is not a page.
+ * A browser navigating to a page of the project: a document request
+ * (`Sec-Fetch-Dest: document`, or an HTML `Accept` from a client that does not
+ * send it) for a path that is not a file. A tab opened on `/mf-manifest.json`,
+ * the descriptor or a module is not a page.
  */
 function isPageRequest(req: {
   url?: string
@@ -105,7 +105,7 @@ function isPageRequest(req: {
 }
 
 /**
- * Builds a next-federation **components** remote (Mode A): Module Federation
+ * Builds a next-federation **components** remote: Module Federation
  * client components that hosts render inside their own React tree, on the
  * host's React. Wraps `@module-federation/vite` (pinned, NF-026) and emits,
  * per build, `<outDir>/<buildId>/client/` (served under the immutable

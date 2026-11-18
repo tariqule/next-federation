@@ -1,6 +1,7 @@
-// TEST-ONLY key pair for the Mode A e2e: the components remote fixture signs
-// its build descriptors with the private key (NF_COMPONENTS_SIGNING_KEY), the
-// hosts trust the public key. Never use it outside tests.
+// TEST-ONLY key pair for the remote components e2e: the components remote
+// fixture signs its build descriptors with the private key
+// (NF_COMPONENTS_SIGNING_KEY), the hosts trust the public key. Never use it
+// outside tests.
 // No imports: Next and Vite fixture configs import this file.
 export const COMPONENTS_SIGNING_KEY = {
   kty: 'EC',
@@ -19,7 +20,7 @@ export const COMPONENTS_PUBLIC_KEY = {
   kid: 'nf-e2e-components-1',
 } as const
 
-/** Mode A remote ports (before the lane offset, see lane.ts). */
+/** Components remote ports (before the lane offset, see lane.ts). */
 export const COMPONENTS_PORTS = {
   /** Signed builds c1 (current). */
   signed: 4110,

@@ -27,7 +27,7 @@ test.describe('island remote protocol endpoint', () => {
     expect(env.rscPayload.length).toBeGreaterThan(0)
     expect(env.css.length).toBeGreaterThanOrEqual(1)
     for (const href of env.css) expect(href.startsWith(`${A}/`)).toBe(true)
-    // Islands never emit hoistables (design §6).
+    // Islands never emit hoistables.
     expect(env.html).not.toContain('<link')
     expect(env.bootstrap.startsWith(`${A}/`)).toBe(true)
     expect(env.idPlaceholder).toMatch(/^nfid-[0-9a-f]{8}-$/)
@@ -50,7 +50,7 @@ test.describe('island remote protocol endpoint', () => {
   test('the island HTML contains no <script> or <link>', async ({
     request,
   }) => {
-    // Production React emits them for client components (finding 6); the
+    // Production React emits them for client components; the
     // handler strips them.
     for (const url of [
       productPanel,
@@ -135,7 +135,7 @@ test('a token from an issuer that is not on the allowlist gets 401', async ({
   request,
 }) => {
   // Signed by the fixture key, but claiming an issuer the remote does not
-  // trust: the remote must not fetch keys from it (design §9a allowlist).
+  // trust: the remote must not fetch keys from it (issuer allowlist).
   const token = await mint(request, 'aud=a&iss=http://evil.test')
   const res = await request.get(`${A}/_nf/island/MyOrders`, {
     headers: { Authorization: `Bearer ${token}` },

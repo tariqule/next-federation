@@ -18,7 +18,7 @@ export type RscEntries = { rsc: string; ssr: string; client: string }
 /** Options for `@vitejs/plugin-rsc`: this package's own entries, no hoistable CSS links. */
 export function rscPluginOptions(entries: RscEntries): RscPluginOptions {
   // Islands must not emit `<link precedence>` tags; CSS URLs go in the
-  // envelope instead (phase 0, spike vite.config.ts).
+  // envelope instead.
   return { entries, rscCssTransform: false }
 }
 
@@ -58,11 +58,11 @@ export function remoteViteConfig(
   const server = () => ({ resolve: { noExternal: [NF_PACKAGES] } })
   return {
     // plugin-rsc rejects a relative base, and hosts on other origins need
-    // absolute asset URLs (finding 3).
+    // absolute asset URLs.
     base: resolved.publicBase,
     cacheDir: optimizerCacheDir(resolved.name, scopeKey),
-    // No @vitejs/plugin-react: Fast Refresh code cannot run in a host page
-    // (finding 5). Vite's built-in oxc compiles JSX.
+    // No @vitejs/plugin-react: Fast Refresh code cannot run in a host page.
+    // Vite's built-in oxc compiles JSX.
     oxc: {
       jsx: { runtime: 'automatic', importSource: 'react', refresh: false },
     },
@@ -76,7 +76,7 @@ export function remoteViteConfig(
         build: {
           outDir: `${outDir}/client`,
           // Hosts import the bootstrap for its `mountIsland` export; app builds
-          // drop entry exports by default (finding 7).
+          // drop entry exports by default.
           rollupOptions: { preserveEntrySignatures: 'exports-only' },
         },
       },

@@ -85,7 +85,7 @@ const now = (): number =>
   typeof performance === 'undefined' ? Date.now() : performance.now()
 
 /**
- * Mounts and hydrates a remote island (design §6, island mount lifecycle).
+ * Mounts and hydrates a remote island.
  *
  * The HTML is written once, on first render. The island root lives in a
  * registry keyed to the container node, so effect re-runs (StrictMode, hidden
@@ -387,16 +387,15 @@ export function IslandMount(props: IslandMountProps): ReactElement {
         data-nf-build={envelope.buildId}
         data-nf-state="booting"
         suppressHydrationWarning
-        // Trust boundary (design §6 "Honest limits", docs/guides/limits.md
-        // "Trust"): the host trusts its configured remotes' HTML and scripts
-        // by design, as it runs their bootstrap module anyway. This HTML is
-        // the island SSR output of an allowlisted remote: the envelope came
-        // through `fetchIsland` (`parseEnvelope`, `assertEnvelopeUrls`, the
-        // remote name check), and the remote server stripped scripts and head
-        // tags from it (`stripIslandHtml`; cleanup, not a security control).
-        // The only host-side change is the id prefix, which `applyIdPrefix`
-        // reduces to [A-Za-z0-9]. Never pass an envelope built from visitor
-        // input.
+        // Trust boundary (docs/guides/limits.md "Trust"): the host trusts its
+        // configured remotes' HTML and scripts by design, as it runs their
+        // bootstrap module anyway. This HTML is the island SSR output of an
+        // allowlisted remote: the envelope came through `fetchIsland`
+        // (`parseEnvelope`, `assertEnvelopeUrls`, the remote name check), and
+        // the remote server stripped scripts and head tags from it
+        // (`stripIslandHtml`; cleanup, not a security control). The only
+        // host-side change is the id prefix, which `applyIdPrefix` reduces to
+        // [A-Za-z0-9]. Never pass an envelope built from visitor input.
         dangerouslySetInnerHTML={{ __html: frozen.html }}
       />
     </>

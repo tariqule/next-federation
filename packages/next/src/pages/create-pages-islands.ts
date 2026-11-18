@@ -55,7 +55,7 @@ function localeOf(ctx: PagesContext): string {
 }
 
 /**
- * The Pages Router API (design §6):
+ * The Pages Router API:
  *
  * ```ts
  * export const { getIslandProps } = createPagesIslands(federation, { getIdentity })

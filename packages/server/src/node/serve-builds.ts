@@ -113,7 +113,7 @@ const TYPES: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
-/** A build folder: an island build (its own server process) or a Mode A components build (static files). */
+/** A build folder: an island build (its own server process) or a remote components build (static files). */
 export type BuildEntry = BuildInfo & { kind: 'islands' | 'components' }
 
 export async function readBuilds(dir: string): Promise<BuildEntry[]> {

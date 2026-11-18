@@ -175,7 +175,7 @@ function localModule(ids: Map<string, string>): string {
 
 /**
  * Production client builds: shares React (and `share.libs`) across the island
- * remotes on a page through the island share scope (Task 18B):
+ * remotes on a page through the island share scope:
  *
  * 1. The client entry becomes an async boundary: it awaits the share scope,
  *    then imports the real bootstrap, so every module that imports React runs

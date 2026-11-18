@@ -3,7 +3,7 @@ import { placeOrder, whoami } from '../actions'
 import { getOrders } from '../data'
 import { ActionButton } from './ActionButton'
 
-// Private island: rendered per user from verified token claims (design §9a).
+// Private island: rendered per user from verified token claims.
 export default async function MyOrders() {
   const user = getIdentity()
   // The handler rejects tokenless requests before rendering.

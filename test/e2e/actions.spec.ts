@@ -1,4 +1,4 @@
-// Island Server Actions (Phase 3) in every host: App Router (cacheComponents
+// Island Server Actions in every host: App Router (cacheComponents
 // off and on), Pages Router (with and without basePath) and the SPA.
 import { expect, test } from '@playwright/test'
 import type { Locator, Page, Request } from '@playwright/test'

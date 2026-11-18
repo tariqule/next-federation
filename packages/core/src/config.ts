@@ -21,7 +21,10 @@ export type RemoteConfig = {
   retries?: number
   /** Largest island response body accepted, in bytes. Default `islands.maxBytes`. */
   maxBytes?: number
-  /** Mode A: this remote also serves Module Federation client components. */
+  /**
+   * Remote components: this remote also serves Module Federation client
+   * components.
+   */
   components?: RemoteComponentsConfig
 }
 
@@ -39,7 +42,7 @@ export type RemoteComponentsConfig = {
   descriptor?: string
   /** Seconds the host caches the descriptor. Default `islands.revalidate`. */
   revalidate?: number
-  /** Distinct builds of this remote a process keeps loaded. Default 5. */
+  /** Distinct builds of this remote kept loaded per router layer. Default 5. */
   maxBuilds?: number
   /**
    * Server rendering. The host evaluates the remote's server code only for a

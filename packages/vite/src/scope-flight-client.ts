@@ -10,8 +10,7 @@ export const FLIGHT_CLIENT_ID: RegExp =
  * Re-points the browser flight client's page globals at this build's slot in
  * the `__nf_rsc__` registry (keyed by the build's absolute base URL), so two
  * remotes, or two builds of one remote, on one page never resolve each other's
- * client references (phase 0 finding 1). Order matters: `.u` before the bare
- * name.
+ * client references. Order matters: `.u` before the bare name.
  */
 export function scopeFlightClient(code: string, scopeKey: string): string {
   const slot = `globalThis.${FLIGHT_REGISTRY_GLOBAL}[${JSON.stringify(scopeKey)}]`
@@ -25,7 +24,7 @@ export function scopeFlightClient(code: string, scopeKey: string): string {
 /**
  * Vite's dependency optimizer does not notice plugin changes, and the dev
  * pre-bundle of the flight client has the slot key baked in, so the cache
- * folder is named after the key: a new key forces a fresh bundle (finding 14).
+ * folder is named after the key: a new key forces a fresh bundle.
  */
 export function optimizerCacheDir(name: string, scopeKey: string): string {
   const hash = createHash('sha1').update(scopeKey).digest('hex').slice(0, 8)

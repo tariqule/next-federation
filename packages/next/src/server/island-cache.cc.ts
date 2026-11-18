@@ -105,8 +105,8 @@ function shortenTo(life: typeof FAILURE_LIFE): boolean {
 }
 
 /**
- * Mode A: a components remote's verified build descriptor, for hosts with
- * `cacheComponents`: `'use cache'` with a `cacheLife` of at least minutes
+ * Remote components: a components remote's verified build descriptor, for hosts
+ * with `cacheComponents`: `'use cache'` with a `cacheLife` of at least minutes
  * (a shorter one makes the entry dynamic). A failure is returned with the
  * failure profile, like an island envelope: retried within seconds, without
  * turning a static page into a partial prerender. Verification runs inside

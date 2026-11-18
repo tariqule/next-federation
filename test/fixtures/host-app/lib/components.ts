@@ -7,7 +7,8 @@ import {
 } from '../../../e2e/fixtures/components-keys.ts'
 import { lanePort } from '../../../e2e/lane.ts'
 
-// Mode A remotes (test/fixtures/components-remote, ports in components-keys.ts).
+// Components remotes (test/fixtures/components-remote, ports in
+// components-keys.ts).
 const at = (port: number) => `http://127.0.0.1:${lanePort(port)}`
 // Trust the test key; re-read descriptors every second (redeploy checks).
 const trusted = {

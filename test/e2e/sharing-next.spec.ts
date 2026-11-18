@@ -2,7 +2,7 @@ import { gzipSync } from 'node:zlib'
 import { expect, test, type Page } from '@playwright/test'
 import { HOST_APP, HOST_PAGES, REMOTE_A, REMOTE_B } from './servers.ts'
 
-// Island React sharing on Next hosts (Task 18B). `/two` mounts two islands of
+// Island React sharing on Next hosts. `/two` mounts two islands of
 // remote `a` and one of remote `b`, all on React 19.3.1.
 // - App Router: Next runs its own canary React, so the host never provides
 //   React; the islands share one React among themselves.

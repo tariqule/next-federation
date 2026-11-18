@@ -1,5 +1,6 @@
-// Mode A (Module Federation client components) wire format v1: the build
-// descriptor a components remote publishes for each build. Bundler-neutral.
+// Remote components (Module Federation client components) wire format v1: the
+// build descriptor a components remote publishes for each build.
+// Bundler-neutral.
 import { BUILD_ID_PATTERN, NAME_PATTERN, SHA384_PATTERN } from './constants.ts'
 import { canonicalJson } from './props.ts'
 import { isSemverRange, isSemverVersion } from './semver.ts'
@@ -108,9 +109,10 @@ export type ComponentDescriptorFile = ComponentBuildDescriptor & {
 }
 
 /**
- * What a host passes to `RemoteComponent`: one build, resolved on the server
- * (or in the browser for an SPA). `ssr` is non-null only when the host
- * verified the build's server code (signature, pinned digest or `unsafe-dev`).
+ * What a host passes to a component made with `createRemoteComponent`: one
+ * build, resolved on the server (or in the browser for an SPA). `ssr` is
+ * non-null only when the host verified the build's server code (signature,
+ * pinned digest or `unsafe-dev`).
  */
 export type RemoteComponentDescriptor = {
   /** The host's key for this remote (defineFederation `remotes`). */
@@ -120,7 +122,7 @@ export type RemoteComponentDescriptor = {
   base: string
   manifest: string
   ssr: null | { integrity: Record<string, string> }
-  /** Distinct builds of this remote a process keeps loaded. */
+  /** Distinct builds of this remote kept loaded per router layer. */
   maxBuilds: number
   iat?: number
   /** The build's browser files, as in its descriptor. */

@@ -1,6 +1,6 @@
-// The Rspack Mode A remotes of the e2e run (test/e2e/servers.ts starts this):
-// builds two remotes one after the other, then serves each with nf-serve, in
-// this process.
+// The Rspack components remotes of the e2e run (test/e2e/servers.ts starts
+// this): builds two remotes one after the other, then serves each with
+// nf-serve, in this process.
 //   signed    rs1, signed with the test key   port 4114
 //   unsigned  ru1, no signature              port 4115
 import { execFileSync } from 'node:child_process'

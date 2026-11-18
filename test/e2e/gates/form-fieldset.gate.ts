@@ -1,4 +1,4 @@
-// Gate G1 (Phase 3): before an island hydrates, `<Form>` (from @next-federation/island)
+// Before an island hydrates, `<Form>` (from @next-federation/island)
 // renders its fields inside a disabled `<fieldset>`. This proves, in every engine, that
 // such markup cannot be submitted: not by Enter (on the body, after Tab presses, or in the
 // autofocused field), not by clicking the submit button, and not by a `<button form=…>`

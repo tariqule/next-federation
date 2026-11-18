@@ -1,5 +1,5 @@
-// The Mode A React bindings, created over a runtime (index.tsx wires the real
-// one; tests pass a fake, with `isServer` set either way).
+// The remote components React bindings, created over a runtime (index.tsx wires
+// the real one; tests pass a fake, with `isServer` set either way).
 import type {
   ComponentExposeAssets,
   RemoteComponentDescriptor,

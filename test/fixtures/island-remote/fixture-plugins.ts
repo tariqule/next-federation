@@ -1,4 +1,4 @@
-// Fixture-only Vite plugins for the React sharing e2e (Task 18B).
+// Fixture-only Vite plugins for the React sharing e2e.
 import { join } from 'node:path'
 import type { Plugin } from 'vite'
 

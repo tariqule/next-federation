@@ -6,8 +6,8 @@ import {
 } from '@next-federation/react/components'
 import { Suspense, use } from 'react'
 
-// Mode A in a client-only host: the descriptor is fetched in the browser and
-// the component renders in the browser only. The harness sets
+// Remote components in a client-only host: the descriptor is fetched in the
+// browser and the component renders in the browser only. The harness sets
 // VITE_NF_COMPONENTS_ORIGIN (per lane, see test/e2e/servers.ts).
 const origin =
   import.meta.env.VITE_NF_COMPONENTS_ORIGIN ?? 'http://127.0.0.1:4110'

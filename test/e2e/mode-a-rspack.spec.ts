@@ -1,7 +1,8 @@
-// Mode A with a remote NOT built with Vite: test/fixtures/components-remote-rspack
-// is built with Rspack + @module-federation/enhanced (Module Federation 2.0),
-// its descriptor written by `nf-describe`, served by nf-serve (signed rs1,
-// unsigned ru1). The hosts and their runtime are the same as mode-a.spec.ts.
+// Remote components from a remote NOT built with Vite:
+// test/fixtures/components-remote-rspack is built with Rspack +
+// @module-federation/enhanced (Module Federation 2.0), its descriptor written
+// by `nf-describe`, served by nf-serve (signed rs1, unsigned ru1). The hosts
+// and their runtime are the same as mode-a.spec.ts.
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { COMPONENTS_PORTS } from './fixtures/components-keys.ts'
@@ -62,7 +63,8 @@ async function html(url: string): Promise<{ status: number; body: string }> {
 }
 
 // As in mode-a.spec.ts: `next dev --webpack` reloads the host's server
-// modules, after which Mode A renders browser-only (NF-028 "stale").
+// modules, after which remote components render browser-only (NF-028
+// "stale").
 const DEV_WEBPACK = MODE === 'dev' && BUNDLER === 'webpack'
 function expectServerMarkup(body: string, expected: string): void {
   if (
