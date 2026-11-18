@@ -92,14 +92,14 @@ jobs:
         run: git push origin --tags
       # One release for the whole version, at the published commit. The tag
       # v<version> is created by `gh release create` (the "release tags"
-      # ruleset allows creating v* tags). A re-run updates the notes of an
-      # existing release instead of failing.
+      # ruleset allows creating v* tags). A re-run leaves an existing release
+      # alone, so notes edited by hand are kept.
       - name: Create GitHub Release
         if: ${{ !inputs.dry_run }}
         run: |
           tag="v$RELEASE_VERSION"
           if gh release view "$tag" > /dev/null 2>&1; then
-            gh release edit "$tag" --title "$tag" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
+            echo "::notice::Release $tag already exists; leaving it unchanged."
           else
             gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" \
               --notes-file "$RUNNER_TEMP/release-notes.md" --latest

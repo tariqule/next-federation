@@ -42,7 +42,7 @@ per package.
   create. A real run, after the npm publish and the tag push, runs `gh release create v<version>
   --target <commit> --latest` with those notes (`GITHUB_TOKEN`, `contents: write`). The release's tag
   `v<version>` is created at the commit the workflow ran on. If the release already exists (a re-run),
-  its notes are updated instead.
+  it is left unchanged, so notes edited by hand are kept.
 - The "release tags" ruleset covers `v*` and `@next-federation/*`: it blocks deleting, moving and
   rewriting those tags, and allows creating them. Fix a wrong release body by editing the release
   (`gh release edit`), not by moving the tag.
