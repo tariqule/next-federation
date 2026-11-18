@@ -613,15 +613,62 @@ describe('builds with a react-server-dom-webpack affected by GHSA-xqc2-xf4c-x3h3
     expect(alive(dir)).toBe('')
   }, 20000)
 
-  test('builds that record no version (an older plugin) keep working, with one warning', async () => {
+  test('builds that record no version (an older plugin) keep working, logged once at error level', async () => {
+    const error = rs.spyOn(console, 'error').mockImplementation(() => {})
     const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
     build('v2', 0)
-    build('v1', 1, 'not a list')
+    build('v1', 1)
     handle = await serveBuilds({ dir, port: 0 })
     expect(handle.live).toEqual(['v2', 'v1'])
     const res = await fetch(`http://127.0.0.1:${handle.port}/b/v1/_nf/x`)
     expect((await res.json()).buildId).toBe('v1')
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(logged(warn)).toMatch(/NF-041.*"v2", "v1".*GHSA-xqc2-xf4c-x3h3/)
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(logged(error)).toMatch(/NF-041.*"v2", "v1".*GHSA-xqc2-xf4c-x3h3/)
+    expect(warn).not.toHaveBeenCalled()
   }, 20000)
+
+  test('a malformed or empty recorded field fails closed: older builds retire (410 NF-023)', async () => {
+    const error = rs.spyOn(console, 'error').mockImplementation(() => {})
+    build('v4', 0, ['19.3.1'])
+    build('v3', 1, 'not a list')
+    build('v2', 2, [])
+    build('v1', 3, ['19.3.1', 5])
+    handle = await serveBuilds({
+      dir,
+      port: 0,
+      retention: { maxBuilds: 4 },
+    })
+    expect(handle.live).toEqual(['v4'])
+    expect([...handle.retired].sort()).toEqual(['v1', 'v2', 'v3'])
+    for (const id of ['v1', 'v2', 'v3']) {
+      expect(alive(join(dir, id))).toBe('')
+      const res = await fetch(`http://127.0.0.1:${handle.port}/b/${id}/_nf/x`)
+      expect(res.status).toBe(410)
+      expect(await res.json()).toEqual({ error: 'NF-023' })
+    }
+    const log = logged(error)
+    for (const id of ['v1', 'v2', 'v3']) {
+      expect(log).toMatch(
+        new RegExp(`NF-041.*"${id}".*malformed.*GHSA-xqc2-xf4c-x3h3`)
+      )
+    }
+  }, 20000)
+
+  test.each([['not a list'], [[]], [[19]]])(
+    'a malformed or empty recorded field on the current build (%j): nf-serve refuses to start (NF-041)',
+    async (field) => {
+      rs.spyOn(console, 'error').mockImplementation(() => {})
+      build('v1', 0, field)
+      let thrown: unknown
+      try {
+        handle = await serveBuilds({ dir, port: 0 })
+      } catch (error) {
+        thrown = error
+      }
+      expect((thrown as { code?: string }).code).toBe('NF-041')
+      expect(String((thrown as Error).message)).toMatch(/"v1".*malformed/)
+      expect(alive(dir)).toBe('')
+    },
+    20000
+  )
 })

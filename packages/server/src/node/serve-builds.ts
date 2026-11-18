@@ -120,9 +120,10 @@ export type BuildEntry = BuildInfo & {
   kind: 'islands' | 'components'
   /**
    * The `react-server-dom-webpack` versions its `nf-build.json` records;
-   * undefined when it records none (a build made before the field existed).
+   * undefined when it records none (a build made before the field existed),
+   * null when the field is malformed or empty (refused, like an affected build).
    */
-  reactServerDomWebpack?: string[]
+  reactServerDomWebpack?: string[] | null
 }
 
 export async function readBuilds(dir: string): Promise<BuildEntry[]> {
@@ -143,16 +144,21 @@ export async function readBuilds(dir: string): Promise<BuildEntry[]> {
       reactServerDomWebpack?: unknown
     }
     if (buildId === entry.name && typeof builtAt === 'number') {
+      // Absent: no version recorded. Present (JSON null included) but not a
+      // non-empty list of strings: malformed.
       const recorded =
-        Array.isArray(reactServerDomWebpack) &&
-        reactServerDomWebpack.every((v) => typeof v === 'string')
-          ? (reactServerDomWebpack as string[])
-          : undefined
+        reactServerDomWebpack === undefined
+          ? undefined
+          : Array.isArray(reactServerDomWebpack) &&
+              reactServerDomWebpack.length > 0 &&
+              reactServerDomWebpack.every((v) => typeof v === 'string')
+            ? (reactServerDomWebpack as string[])
+            : null
       builds.push({
         buildId,
         builtAt,
         kind: kind === 'components' ? 'components' : 'islands',
-        ...(recorded ? { reactServerDomWebpack: recorded } : {}),
+        ...(recorded === undefined ? {} : { reactServerDomWebpack: recorded }),
       })
     }
   }
@@ -220,10 +226,12 @@ function isBuildBookkeeping(rel: string): boolean {
 
 /**
  * Retires every live island build whose recorded `react-server-dom-webpack`
- * is affected by GHSA-xqc2-xf4c-x3h3 or cannot be checked against it (NF-041,
- * logged): it is never started and answers 410 NF-023 like any retired build,
- * since it will not come back. NF-041 thrown when that is the current build.
- * Builds that record no version keep running, with one NF-041 warning.
+ * is affected by GHSA-xqc2-xf4c-x3h3 or cannot be checked against it (an
+ * experimental version, or a malformed or empty field) (NF-041, logged): it is
+ * never started and answers 410 NF-023 like any retired build, since it will
+ * not come back. NF-041 thrown when that is the current build. Builds that
+ * record no version keep running, logged once as an NF-041 error (they are
+ * likely builds from before the field existed, with an affected version).
  */
 function refuseAffectedBuilds(
   builds: BuildEntry[],
@@ -235,15 +243,21 @@ function refuseAffectedBuilds(
   for (const id of plan.live) {
     const build = byId.get(id)
     if (build?.kind !== 'islands') continue
-    if (!build.reactServerDomWebpack) {
+    const recorded = build.reactServerDomWebpack
+    if (recorded === undefined) {
       unrecorded.push(id)
       continue
     }
-    const details = build.reactServerDomWebpack
-      .map((version) => flightClientAdvisoryDetail(version))
-      .filter((detail): detail is string => detail !== null)
+    const details =
+      recorded === null
+        ? [
+            `a malformed react-server-dom-webpack field in its nf-build.json (expected a non-empty list of versions), so it cannot be checked against ${RSC_ADVISORY.id} (${RSC_ADVISORY.url}).`,
+          ]
+        : recorded
+            .map((version) => flightClientAdvisoryDetail(version))
+            .filter((detail): detail is string => detail !== null)
     if (details.length === 0) continue
-    const detail = `Build "${id}" uses ${details.join(' ')}`
+    const detail = `Build "${id}" ${recorded === null ? 'records' : 'uses'} ${details.join(' ')}`
     if (id === plan.current) {
       throw new NFError(
         'NF-041',
@@ -257,9 +271,9 @@ function refuseAffectedBuilds(
     refused.push(id)
   }
   if (unrecorded.length > 0) {
-    logger.warn(
+    logger.error(
       'NF-041',
-      `Builds ${unrecorded.map((id) => `"${id}"`).join(', ')} do not record their react-server-dom-webpack version (built with an older @next-federation/vite), so nf-serve cannot check them against ${RSC_ADVISORY.id} (${RSC_ADVISORY.url}). Remove every build made with an affected version, or rebuild.`
+      `Builds ${unrecorded.map((id) => `"${id}"`).join(', ')} do not record their react-server-dom-webpack version (built with an older @next-federation/vite), so nf-serve cannot check them against ${RSC_ADVISORY.id} (${RSC_ADVISORY.url}). They are still served: remove every build made with an affected version, or rebuild with a current @next-federation/vite.`
     )
   }
   if (refused.length === 0) return plan

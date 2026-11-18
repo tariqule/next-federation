@@ -53,7 +53,8 @@ and restart `nf-serve`, or restart it once with `--max-builds 1 --min-age-hours 
 - an older live build is affected: it is retired, so its process is not started and its routes
   answer `410 NF-023`, as for any retired build (it will not come back, so `410` rather than `503`),
   and `nf-serve` logs `NF-041` naming the build and the version;
-- builds without the field (made with an older `@next-federation/vite`) are served, with one
-  `NF-041` warning: remove those made with an affected version yourself.
+- a malformed or empty field (not a list, a non-string entry, or `[]`) is refused the same way;
+- builds without the field (made with an older `@next-federation/vite`) are served and logged once as
+  an `NF-041` error: they are probably builds with an affected version, so remove those yourself.
 
 See [NF-023](../errors/build-retired.md) and [NF-041](../errors/vulnerable-react-server-dom.md).

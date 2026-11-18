@@ -8,18 +8,31 @@ One of these:
   [GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), unauthenticated remote
   code execution in React Server Components, or an experimental React build that cannot be checked
   against it. `vite build` fails; the Vite dev server logs this as a warning and goes on.
-- `nf-serve` found a build whose `nf-build.json` records such a version. If it is the current
-  build, `nf-serve` does not start. An older build is retired: its process is not started and its
-  `/b/<build>/` paths answer `410 NF-023`.
+- `nf-serve` found a build whose `nf-build.json` records such a version, or whose
+  `reactServerDomWebpack` field is malformed or empty (not a list, a non-string entry, or `[]`). If
+  it is the current build, `nf-serve` does not start. An older build is retired: its process is not
+  started and its `/b/<build>/` paths answer `410 NF-023`.
 - `nf-serve` found builds that record no version (made with an older `@next-federation/vite`). It
-  serves them and warns once, because it cannot check them.
+  cannot check them and they are probably builds with an affected version, so it logs them once as
+  an error; it still serves them.
 
 ## Why
 
 An island remote runs `react-server-dom-webpack` on its server to render islands and run Server
 Actions. The affected versions are 19.0.0 to 19.0.8, 19.1.0 to 19.1.9, 19.2.0 to 19.2.8 and
-19.3.0. The patched versions are **19.0.9**, **19.1.10**, **19.2.9** and **19.3.1**. The message
-names the version found, where it was found, and the first patched version of its minor line.
+19.3.0. The patched versions are **19.0.9**, **19.1.10**, **19.2.9** and **19.3.1**.
+
+What the message contains depends on the case:
+
+- **An affected version**: the version found, where it was found (a folder for `vite build`, the
+  build id for `nf-serve`), the advisory, and the first patched version of its minor line with the
+  command to install it.
+- **An experimental build or a value that is not a release version**: the version found, where it
+  was found, the advisory, and that experimental builds cannot be checked against it. It names no
+  patched version: it lists the patched releases to choose from.
+- **A malformed or empty `reactServerDomWebpack` field** (`nf-serve` only): the build id, that the
+  field is malformed, and the advisory.
+- **Builds that record no version** (`nf-serve` only): the build ids and the advisory.
 
 React canaries and experimental builds are refused too:
 
