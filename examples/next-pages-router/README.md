@@ -30,7 +30,8 @@ their READMEs), then `pnpm --filter example-next-pages-router dev` (or `build` a
 `vercel.json` builds the workspace packages, then `next build`. Environment variables: `SHOP_ORIGIN`
 and `CART_ORIGIN` (the remotes' URLs), `PAGES_ROUTER_ORIGIN` (this host's URL: the identity issuer
 the island remote lists), `NF_SIGNING_KEY` (private, this project only) and
-`NF_COMPONENTS_PUBLIC_KEY`. Without them, the local defaults apply. On Vercel, the header shows a
+`NF_COMPONENTS_PUBLIC_KEY`. Locally, without them, the local defaults apply; on Vercel a missing one
+fails the build. `vercel.json` builds production deployments only. On Vercel, the header shows a
 live demo banner (`NEXT_PUBLIC_VERCEL_ENV` is set at build time).
 
 Guides: [Pages Router host](../../docs/guides/getting-started-pages-router.md),

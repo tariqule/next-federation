@@ -8,13 +8,21 @@ import type { AppIdentity } from '@next-federation/next/server'
 // deployment: environment variables).
 //   NF_SIGNING_KEY            private JWK: signs identity tokens for remotes
 //   NF_COMPONENTS_PUBLIC_KEY  public JWK of the components remote's builds
-const componentsKey = process.env.NF_COMPONENTS_PUBLIC_KEY
-// The remotes' URLs and this host's own (the identity issuer): fixed by
-// configuration, never taken from a request. Defaults: the local ports.
-const SHOP_ORIGIN = process.env.SHOP_ORIGIN || 'http://127.0.0.1:3300'
-const CART_ORIGIN = process.env.CART_ORIGIN || 'http://127.0.0.1:3304'
-const APP_ROUTER_ORIGIN =
-  process.env.APP_ROUTER_ORIGIN || 'http://localhost:3301'
+// The remotes' URLs and this host's own (the identity issuer) are fixed by
+// configuration, never taken from a request. Locally they default to the
+// example ports. On Vercel every variable is required: a missing one fails
+// the build instead of falling back to localhost.
+function env(name: string): string | undefined {
+  const value = process.env[name]
+  if (!value && process.env.VERCEL) {
+    throw new Error(`${name} is not set: set it on the Vercel project`)
+  }
+  return value || undefined
+}
+const componentsKey = env('NF_COMPONENTS_PUBLIC_KEY')
+const SHOP_ORIGIN = env('SHOP_ORIGIN') ?? 'http://127.0.0.1:3300'
+const CART_ORIGIN = env('CART_ORIGIN') ?? 'http://127.0.0.1:3304'
+const APP_ROUTER_ORIGIN = env('APP_ROUTER_ORIGIN') ?? 'http://localhost:3301'
 
 export const federation = defineFederation({
   remotes: {
@@ -32,7 +40,7 @@ export const federation = defineFederation({
   },
   identity: {
     issuer: APP_ROUTER_ORIGIN,
-    signingKeys: process.env.NF_SIGNING_KEY!,
+    signingKeys: env('NF_SIGNING_KEY')!,
   },
 })
 

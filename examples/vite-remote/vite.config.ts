@@ -4,23 +4,44 @@ import { defineConfig } from 'vite'
 // The hosts' origins: the App Router host, the Pages Router host (basePath
 // /shop) and the SPA. Locally they run on `localhost`, ports 3301-3303, and
 // this remote on 127.0.0.1:3300, so hosts and remote are different sites, as
-// in production. A deployment sets each variable to the host's URL.
-const origin = (name: string, local: string) =>
-  new URL(process.env[name] || local).origin
+// in production. A deployment sets each variable to the host's URL; on
+// Vercel a missing one fails the build instead of falling back to localhost.
+function origin(name: string, local: string): string {
+  const value = process.env[name]
+  if (!value && process.env.VERCEL) {
+    throw new Error(`${name} is not set: set it on the Vercel project`)
+  }
+  return new URL(value || local).origin
+}
 const APP_ROUTER = origin('APP_ROUTER_ORIGIN', 'http://localhost:3301')
 const PAGES_ROUTER = origin('PAGES_ROUTER_ORIGIN', 'http://localhost:3302')
 const SPA = origin('SPA_ORIGIN', 'http://localhost:3303')
 
 // On Vercel (scripts/vercel-build.ts sets NF_VERCEL=1), the remote is served
-// from the project's production domain: Vercel sets it, without the scheme,
-// as VERCEL_PROJECT_PRODUCTION_URL. Never use VERCEL_URL: generated
-// deployment URLs are behind Vercel's login.
+// from its public origin: NF_PUBLIC_ORIGIN if set, else the production domain
+// Vercel sets, without the scheme, as VERCEL_PROJECT_PRODUCTION_URL (which
+// may name another of the project's domains). Never use VERCEL_URL:
+// generated deployment URLs are behind Vercel's login.
 const VERCEL = process.env.NF_VERCEL === '1'
 function base(): string {
   if (!VERCEL) return 'http://127.0.0.1:3300/'
+  const publicOrigin = process.env.NF_PUBLIC_ORIGIN
+  if (publicOrigin) {
+    // An https origin, as https://shop.example.com: no path, no trailing slash.
+    const url = URL.canParse(publicOrigin) ? new URL(publicOrigin) : null
+    if (url?.protocol !== 'https:' || url.origin !== publicOrigin) {
+      throw new Error(
+        `NF_PUBLIC_ORIGIN must be an https origin, without a trailing slash: ${publicOrigin}`
+      )
+    }
+    return `${publicOrigin}/`
+  }
   const domain = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  if (!domain)
-    throw new Error('NF_VERCEL=1 needs VERCEL_PROJECT_PRODUCTION_URL')
+  if (!domain) {
+    throw new Error(
+      'NF_VERCEL=1 needs NF_PUBLIC_ORIGIN or VERCEL_PROJECT_PRODUCTION_URL'
+    )
+  }
   return `https://${domain}/`
 }
 

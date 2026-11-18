@@ -39,9 +39,10 @@ Without a trusted key or pin, hosts render the component in the browser only (an
 
 ## Deploy on Vercel
 
-Static files only. `vercel.json` runs `scripts/vercel-build.ts`: `vite build` with `NF_VERCEL=1`
-(`base` from `VERCEL_PROJECT_PRODUCTION_URL`), then the layout `nf-serve` serves: `b/<buildId>/*`
-and `_nf/components.json`. Set `NF_COMPONENTS_SIGNING_KEY` on this project only; the script fails
+Static files only. `vercel.json` runs `scripts/vercel-build.ts` (production deployments only):
+`vite build` with `NF_VERCEL=1` (`base` from `NF_PUBLIC_ORIGIN`, this remote's https origin; else
+`VERCEL_PROJECT_PRODUCTION_URL`), then the layout `nf-serve` serves: `b/<buildId>/*` and
+`_nf/components.json`. Set `NF_COMPONENTS_SIGNING_KEY` on this project only; the script fails
 without it, so a deployment is always signed. Hosts get the public key as `NF_COMPONENTS_PUBLIC_KEY`.
 
 Guide: [Remote components](../../docs/guides/remote-components.md) (integrity, rotation, limits).

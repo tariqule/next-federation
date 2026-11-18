@@ -12,6 +12,11 @@ import { privateJwk } from './keys.mjs'
 const argv = process.argv.slice(2)
 const at = argv.indexOf('--prefix')
 const prefix = at === -1 ? 'next-federation-example-' : argv[at + 1]
+if (!prefix || prefix.startsWith('-')) {
+  console.error('usage: pnpm examples:demo-keys [--prefix <prefix>]')
+  console.error('--prefix needs a value, for example --prefix my-demo-')
+  process.exit(1)
+}
 const url = (env, name) =>
   process.env[env] || `https://${prefix}${name}.vercel.app`
 
@@ -36,6 +41,7 @@ const PROJECTS = [
     `${prefix}vite-remote`,
     'examples/vite-remote',
     [
+      ['NF_PUBLIC_ORIGIN', shop],
       ['APP_ROUTER_ORIGIN', appRouter],
       ['PAGES_ROUTER_ORIGIN', pagesRouter],
       ['SPA_ORIGIN', spa],
@@ -44,7 +50,10 @@ const PROJECTS = [
   [
     `${prefix}components-remote`,
     'examples/components-remote',
-    [['NF_COMPONENTS_SIGNING_KEY', components, true]],
+    [
+      ['NF_PUBLIC_ORIGIN', cart],
+      ['NF_COMPONENTS_SIGNING_KEY', components, true],
+    ],
   ],
   [
     `${prefix}app-router`,
@@ -79,8 +88,9 @@ const PROJECTS = [
 ]
 
 console.log(`# Live demo environment variables. New keys on every run: nothing is saved.
-# Per project, set each NAME to the text after the first "=" (Production and
-# Preview). Mark the private keys Sensitive. Deploy the remotes first.`)
+# Per project, set each NAME to the text after the first "=", for Production
+# only (previews are not built). Mark the private keys Sensitive. Deploy the
+# remotes first.`)
 for (const [project, folder, vars] of PROJECTS) {
   console.log(`\n## ${project} (Root Directory ${folder})`)
   for (const [name, value, secret] of vars) {

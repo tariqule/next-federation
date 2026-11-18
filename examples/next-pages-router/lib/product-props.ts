@@ -4,10 +4,15 @@ import { getComponentDescriptor } from '@next-federation/next/pages/server'
 import { federation, getIslandProps } from './federation'
 import type { ProductPageProps } from './ProductPage'
 
+const SKUS = ['A1', 'B2', 'C3']
+
 export const getProductPageProps =
   (fixedSku?: string): GetServerSideProps<ProductPageProps> =>
   async (ctx) => {
     const sku = fixedSku ?? String(ctx.params?.sku)
+    // The remote's products only: any other SKU is a 404 (as in the App
+    // Router host), so a public deployment asks the remote for these only.
+    if (!SKUS.includes(sku)) return { notFound: true }
     const locale = ctx.locale ?? 'en'
     const [product, links, cart] = await Promise.all([
       // Islands, rendered by the remote. The price format needs the locale,

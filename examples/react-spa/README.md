@@ -26,9 +26,10 @@ Then open <http://localhost:3303>. Alone: start both remotes (see their READMEs)
 ## Deploy on Vercel
 
 `vercel.json` builds the workspace packages, then `vite build` (static output in `dist`). Set
-`VITE_SHOP_ORIGIN` and `VITE_CART_ORIGIN` to the remotes' URLs; they are fixed at build time. The
-island remote must list this app's URL in `hosts` (its `SPA_ORIGIN`). On Vercel, the page shows a
-live demo banner (`VITE_VERCEL_ENV` is set at build time).
+`VITE_SHOP_ORIGIN` and `VITE_CART_ORIGIN` to the remotes' URLs; they are fixed at build time, and on
+Vercel `vite.config.ts` fails the build without them. The island remote must list this app's URL in
+`hosts` (its `SPA_ORIGIN`). `vercel.json` builds production deployments only. On Vercel, the page
+shows a live demo banner (`VITE_VERCEL_ENV` is set at build time).
 
 Guides: [SPA host](../../docs/guides/getting-started-spa.md),
 [Remote components](../../docs/guides/remote-components.md).

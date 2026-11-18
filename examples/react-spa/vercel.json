@@ -3,5 +3,6 @@
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile --filter example-react-spa...",
   "buildCommand": "pnpm --filter \"example-react-spa^...\" build && pnpm run build",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] && exit 1 || exit 0",
   "outputDirectory": "dist"
 }

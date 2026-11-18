@@ -102,6 +102,6 @@ The examples import only published entry points (`@next-federation/*`), linked f
 with `workspace:*`. In your own app, use version ranges instead. The origins default to the local
 ports above; set them with environment variables (`SHOP_ORIGIN`, `CART_ORIGIN`, `APP_ROUTER_ORIGIN`,
 `PAGES_ROUTER_ORIGIN`, `SPA_ORIGIN`; `VITE_SHOP_ORIGIN` and `VITE_CART_ORIGIN` in the SPA), as the
-live demo does. Each remote's `base` is its own URL: on Vercel, the build reads it from
-`VERCEL_PROJECT_PRODUCTION_URL`. Each remote keeps every build in `dist/<buildId>/`; delete old
-folders when you no longer need them.
+live demo does (on Vercel a missing one fails the build). Each remote's `base` is its own URL: on
+Vercel, the build reads it from `NF_PUBLIC_ORIGIN`, else `VERCEL_PROJECT_PRODUCTION_URL`. Each
+remote keeps every build in `dist/<buildId>/`; delete old folders when you no longer need them.
