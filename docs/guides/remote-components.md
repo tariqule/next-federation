@@ -993,7 +993,8 @@ differ until it hydrates.
 - **Server logs**: when a build renders browser-only at request time (an integrity failure, for
   example), Next logs the error React reports for that Suspense boundary, besides the `NF-` line.
 - **`next dev --webpack`**: the dev server re-creates the host's server modules when it compiles
-  another route ([Mixed-router hosts](#mixed-router-hosts)). A runtime whose own share cache holds
+  another route; the re-created runtime loads the remote's server code again and keeps
+  server-rendering ([Mixed-router hosts](#mixed-router-hosts)). A runtime whose own share cache holds
   another instance of a host module renders browser-only (`NF-028`, "stale").
 - **Load timeout**: one load attempt (manifest, entry and chunks) fails after 10 s, so a stalled
   remote never holds a server render; the server then renders the component in the browser only.
