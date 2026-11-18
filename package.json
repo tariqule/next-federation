@@ -49,5 +49,11 @@
     "tsdown": "0.23.7",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss@<8.5.23": "8.5.32",
+      "minimatch@>=7 <11.0.1": "11.0.1"
+    }
   }
 }
