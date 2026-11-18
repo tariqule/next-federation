@@ -67,9 +67,12 @@ retried soon (above). The envelope's build stays loadable because remotes retain
 
 The last good envelopes live in the server process's memory (at most 500, 50 MiB in all, keys and props included). A fresh
 process, a new serverless instance, or `next build` has none, so a failure there renders the
-fallback. Private and `dynamic` islands are never served stale, nor is an island the remote no longer
-exposes (its `404` with `{"error":"NF-021"}`, logged as `NF-007`): that is a deliberate removal, so
-the fallback renders at once.
+fallback. Private and `dynamic` islands are never served stale, nor is an island whose remote
+answers `404` with a JSON body (`Content-Type: application/json`, logged as `NF-007`). Any JSON 404
+counts as a deliberate removal, so the fallback renders at once: the remote's own
+`{"error":"NF-021"}` for an island it no longer exposes, but also, say, an API gateway's
+`{"message":"Not Found"}` in front of it. A 404 with any other content type, such as an HTML page
+from a proxy or a CDN, may be an outage and is still served stale.
 
 ## Private islands
 
