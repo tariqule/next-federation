@@ -49,3 +49,27 @@ export async function warmUp(
     await new Promise((resolve) => setTimeout(resolve, intervalMs))
   }
 }
+
+/** One page for {@link warmUpWithin}. */
+export type WarmUpStep = Omit<WarmUpOptions, 'deadlineMs'> & { url: string }
+
+/**
+ * Warms the pages in order within one budget: each step gets what the
+ * earlier ones left, so the whole warm-up ends within `budgetMs` (plus one
+ * request's tail) and fits the hook's timeout. Returns the URLs that never
+ * got ready, for a clear message instead of a hook timeout.
+ */
+export async function warmUpWithin(
+  steps: WarmUpStep[],
+  budgetMs: number
+): Promise<string[]> {
+  const deadline = Date.now() + budgetMs
+  const cold: string[] = []
+  for (const { url, ...options } of steps) {
+    const left = deadline - Date.now()
+    const ready =
+      left > 0 && (await warmUp(url, { ...options, deadlineMs: left }))
+    if (!ready) cold.push(url)
+  }
+  return cold
+}

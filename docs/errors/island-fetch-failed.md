@@ -34,7 +34,8 @@ adds a hint:
   A Next.js app cannot serve islands; its components can be shared another way
   ([Sharing components from a Next.js app](../guides/sharing-components-from-a-next-app.md)).
 - An island remote that does not expose this island answers `404` with `{"error":"NF-021"}`: that
-  is a wrong island name, not a wrong origin, and gets no hint ([NF-021](unknown-island.md)).
+  is a wrong island name, not a wrong origin, and gets no hint ([NF-021](unknown-island.md)). It is
+  never served from the last good envelope below: the remote removed the island on purpose.
 
 A cached public island keeps rendering its last good envelope from this server process while its
 remote fails (the log line then ends "rendering its last good envelope (N s old)"); otherwise the

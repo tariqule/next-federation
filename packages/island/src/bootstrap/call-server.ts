@@ -93,6 +93,15 @@ export function createCallServer(options: CallServerOptions): CallServer {
     const started = now()
     const body = await options.encodeReply(args)
     const { timeoutMs } = options
+    // One deadline from the first request until a response starts, across a
+    // 401 token refresh and its retry (never twice timeoutMs).
+    let limit:
+      | {
+          controller: AbortController
+          timeout: NFError
+          timer: ReturnType<typeof setTimeout>
+        }
+      | undefined
     const send = async (token: string | null): Promise<Response> => {
       const headers: Record<string, string> = { [ACTION_HEADER]: id }
       if (token) headers.authorization = `Bearer ${token}`
@@ -106,18 +115,21 @@ export function createCallServer(options: CallServerOptions): CallServer {
       }
       if (timeoutMs === undefined) return fetch(url, init)
       // Until the response starts: a long streamed result is not cut off.
-      const controller = new AbortController()
-      const timeout = new NFError(
-        'NF-038',
-        `Server Action "${id}" did not answer within ${timeoutMs} ms; it may or may not have run.`
-      )
-      const timer = setTimeout(() => controller.abort(timeout), timeoutMs)
+      if (!limit) {
+        const controller = new AbortController()
+        const timeout = new NFError(
+          'NF-038',
+          `Server Action "${id}" did not answer within ${timeoutMs} ms; it may or may not have run.`
+        )
+        const timer = setTimeout(() => controller.abort(timeout), timeoutMs)
+        limit = { controller, timeout, timer }
+      }
+      const { controller, timeout } = limit
+      if (controller.signal.aborted) throw timeout
       try {
         return await fetch(url, { ...init, signal: controller.signal })
       } catch (error) {
         throw controller.signal.aborted ? timeout : error
-      } finally {
-        clearTimeout(timer)
       }
     }
     let retried = false
@@ -153,6 +165,9 @@ export function createCallServer(options: CallServerOptions): CallServer {
       if (isNFError(error)) code = error.code
       done(false)
       throw error
+    } finally {
+      // The final response has started: the body is never cut off.
+      if (limit) clearTimeout(limit.timer)
     }
     status = res.status
     const type = res.headers.get('content-type') ?? ''

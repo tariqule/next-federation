@@ -16,6 +16,7 @@ scripts/
   check-guardrails.mjs          grep guardrail (see Hard rules), with __tests__/check-guardrails.spec.ts
   check-error-docs.mjs          every NF code has docs/errors/<slug>.md
   check-pack.mjs                every package packs its README, LICENSE and CHANGELOG
+  publish-wait.mjs              publish workflow step: `pnpm release`, waiting out npm staged versions
 docs/
   README.md                     docs index
   architecture.md               how islands and remote components work

@@ -25,6 +25,16 @@ The job runs in the `npm-publish` GitHub environment. Add yourself as a **requir
 that environment (Settings → Environments → `npm-publish`) to get an approval step between
 starting the workflow and anything being published.
 
+## If npm stages a version
+
+npm may hold a newly accepted version as staged for a few minutes; publishing it again meanwhile
+fails with `E409 … Cannot publish over previously staged version` (a brand-new package can also
+show a `0.0.0-stage` placeholder). When that is the only failure, the publish step
+(`scripts/publish-wait.mjs`) waits up to 15 minutes until `npm view <name>@<version>` shows each
+staged version, then publishes the rest. If a version is still not shown, the job fails: approve it
+on npmjs.com (the package's Staged Packages), or run `npm stage list <name>` and
+`npm stage approve <stage-id>` (2FA), then run the workflow again.
+
 ## One-time setup
 
 1. **Create the npm organization.** On npmjs.com create the `next-federation` organization (the scope

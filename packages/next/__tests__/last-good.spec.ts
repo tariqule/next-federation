@@ -74,3 +74,17 @@ test('bounded to 50 MiB of envelopes in all', () => {
   expect(lastGood(key(2), 2000, 60)).not.toBeNull()
   expect(lastGood(key(3), 2000, 60)).not.toBeNull()
 })
+
+test('the keys count against the 50 MiB too: large props cannot grow memory past it', () => {
+  // 10 Mi characters of props per key, small envelopes: the keys are what
+  // takes the memory (a JavaScript string can take 2 bytes per character).
+  const props = (n: number) =>
+    JSON.stringify({ n, blob: 'x'.repeat(10 * 1024 * 1024) })
+  const bigKey = (n: number) => lastGoodKey(target, 'Banner', props(n), '{}')
+  rememberGood(bigKey(1), good('b1'), 1000)
+  rememberGood(bigKey(2), good('b2'), 1001)
+  rememberGood(bigKey(3), good('b3'), 1002)
+  expect(lastGood(bigKey(1), 2000, 60)).toBeNull()
+  expect(lastGood(bigKey(2), 2000, 60)).not.toBeNull()
+  expect(lastGood(bigKey(3), 2000, 60)).not.toBeNull()
+})

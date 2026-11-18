@@ -641,6 +641,40 @@ describe('stale-if-error: a public island whose remote fails keeps its last good
     expect(events.filter((e) => e.type === 'island:error')).toHaveLength(1)
   })
 
+  test('an island the remote removed (its JSON 404, NF-021) is not served stale: the fallback renders at once', async () => {
+    const error = rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const fed = federation(false)
+    const spec = { remote: 'a', island: 'Banner' }
+    // The protocol's own answer for an unknown island: a deliberate removal.
+    serve(good(T0), failed(T0 + 1000, 404))
+    await loadIsland(fed, {}, spec)
+    expect(await loadIsland(fed, {}, spec)).toEqual({ kind: 'failed' })
+    expect(error).toHaveBeenLastCalledWith(
+      'NF-007',
+      expect.stringMatching(/rendering its fallback/)
+    )
+    // A 404 page that is not the protocol's (a proxy or CDN in front of the
+    // remote, `not-an-island-remote`) may be an outage: still served stale.
+    serve(
+      good(T0),
+      markFresh(
+        {
+          ok: false,
+          code: 'NF-007',
+          status: 404,
+          hint: 'not-an-island-remote',
+          meta: { ms: 4, bytes: 0, attempts: 1 },
+        },
+        T0 + 1000
+      )
+    )
+    await loadIsland(fed, {}, spec)
+    expect(await loadIsland(fed, {}, spec)).toMatchObject({
+      kind: 'ok',
+      stale: true,
+    })
+  })
+
   test('private and dynamic islands are never served stale', async () => {
     rs.spyOn(logger, 'error').mockImplementation(() => {})
     const fed = federation(false)

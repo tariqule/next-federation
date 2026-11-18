@@ -81,7 +81,8 @@ A remote whose Server Actions read or change private data should set
 
 Server Action calls have no client-side timeout unless you set `actions.timeoutMs`: a call whose
 response has not started within that many milliseconds is aborted and rejects with `NF-038`. The
-action may still have run on the remote.
+action may still have run on the remote. The limit covers a retry after a token refresh too (one
+deadline from the first request).
 
 `resolveOptions(options, { command, env, now })` validates them (`NF-020` for a relative `base`,
 `NF-002` for everything else) and returns the resolved shape. A `buildId` matches

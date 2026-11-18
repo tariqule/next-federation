@@ -281,6 +281,22 @@ describe('stale-if-error (ISR): a failed regeneration keeps the last good envelo
     expect(await getIslandProps(ssg(), spec)).toEqual(good)
   })
 
+  test('an island the remote removed (its JSON 404, NF-021) is not served stale', async () => {
+    rs.spyOn(logger, 'error').mockImplementation(() => {})
+    const { getIslandProps } = createPagesIslands(federation(false))
+    const spec = { remote: 'a', island: 'Banner' }
+    await getIslandProps(ssg(), spec)
+    respond = () =>
+      new Response(JSON.stringify({ error: 'NF-021' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      })
+    now = T0 + 1000
+    expect(await getIslandProps(ssg(), spec)).toMatchObject({
+      envelope: null,
+    })
+  })
+
   test('kept at most an hour (or twice islands.revalidate); then envelope null', async () => {
     rs.spyOn(logger, 'error').mockImplementation(() => {})
     const { getIslandProps } = createPagesIslands(federation(false))

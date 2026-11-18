@@ -90,6 +90,35 @@ describe('legacy', () => {
     expect(init.credentials).toBe('omit')
   })
 
+  test("legacy: `at` is when the envelope was fetched (the response's Date), not this render: a fetch-cache hit keeps its age", async () => {
+    // Next's fetch cache replays the stored response, Date header included.
+    const fetchedAt = Math.floor(Date.now() / 1000) * 1000 - 90_000
+    respond = () =>
+      new Response(JSON.stringify(envelope), {
+        headers: { date: new Date(fetchedAt).toUTCString() },
+      })
+    const r = await legacyGet(target, 'Banner', '{}', '{}', 60)
+    expect(r.ok).toBe(true)
+    expect(r.at).toBe(fetchedAt)
+  })
+
+  test('legacy: without a usable Date header (missing, invalid, in the future) `at` is now', async () => {
+    for (const date of [
+      undefined,
+      'not a date',
+      new Date(Date.now() + 600_000).toUTCString(),
+    ]) {
+      respond = () =>
+        new Response(JSON.stringify(envelope), {
+          headers: date === undefined ? {} : { date },
+        })
+      const before = Date.now()
+      const r = await legacyGet(target, 'Banner', '{}', '{}', 60)
+      expect(r.at).toBeGreaterThanOrEqual(before)
+      expect(r.at).toBeLessThanOrEqual(Date.now())
+    }
+  })
+
   test('legacy returns the failure result for a remote error', async () => {
     respond = () => new Response('nope', { status: 500 })
     const r = await legacyGet(target, 'Banner', '{}', '{}', 60)
@@ -250,17 +279,49 @@ describe('skipStaticShellUntilReady (remote components on a static cacheComponen
 
   test('cc, next start: a build the server has not loaded yet keeps this render out of the static shell, and says so', async () => {
     const warn = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    // Not inside a host 'use cache' scope: cacheLife() throws there.
+    rs.mocked(cacheLife).mockImplementationOnce(() => {
+      throw new Error('cacheLife() can only be called inside a "use cache"')
+    })
     await ccSkip(d())
     // A deliberate dynamic hole (the page's descriptor entries stay in the
-    // shell, so the page still regenerates), not the failure profile.
-    expect(cacheLife).toHaveBeenCalledWith(DEFER_LIFE)
-    expect(cacheLife).not.toHaveBeenCalledWith(FAILURE_LIFE)
+    // shell, so the page still regenerates), not the failure profile: the
+    // only cacheLife() that applies is the hole's own.
+    expect(cacheLife).toHaveBeenLastCalledWith(DEFER_LIFE)
+    const applied = rs
+      .mocked(cacheLife)
+      .mock.calls.filter(
+        (_, i) => rs.mocked(cacheLife).mock.results[i]!.type !== 'throw'
+      )
+    expect(applied).toEqual([[DEFER_LIFE]])
     expect(warn).toHaveBeenCalledWith(
       'NF-039',
       `not-loaded:${base}`,
       expect.stringMatching(/not loaded in this server process yet/)
     )
     expect(warn.mock.calls.map((c) => c[0])).not.toContain('NF-028')
+  })
+
+  test("cc: inside the host's own 'use cache' scope, that scope gets the failure profile, never a hole (it would take the descriptor out of the shell)", async () => {
+    // A host component with 'use cache' that reads the descriptor: a
+    // short-lived life there would make the whole scope (descriptor entry
+    // included) a dynamic hole, and a shell left without a revalidating entry
+    // gets `revalidate: false`, stuck as a partial prerender. The failure
+    // profile keeps that scope in the shell, retried within seconds.
+    const warn = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    await ccSkip(d())
+    expect(cacheLife).toHaveBeenCalledWith(FAILURE_LIFE)
+    expect(cacheLife).not.toHaveBeenCalledWith(DEFER_LIFE)
+    for (const [life] of rs.mocked(cacheLife).mock.calls) {
+      expect((life as { expire: number }).expire).toBeGreaterThanOrEqual(
+        2 * MIN_PRERENDERABLE_EXPIRE
+      )
+    }
+    expect(warn).toHaveBeenCalledWith(
+      'NF-039',
+      `not-loaded:${base}`,
+      expect.stringMatching(/not loaded in this server process yet/)
+    )
   })
 
   test('cc: a loaded or refused build, a browser-only descriptor, the build and dev do nothing', async () => {

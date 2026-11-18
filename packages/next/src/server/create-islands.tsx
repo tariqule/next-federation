@@ -100,9 +100,10 @@ export function createIslands(
   return {
     /**
      * Sync Server Component. It renders its own `<Suspense>`: with
-     * `cacheComponents` a failed or private island becomes a dynamic hole
-     * there, and a hydration error elsewhere in the host cannot client-render
-     * the island's DOM away. `blocking` (private islands only) leaves the
+     * `cacheComponents` a private island becomes a dynamic hole there (a
+     * failed public one stays in the static shell, retried within seconds),
+     * and a hydration error elsewhere in the host cannot client-render the
+     * island's DOM away. `blocking` (private islands only) leaves the
      * boundary out, so the island renders in the shell: the nearest boundary
      * above it is the page's own (`loading.tsx`, a `<Suspense>`), if any,
      * which also takes the place of the island's for hydration errors.

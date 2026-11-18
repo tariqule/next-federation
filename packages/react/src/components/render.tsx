@@ -137,6 +137,9 @@ function isControlFlow(thrown: unknown): boolean {
     message?: unknown
     $$typeof?: unknown
   }
+  // React's `use()` throws an Error named only by this message prefix
+  // ("Suspense Exception: This is not a real error!"). Re-verify it on every
+  // React upgrade (components-render-errors.spec.tsx pins it).
   return (
     typeof value.then === 'function' ||
     typeof value.digest === 'string' ||
@@ -191,6 +194,11 @@ function renderer(
 }
 
 const subscribeNothing = () => () => {}
+
+/** Renders its children: stands where the renderer would, to keep the tree shape. */
+function Slot({ children }: { children: ReactNode }): ReactNode {
+  return children
+}
 
 /** Fallback on the server and during hydration; children once hydrated. */
 function BrowserOnly({ fallback, children }: BoundaryProps): ReactNode {
@@ -392,10 +400,19 @@ export function createBindings({
         preinit(href, { as: 'style', precedence: CSS_PRECEDENCE })
       }
     }
-    const browserOnly = (
+    const markAndFallback = (
       <>
         <template {...{ [BROWSER_ONLY_ATTR]: id }} />
         {fallback}
+      </>
+    )
+    // The same tree shape as a server render error, where the renderer (the
+    // second child below) returns `markAndFallback`: ids in the fallback
+    // (useId) then match during hydration.
+    const browserOnly = (
+      <>
+        {null}
+        <Slot>{markAndFallback}</Slot>
       </>
     )
     if (marked && !hydrated) return browserOnly
@@ -433,7 +450,7 @@ export function createBindings({
             props={props}
             onServerError={(error) => {
               reportRenderError(descriptor, expose, error)
-              return browserOnly
+              return markAndFallback
             }}
           />
         ) : (

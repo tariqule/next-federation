@@ -28,17 +28,36 @@ export async function getPublicEnvelope(
   hostJson: string,
   revalidate: number
 ): Promise<MarkedIslandResult> {
+  let date: string | null = null
   const result = await fetchIsland(target, {
     island,
     props: JSON.parse(propsJson) as unknown,
     host: JSON.parse(hostJson) as FetchIslandRequest['host'],
     init: { next: { revalidate, tags: islandTags(target.remote, island) } },
+    // Next's fetch, read at call time. Keeps the response's Date header.
+    fetch: async (input, init) => {
+      const response = await globalThis.fetch(input, init)
+      date = response.headers.get('date')
+      return response
+    },
   })
   // This function runs on every render (only the fetch is cached), so every
   // result is marked fresh: a data-cache hit is reported with its own
   // measured duration. `at` bounds how long `loadIsland` may render this
   // envelope in place of a later failure (stale-if-error).
-  return markFresh(result, Date.now())
+  const now = Date.now()
+  return markFresh(result, result.ok ? fetchedAt(date, now) : now)
+}
+
+/**
+ * When a good envelope was fetched: its response's Date header, which Next's
+ * fetch cache replays with the stored response, so a cache hit keeps its
+ * real age (and the stale-if-error window is not stretched by up to
+ * `revalidate`). Now when the header is missing, invalid or in the future.
+ */
+function fetchedAt(date: string | null, now: number): number {
+  const at = date === null ? Number.NaN : Date.parse(date)
+  return Number.isFinite(at) && at <= now ? at : now
 }
 
 /** Legacy model: no `'use cache'` scopes exist, so there is nothing to shorten. */

@@ -53,7 +53,8 @@ chosen at build time because `'use cache'` only compiles with `cacheComponents`:
   envelope this server process fetched for the same remote, island, props and host context, kept
   for at least an hour or twice `revalidate` (at most 500 envelopes, 50 MiB). The failure is still
   logged with its code and emitted as `island:error`. Without one, the fallback renders. Private
-  islands (`blocking` or not) and `dynamic` islands are never served stale.
+  islands (`blocking` or not), `dynamic` islands and an island the remote removed (its `404`
+  `NF-021`) are never served stale.
 
 ## `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router)
 
@@ -264,8 +265,10 @@ nf-types --config lib/federation.config.ts [--remote shop]... [--out next-federa
 ```
 
 `--config` is the federation file with no Next.js imports (`lib/federation.config.ts` in the
-guides), loaded with plain Node. `nf-types` does not read `.env.local`; load it with Node (`cli.js`
-is what the `nf-types` bin runs):
+guides), loaded with plain Node. A `.ts` config needs a Node that strips types (by default from 22.18
+and 23.6; from 22.6 with `NODE_OPTIONS=--experimental-strip-types`); on older Node (the package
+supports 20.9+) write it as `.mjs`. `nf-types` does not read `.env.local`; load it with Node (`cli.js` is what the `nf-types`
+bin runs):
 
 ```sh
 node --env-file=.env.local node_modules/@next-federation/next/dist/types/cli.js \

@@ -29,7 +29,9 @@ which logs the live builds when it starts.
 
 ## Operator rule
 
-Keep builds for at least `max(host island revalidate, longest expected open tab)`. Raise
+Keep builds for at least `max(host island revalidate, stale-if-error window, longest expected open
+tab)`, where the stale-if-error window is `max(1 h, 2 × host island revalidate)`: a host may keep
+rendering a last good envelope, and so loading its build, that long while the remote fails. Raise
 `--min-age-hours` if tabs stay open for days. Deleting a retired build's folder is safe. Before you
 rebuild into an output directory, delete that build's folder first so stale files never mix with the
 new build. On Vercel the production domain serves only the newest deployment's build: see
