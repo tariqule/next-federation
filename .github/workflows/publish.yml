@@ -38,13 +38,15 @@ jobs:
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      # Held on v4 on purpose: v7 stopped exporting a placeholder NODE_AUTH_TOKEN, and with
+      # `registry-url` the npmrc references it before the Publish step sets it. Move to v7 only
+      # together with a dry run.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-          cache: pnpm
           registry-url: https://registry.npmjs.org
       - name: Use an npm version that supports trusted publishing
-        run: npm install -g npm@11.21.3
+        run: npm install -g npm@11.21.2
       - run: pnpm install --frozen-lockfile
       - name: Refuse to publish with pending changesets
         run: |
