@@ -6,8 +6,9 @@
 
 **Documentation: <https://next-federation-docs.vercel.app>**
 
-**Live demo: <https://next-federation-example-app-router.vercel.app>** (the
-[examples](examples/README.md#live-demo) on Vercel: three hosts, two remotes)
+**Live demo: <https://next-federation-docs.vercel.app/docs/live-demo>** (the
+[examples](examples/README.md) on Vercel: three hosts and two remotes, what each one runs and what
+to try)
 
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
 renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App

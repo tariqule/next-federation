@@ -1,5 +1,9 @@
 # example-next-app-router
 
+**Host** (Next.js App Router). Embeds islands from [`vite-remote`](../vite-remote/README.md) and a
+remote component from [`components-remote`](../components-remote/README.md).
+Live: <https://next-federation-example-app-router.vercel.app>.
+
 A Next.js 16 App Router host on port 3301.
 
 - `/` and `/products/[sku]` (`lib/ProductPage.tsx`): two public islands from the island remote
@@ -11,6 +15,9 @@ A Next.js 16 App Router host on port 3301.
   routes, mounted at `app/api/next-federation/[...nf]/route.ts`.
   The guides keep `defineFederation` in a separate `lib/federation.config.ts` so `nf-types` can load
   it. This example does not run `nf-types`, so it keeps everything in one file.
+- `lib/Embedded.tsx`: demo only. The dashed outline and tag around each embedded piece, and the
+  caption under the header (`app/layout.tsx`), say which remote serves what. They wrap the island
+  or component and never go inside it; leave them out of your app.
 - `app/api/session/route.ts`: demo-only sign-in (any name, a plain cookie, no password).
   Replace it with your real authentication; the library only needs `getIdentity`.
 

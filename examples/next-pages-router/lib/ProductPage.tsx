@@ -2,6 +2,7 @@ import { RemoteIsland } from '@next-federation/next/pages'
 import type { IslandProps } from '@next-federation/next/pages'
 import type { RemoteComponentDescriptor } from '@next-federation/next/pages/server'
 import { CartButton } from './CartButton'
+import { Embedded } from './Embedded'
 
 export type ProductPageProps = {
   sku: string
@@ -31,10 +32,20 @@ export function ProductPage({
       <h1>
         {t.title} {sku}
       </h1>
-      <RemoteIsland {...product} fallback={<p>product unavailable</p>} />
-      <CartButton descriptor={cart} sku={sku} />
+      <Embedded remote="shop" name="ProductPanel">
+        <RemoteIsland {...product} fallback={<p>product unavailable</p>} />
+      </Embedded>
+      <Embedded remote="cart" name="CartButton">
+        <CartButton descriptor={cart} sku={sku} />
+      </Embedded>
       <h2>{t.more}</h2>
-      <RemoteIsland key={sku} {...links} fallback={<p>links unavailable</p>} />
+      <Embedded remote="shop" name="Links">
+        <RemoteIsland
+          key={sku}
+          {...links}
+          fallback={<p>links unavailable</p>}
+        />
+      </Embedded>
     </main>
   )
 }

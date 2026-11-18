@@ -20,6 +20,37 @@
         padding: 12px 0;
         border-bottom: 1px solid #ddd;
       }
+      /* Demo labels: what this app is, and which parts of the page remotes serve.
+         System colors (Canvas, CanvasText) follow the page in light and dark. */
+      .role {
+        margin: 8px 0 0;
+        font-size: 13px;
+        color: color-mix(in srgb, CanvasText 62%, Canvas);
+      }
+      .embedded {
+        position: relative;
+        max-width: 440px;
+        margin: 22px 0 14px;
+        padding: 12px 14px 8px;
+        border: 1px dashed;
+        border-radius: 10px;
+      }
+      .embedded-shop {
+        border-color: color-mix(in srgb, #4c6ef5 70%, Canvas);
+      }
+      .embedded-cart {
+        border-color: color-mix(in srgb, #2f9e6b 70%, Canvas);
+      }
+      .embedded-tag {
+        position: absolute;
+        top: -0.8em;
+        left: 10px;
+        padding: 0 6px;
+        background: Canvas;
+        font-size: 12px;
+        line-height: 1.5;
+        color: color-mix(in srgb, CanvasText 62%, Canvas);
+      }
     </style>
   </head>
   <body>

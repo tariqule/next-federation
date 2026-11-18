@@ -7,6 +7,8 @@
 // 2. dist/vercel/static/ (`outputDirectory`), laid out as `nf-serve` serves
 //    a components build: b/<buildId>/* (the build's files and descriptor)
 //    and _nf/components.json (the current descriptor, which hosts fetch).
+// 3. dist/vercel/static/index.html: the landing page at `/` (landing/), which
+//    says this is a remote.
 import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
@@ -45,4 +47,5 @@ cpSync(join(out, buildId, 'client'), pinned, {
 cpSync(descriptor, join(pinned, 'nf-components.json'))
 mkdirSync(join(out, 'static', '_nf'))
 cpSync(descriptor, join(out, 'static', '_nf', 'components.json'))
+cpSync(join(root, 'landing', 'index.html'), join(out, 'static', 'index.html'))
 console.log(`vercel-build: signed build ${buildId}`)

@@ -1,7 +1,14 @@
 # example-vite-remote
 
+**Remote** (island remote, Vite, remote name `shop`). Serves the islands `ProductPanel`, `Links`
+and `MyOrders` to the three hosts. It has no UI of its own.
+Live: <https://next-federation-example-vite-remote.vercel.app>.
+
 An island remote built with `@next-federation/vite`. It renders React Server Components on its
-own server and answers island requests from the example hosts.
+own server and answers island requests from the example hosts:
+[`next-app-router`](../next-app-router/README.md) and
+[`next-pages-router`](../next-pages-router/README.md) embed all three islands,
+[`react-spa`](../react-spa/README.md) embeds `ProductPanel`.
 
 | Island         | Shows                                                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -30,6 +37,9 @@ Check it: <http://127.0.0.1:3300/_nf/health>.
   (3301-3303 unless set), `issuers` the hosts whose tokens it accepts, with their JWKS URLs (the
   Pages Router host's issuer includes its basePath `/shop`).
 - `src/islands/*.tsx`: one entry per island (a Server Component with a default export).
+- `landing/index.html`: the page at `/` on Vercel, which says this is a remote and what it serves.
+  `scripts/vercel-build.ts` copies it to the static output. `nf-serve` serves no page at `/`, so
+  locally `/` answers `404`.
 
 ## Deploy on Vercel
 

@@ -1,5 +1,9 @@
 # example-next-pages-router
 
+**Host** (Next.js Pages Router). Embeds islands from [`vite-remote`](../vite-remote/README.md) and a
+remote component from [`components-remote`](../components-remote/README.md).
+Live: <https://next-federation-example-pages-router.vercel.app/shop>.
+
 A Next.js 16 Pages Router host on port 3302, with `basePath: '/shop'` and the locales `en`
 (default) and `fr`.
 
@@ -14,6 +18,9 @@ A Next.js 16 Pages Router host on port 3302, with `basePath: '/shop'` and the lo
   of the browser bundle. The identity issuer includes the basePath. The guides keep
   `defineFederation` in a separate `lib/federation.config.ts` so `nf-types` can load it; this
   example does not run `nf-types`, so it keeps everything in one file.
+- `lib/Embedded.tsx`: demo only. The dashed outline and tag around each embedded piece, and the
+  caption under the header (`pages/_app.tsx`), say which remote serves what. They wrap the island
+  or component and never go inside it; leave them out of your app.
 - `pages/api/session.ts`: demo-only sign-in (any name, a plain cookie, no password).
 
 ## Run it

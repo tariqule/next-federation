@@ -6,7 +6,10 @@
 // 2. dist/vercel/static/b/<buildId>/: the build's client files, the static
 //    output Vercel serves (`outputDirectory`), at the build-pinned paths the
 //    island envelopes name.
-// 3. dist/vercel/entry.js: re-exports the build's island handler and its id
+// 3. dist/vercel/static/index.html: the landing page at `/` (landing/), which
+//    says this is a remote. The rewrites send only `/_nf/*` and
+//    `/b/<buildId>/_nf/*` to the Function, so `/` stays static.
+// 4. dist/vercel/entry.js: re-exports the build's island handler and its id
 //    under a fixed path, so api/nf.ts imports it statically and Vercel's file
 //    tracing bundles every server chunk.
 import { execFileSync } from 'node:child_process'
@@ -31,6 +34,7 @@ const buildId = builds[0]!
 cpSync(join(out, buildId, 'client'), join(out, 'static', 'b', buildId), {
   recursive: true,
 })
+cpSync(join(root, 'landing', 'index.html'), join(out, 'static', 'index.html'))
 writeFileSync(
   join(out, 'entry.js'),
   `export { default } from './${buildId}/rsc/index.js'\nexport const buildId = ${JSON.stringify(buildId)}\n`

@@ -1,5 +1,8 @@
 # example-cart-context
 
+**Shared package**, not an app. The hosts and [`components-remote`](../components-remote/README.md)
+both use it, so the remote's `CartButton` reads the host's cart.
+
 A small React context package shared by the example hosts and the
 [components remote](../components-remote/README.md): `CartProvider` (used by the hosts) and
 `useCart()` (used by the hosts and by the remote's `CartButton`).
