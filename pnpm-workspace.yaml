@@ -7,5 +7,7 @@ packages:
   - 'test/e2e'
   # Example apps (private, never published).
   - 'examples/*'
+  # The advanced examples (the commerce platform, examples/advanced/README.md).
+  - 'examples/advanced/*'
   # Documentation website (private, never published).
   - 'docs-site'

@@ -4,7 +4,9 @@ A **private island** renders for the signed-in user. The host signs a short-live
 remote, the remote verifies it, and the island reads the user with `getIdentity()`.
 
 Runnable example: [examples/next-app-router](../../examples/next-app-router) (host) and
-[examples/vite-remote](../../examples/vite-remote) (the private `MyOrders` island).
+[examples/vite-remote](../../examples/vite-remote) (the private `MyOrders` island). With several remotes and a role claim:
+[examples/advanced](../../examples/advanced/README.md) (one sign-in, private islands from two
+remotes, an admin-only island).
 
 ## How it works
 

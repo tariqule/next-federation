@@ -1,0 +1,29 @@
+{
+  "name": "example-storefront",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -H localhost -p 13410",
+    "build": "next build",
+    "start": "next start -H localhost -p 13410"
+  },
+  "dependencies": {
+    "@next-federation/core": "workspace:*",
+    "@next-federation/next": "workspace:*",
+    "@next-federation/react": "workspace:*",
+    "example-cart-context": "workspace:*",
+    "example-design-system": "workspace:*",
+    "example-inspect": "workspace:*",
+    "example-session-context": "workspace:*",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -138,7 +138,9 @@ Pick the guide for what you are building:
 | A remote that exposes client components | [Remote components](docs/guides/remote-components.md)               | [components-remote](examples/components-remote) |
 
 To run every example together, run `pnpm examples:dev` in a checkout of this repository. See
-[examples/README.md](examples/README.md).
+[examples/README.md](examples/README.md). For a larger setup (five remotes, Server Actions,
+`cacheComponents`, a mixed-router host and an Rspack remote), see the
+[commerce platform](examples/advanced/README.md) (`pnpm examples:platform`).
 
 ## Documentation
 

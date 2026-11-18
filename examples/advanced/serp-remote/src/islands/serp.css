@@ -1,0 +1,19 @@
+/* Island CSS ships in the envelope; every class is prefixed (serp-). */
+.serp-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.serp-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, Canvas);
+}
+.serp-price {
+  margin-left: 8px;
+  color: color-mix(in srgb, CanvasText 70%, Canvas);
+}
+.serp-build {
+  display: block;
+  font-size: 12px;
+  color: color-mix(in srgb, CanvasText 60%, Canvas);
+}

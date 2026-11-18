@@ -1,0 +1,40 @@
+/* Island CSS ships in the envelope; every class is prefixed (acct-). */
+.acct-panel h2 {
+  margin: 0 0 6px;
+}
+.acct-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+}
+.acct-row input {
+  font: inherit;
+  padding: 4px 6px;
+}
+.acct-cancelled {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.acct-pending {
+  opacity: 0.6;
+}
+.acct-error {
+  color: #c92a2a;
+}
+.acct-ok {
+  color: #2b8a3e;
+}
+.acct-table td,
+.acct-table th {
+  padding: 2px 10px 2px 0;
+  text-align: left;
+}
+.acct-build {
+  display: block;
+  font-size: 12px;
+  color: color-mix(in srgb, CanvasText 60%, Canvas);
+}
+.acct-badge {
+  font-size: 14px;
+}

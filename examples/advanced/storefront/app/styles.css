@@ -1,0 +1,55 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+  max-width: 980px;
+  color-scheme: light dark;
+}
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, Canvas);
+}
+.brand {
+  font-size: 18px;
+}
+.header-link {
+  margin-right: 10px;
+}
+.header-user {
+  margin-left: 8px;
+  font-size: 13px;
+  color: color-mix(in srgb, CanvasText 65%, Canvas);
+}
+.role {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: color-mix(in srgb, CanvasText 65%, Canvas);
+}
+.sign-in {
+  margin: 12px 0;
+}
+main .embedded {
+  max-width: 720px;
+}
+.site-header .embedded {
+  max-width: 100%;
+  min-width: 0;
+}
+.site-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.header-link {
+  margin-right: 0;
+}
+@media (max-width: 560px) {
+  body {
+    padding: 0 16px 96px;
+  }
+}

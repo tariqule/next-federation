@@ -1,0 +1,238 @@
+/* Demo only: the labels around embedded pieces and the "How is this page
+   built?" layer. System colors (Canvas, CanvasText) follow light and dark. */
+.embedded {
+  position: relative;
+  margin: 22px 0 14px;
+  padding: 12px 14px 8px;
+  border: 1px dashed;
+  border-radius: 10px;
+  --embed: #6b7280;
+  border-color: color-mix(in srgb, var(--embed) 70%, Canvas);
+}
+.embedded-cdp {
+  --embed: #4c6ef5;
+}
+.embedded-pdp {
+  --embed: #7048e8;
+}
+.embedded-serp {
+  --embed: #0c8599;
+}
+.embedded-account {
+  --embed: #d9480f;
+}
+.embedded-header {
+  --embed: #2f9e44;
+}
+header .embedded {
+  margin: 10px 0 4px;
+  padding: 8px 10px 4px;
+}
+/* In a header, tags are short: "Header · Header" becomes name and remote. */
+header .tag-long {
+  display: none;
+}
+header .embedded-tag b::before {
+  content: '· ';
+  font-weight: 400;
+}
+.embedded-tag {
+  position: absolute;
+  top: -0.8em;
+  left: 10px;
+  padding: 0 6px;
+  background: Canvas;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: color-mix(in srgb, CanvasText 70%, Canvas);
+}
+
+/* Off: the anchor is empty and takes no space. On: the chip replaces the
+   tag, in-flow at the top of its outline (the outline grows by one line),
+   and the details open in-flow below it, so nothing ever overlaps. */
+.inspect-anchor {
+  display: block;
+}
+html[data-inspect] .embedded-tag {
+  display: none;
+}
+html[data-inspect] .embedded {
+  padding-top: 6px;
+}
+.inspect-chip {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--embed);
+  border-radius: 999px;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+.inspect-chip[aria-expanded='true'] {
+  background: var(--embed);
+  color: #fff;
+}
+.inspect-chip:focus-visible {
+  outline: 3px solid #4c6ef5;
+  outline-offset: 2px;
+}
+.inspect-badge {
+  display: block;
+  max-width: 460px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 2px solid var(--embed);
+  border-radius: 8px;
+  background: Canvas;
+  color: CanvasText;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.inspect-row {
+  display: block;
+  margin-top: 3px;
+}
+.inspect-row b {
+  display: inline-block;
+  min-width: 4.5em;
+}
+.inspect-trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  font-weight: 600;
+}
+.inspect-trail > span + span::before {
+  content: '› ';
+  font-weight: 400;
+}
+.inspect-depth-0 {
+  color: color-mix(in srgb, CanvasText 70%, Canvas);
+}
+.inspect-depth-1 {
+  color: #1971c2;
+}
+.inspect-depth-2 {
+  color: #c2255c;
+}
+.inspect-depth-3 {
+  color: #e67700;
+}
+.inspect-depth-4 {
+  color: #2b8a3e;
+}
+@media (prefers-color-scheme: dark) {
+  .inspect-depth-1 {
+    color: #74c0fc;
+  }
+  .inspect-depth-2 {
+    color: #faa2c1;
+  }
+  .inspect-depth-3 {
+    color: #ffc078;
+  }
+  .inspect-depth-4 {
+    color: #8ce99a;
+  }
+}
+
+/* Nested outlines: depth 1 is the dashed wrapper; depth 2 a remote's own
+   parts ([data-part]); depth 3 the shared design system ([data-ds]). Host
+   CSS only: outlines take no space and change no markup. */
+html[data-inspect] .embedded {
+  border-width: 2px;
+}
+html[data-inspect] .embedded-body [data-part] {
+  outline: 2px dotted #c2255c;
+  outline-offset: 2px;
+}
+html[data-inspect] .embedded-body [data-ds] {
+  outline: 2px solid #e67700;
+  outline-offset: 1px;
+}
+
+.inspect-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 30;
+  padding: 8px 14px;
+  border: 2px solid CanvasText;
+  border-radius: 999px;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.inspect-toggle[aria-pressed='true'] {
+  background: CanvasText;
+  color: Canvas;
+}
+.inspect-toggle:focus-visible,
+.inspect-panel-toggle:focus-visible {
+  outline: 3px solid #4c6ef5;
+  outline-offset: 2px;
+}
+.inspect-panel {
+  /* In-flow at the top of the page content: it never covers anything. */
+  margin: 12px 0;
+  max-width: 720px;
+  padding: 10px 14px;
+  border: 2px solid CanvasText;
+  border-radius: 10px;
+  background: Canvas;
+  color: CanvasText;
+  font-size: 13px;
+}
+.inspect-panel p {
+  margin: 6px 0;
+}
+.inspect-panel-toggle {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+}
+.inspect-timeline {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+.inspect-small {
+  font-size: 12px;
+  color: color-mix(in srgb, CanvasText 72%, Canvas);
+  overflow-wrap: anywhere;
+}
+
+.activity {
+  pointer-events: none;
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 25;
+  display: grid;
+  gap: 6px;
+}
+.activity p {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: CanvasText;
+  color: Canvas;
+  font-size: 13px;
+}
+.activity .activity-bad {
+  background: #c92a2a;
+  color: #fff;
+}

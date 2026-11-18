@@ -1,5 +1,10 @@
 # Server Actions in islands
 
+Runnable example: [examples/advanced/account-remote](../../examples/advanced/account-remote)
+(`updateProfile`, `cancelOrder` and an admin-only `restock`, with `<Form>`, `requireIdentity`,
+pending and optimistic states), embedded by
+[examples/advanced/storefront](../../examples/advanced/storefront).
+
 An island can call the `'use server'` functions of the remote that rendered it. The browser posts
 straight to that remote's build, so an action always runs on the build that rendered its island.
 The host page, its cookies and its router are not involved.

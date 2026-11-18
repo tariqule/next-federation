@@ -34,6 +34,9 @@
     "examples:start": "node examples/scripts/run.mjs start",
     "examples:smoke": "node examples/scripts/run.mjs smoke",
     "examples:walkthrough": "node examples/scripts/walkthrough.mjs",
+    "examples:platform": "node examples/scripts/platform.mjs start",
+    "examples:platform:dev": "node examples/scripts/platform.mjs dev",
+    "examples:platform:smoke": "node examples/scripts/platform.mjs smoke",
     "commitlint": "commitlint --edit"
   },
   "devDependencies": {

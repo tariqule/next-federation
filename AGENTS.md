@@ -70,7 +70,8 @@ test/
   fixtures/components-context/ the React context hosts share with it
   e2e/                      playwright.config.ts, servers.ts, *.spec.ts, fixtures/jwks-server.ts,
                             data/measurements.json (island size report written by measure.spec.ts)
-examples/                   runnable remotes and hosts (README.md, scripts/run.mjs; `pnpm examples:dev`);
+examples/                   runnable remotes and hosts (README.md, scripts/run.mjs; `pnpm examples:dev`)
+  advanced/                 the commerce platform: 5 remotes, 2 hosts (scripts/platform.mjs; `pnpm examples:platform`);
                             each has a vercel.json for the live demo (scripts/demo-keys.mjs)
 ```
 
@@ -91,6 +92,7 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 - `pnpm check:pack`: every package's tarball contents (run after building)
 - `pnpm e2e`: Playwright suites (`NF_LANE=b` runs on a second port range)
 - `pnpm examples:smoke`: start the examples and check every page
+- `pnpm examples:platform:smoke`: the same for the commerce platform (`examples/advanced`)
 
 ## Hard rules
 
