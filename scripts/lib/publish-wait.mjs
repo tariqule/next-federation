@@ -115,6 +115,8 @@ export async function waitUntilVisible(versions, io) {
 
 const COMMIT = /^[0-9a-f]{40}$/
 const SLSA_PROVENANCE = 'https://slsa.dev/provenance/v1'
+// The workflow that publishes (.github/workflows/publish.yml).
+const WORKFLOW = '.github/workflows/publish.yml'
 
 /**
  * The commit `npm view <spec> gitHead --json` names. npm records it only when
@@ -149,15 +151,27 @@ export function attestationsUrl(name, version) {
   return `https://registry.npmjs.org/-/npm/v1/attestations/${name.replaceAll('/', '%2f')}@${encodeURIComponent(version)}`
 }
 
+/**
+ * The package URL npm attests a version as (npm-package-arg's `toPurl`: the
+ * scope's `@` encoded, the version as published).
+ * @param {string} name
+ * @param {string} version
+ */
+export function purl(name, version) {
+  return `pkg:npm/${name.replace(/^@/, '%40')}@${version}`
+}
+
 /** @param {unknown} value */
 const isRecord = (value) => typeof value === 'object' && value !== null
 
 /**
- * The repository and commit a version's SLSA provenance names (GitHub
- * Actions: the workflow's repository and the commit it ran at), from npm's
- * attestations response.
+ * What a version's SLSA provenance names, from npm's attestations response:
+ * the package it describes (`subject`, a package URL), and for GitHub
+ * Actions the workflow's repository and file (`path`), the source it checked
+ * out (`uri`, `git+<repository>@<ref>`) and that source's commit. The
+ * values are npm's, unvalidated: compare them, never log them.
  * @param {FetchResult} response
- * @returns {{ kind: 'build', commit: string, repository: string } | { kind: 'none' } | { kind: 'unreadable' }}
+ * @returns {{ kind: 'build', subject: string, repository: string, path: string, uri: string, commit: string } | { kind: 'none' } | { kind: 'unreadable' }}
  */
 export function readProvenance(response) {
   if (response.status === 404) return { kind: 'none' }
@@ -174,22 +188,28 @@ export function readProvenance(response) {
     const statement = JSON.parse(Buffer.from(payload, 'base64').toString())
     if (statement.predicateType !== SLSA_PROVENANCE)
       return { kind: 'unreadable' }
+    const subject = statement.subject[0].name
     const build = statement.predicate.buildDefinition
-    const repository = build.externalParameters.workflow.repository
-    const commit = build.resolvedDependencies[0].digest.gitCommit
-    if (typeof repository !== 'string' || typeof commit !== 'string')
+    const { repository, path } = build.externalParameters.workflow
+    const source = build.resolvedDependencies[0]
+    const uri = source.uri
+    const commit = source.digest.gitCommit
+    const fields = [subject, repository, path, uri, commit]
+    if (!fields.every((field) => typeof field === 'string'))
       return { kind: 'unreadable' }
     if (!COMMIT.test(commit)) return { kind: 'unreadable' }
-    return { kind: 'build', commit, repository }
+    return { kind: 'build', subject, repository, path, uri, commit }
   } catch {
     return { kind: 'unreadable' }
   }
 }
 
 /**
- * Whether npm's `name@version` was built from `head` of `repository`: its
- * provenance must name both (this workflow always publishes with
- * provenance), and a gitHead, if npm has one, must name `head` too. Returns
+ * Whether npm's `name@version` was built from `head` of `repository` by the
+ * publish workflow: its provenance must describe `name@version` and name
+ * `repository`, the workflow file, a source in `repository` and `head` (this
+ * workflow always publishes with provenance), and a gitHead, if npm has one,
+ * must name `head` too. Returns
  * the error to log, or null. Only validated values appear in it: the name
  * and version (PACKAGE_LINE), commit SHAs and our own repository URL.
  * @param {PackageVersion} v
@@ -204,7 +224,7 @@ export function readProvenance(response) {
 async function checkOrigin(v, head, io) {
   const spec = `${v.name}@${v.version}`
   const other = (/** @type {string} */ what) =>
-    `::error::npm shows ${spec}, but ${what}, and this run is at ${head}: the version npm approved is not this commit's code, so this run publishes and tags nothing more. Inspect it (\`npm pack ${spec}\`). If it is not what you meant to release, deprecate it (\`npm deprecate ${spec} "<reason>"\`) and release a new version: npm never allows publishing a version again.`
+    `::error::npm shows ${spec}, but ${what}, and this run is at ${head}: the version npm approved is not shown to be this run's code, so this run publishes and tags nothing more. Inspect it (\`npm pack ${spec}\`). If it is not what you meant to release, deprecate it (\`npm deprecate ${spec} "<reason>"\`) and release a new version: npm never allows publishing a version again.`
   const gitHead = readGitHead(await io.view(spec, 'gitHead'))
   if (gitHead.kind === 'commit' && gitHead.commit !== head)
     return other(`its gitHead is ${gitHead.commit}`)
@@ -212,10 +232,18 @@ async function checkOrigin(v, head, io) {
     await io.fetchJson(attestationsUrl(v.name, v.version))
   )
   if (provenance.kind === 'build') {
+    if (provenance.subject !== purl(v.name, v.version))
+      return other(
+        `its provenance describes a package other than ${purl(v.name, v.version)}`
+      )
     if (provenance.repository !== io.repository)
       return other(
         `its provenance names a repository other than ${io.repository}`
       )
+    if (!provenance.uri.startsWith(`git+${io.repository}@`))
+      return other(`its provenance names a source outside ${io.repository}`)
+    if (provenance.path !== WORKFLOW)
+      return other(`its provenance names a workflow other than ${WORKFLOW}`)
     if (provenance.commit !== head)
       return other(`its provenance names commit ${provenance.commit}`)
     return null

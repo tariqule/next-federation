@@ -4,6 +4,7 @@
 // fails with E409 "Cannot publish over previously staged version".
 import {
   attestationsUrl,
+  purl,
   isVisible,
   publishWithStagedWait,
   readGitHead,
@@ -123,7 +124,15 @@ const SLSA = 'https://slsa.dev/provenance/v1'
  * GitHub Actions (the shape of the registry's real responses: a publish
  * attestation and a SLSA v1 provenance, each a DSSE envelope).
  */
-function attestations(commit: string, repository = REPO) {
+function attestations(
+  commit: string,
+  {
+    repository = REPO,
+    path = '.github/workflows/publish.yml',
+    uri = `git+${repository}@refs/heads/main`,
+    subject: subjectName = 'pkg:npm/%40next-federation/sdk@0.1.1',
+  }: { repository?: string; path?: string; uri?: string; subject?: string } = {}
+) {
   const envelope = (statement: unknown) => ({
     mediaType: 'application/vnd.dev.sigstore.bundle.v0.3+json',
     verificationMaterial: {},
@@ -133,9 +142,7 @@ function attestations(commit: string, repository = REPO) {
       signatures: [],
     },
   })
-  const subject = [
-    { name: 'pkg:npm/%40next-federation/sdk@0.1.1', digest: { sha512: 'ab' } },
-  ]
+  const subject = [{ name: subjectName, digest: { sha512: 'ab' } }]
   const publish =
     'https://github.com/npm/attestation/tree/main/specs/publish/v0.1'
   return {
@@ -163,12 +170,12 @@ function attestations(commit: string, repository = REPO) {
                 workflow: {
                   ref: 'refs/heads/main',
                   repository,
-                  path: '.github/workflows/publish.yml',
+                  path,
                 },
               },
               resolvedDependencies: [
                 {
-                  uri: `git+${repository}@refs/heads/main`,
+                  uri,
                   digest: { gitCommit: commit },
                 },
               ],
@@ -198,12 +205,24 @@ describe('readGitHead', () => {
 })
 
 describe('readProvenance', () => {
-  test('the repository and commit of a SLSA provenance', () => {
+  test('the subject, repository, workflow, source and commit of a SLSA provenance', () => {
     expect(readProvenance({ status: 200, json: attestations(HEAD) })).toEqual({
       kind: 'build',
-      commit: HEAD,
+      subject: 'pkg:npm/%40next-federation/sdk@0.1.1',
       repository: REPO,
+      path: '.github/workflows/publish.yml',
+      uri: `git+${REPO}@refs/heads/main`,
+      commit: HEAD,
     })
+  })
+
+  test('the package URL npm puts in the subject (npm-package-arg toPurl)', () => {
+    // As in the registry's real attestations: pkg:npm/%40sigstore/core@1.1.0,
+    // pkg:npm/vite@8.4.0-beta.1.
+    expect(purl('@next-federation/sdk', '0.1.1')).toBe(
+      'pkg:npm/%40next-federation/sdk@0.1.1'
+    )
+    expect(purl('vite', '8.4.0-beta.1')).toBe('pkg:npm/vite@8.4.0-beta.1')
   })
 
   test('none when npm has no attestations for the version', () => {
@@ -458,7 +477,9 @@ describe('publishWithStagedWait', () => {
     const h = harness([{ code: 1, output: staged }], 0, {
       attestations: {
         status: 200,
-        json: attestations(HEAD, 'https://github.com/someone/fork'),
+        json: attestations(HEAD, {
+          repository: 'https://github.com/someone/fork',
+        }),
       },
     })
     expect(await publishWithStagedWait(h.options)).toBe(1)
@@ -468,6 +489,42 @@ describe('publishWithStagedWait', () => {
     // npm's text is never echoed.
     expect(text).not.toContain('someone/fork')
   })
+
+  for (const [what, over, shown] of [
+    [
+      'a source URI outside this repository',
+      { uri: 'git+https://github.com/someone/fork@refs/heads/main' },
+      'someone/fork',
+    ],
+    [
+      'a source URI that only starts like this repository',
+      { uri: `git+${REPO}-evil@refs/heads/main` },
+      '-evil',
+    ],
+    ['another workflow', { path: '.github/workflows/ci.yml' }, 'ci.yml'],
+    [
+      'another package as its subject',
+      { subject: 'pkg:npm/%40next-federation/core@0.1.1' },
+      'federation/core',
+    ],
+    [
+      'another version as its subject',
+      { subject: 'pkg:npm/%40next-federation/sdk@0.1.0' },
+      'sdk@0.1.0',
+    ],
+  ] as const) {
+    test(`a staged version whose provenance names ${what}: fails without echoing it`, async () => {
+      const h = harness([{ code: 1, output: staged }], 0, {
+        attestations: { status: 200, json: attestations(HEAD, over) },
+      })
+      expect(await publishWithStagedWait(h.options)).toBe(1)
+      expect(h.runs).toEqual([['pnpm', 'release']])
+      const text = h.logs.join('\n')
+      expect(text).toMatch(/::error::.*@next-federation\/sdk@0\.1\.1/)
+      expect(text).toContain(HEAD)
+      expect(text).not.toContain(shown)
+    })
+  }
 
   test('no provenance, even with a matching gitHead: fails closed, saying how to check it by hand', async () => {
     // gitHead is whatever the publisher's package.json says; pnpm does not

@@ -36,16 +36,22 @@ package's Staged Packages), or run `npm stage list <name>` and `npm stage approv
 (2FA), then run the workflow again.
 
 A staged version may not be this run's code: an earlier run on an older `main`, or anyone else with
-publish rights, may have staged it. So before going on, the step checks that npm's provenance for
-each staged version names this repository and the commit the run is at (`git rev-parse HEAD`), and
-that its `gitHead`, if npm has one, names that commit too. Only then does it publish the rest, and
-`changeset publish` tags what it publishes at that commit. Otherwise the job fails, publishing and
-tagging nothing more:
+publish rights, may have staged it. So before going on, the step reads the SLSA provenance in npm's
+attestations for each staged version and checks that it:
 
-- **Another commit or repository.** The version npm approved is not this commit's code. Inspect it
-  (`npm pack <name>@<version>`). If it is not what you meant to release, deprecate it
-  (`npm deprecate <name>@<version> "<reason>"`) and release a new version: npm never allows
-  publishing a version again.
+- describes that version (subject `pkg:npm/%40next-federation/<name>@<version>`);
+- names this repository, with its source (`git+<repository>@<ref>`) in this repository;
+- names this workflow, `.github/workflows/publish.yml`;
+- names the commit the run is at (`git rev-parse HEAD`).
+
+The version's `gitHead`, if npm has one, must name that commit too. Only then does the step publish
+the rest, and `changeset publish` tags what it publishes at that commit. Otherwise the job fails,
+publishing and tagging nothing more:
+
+- **Another version, repository, workflow or commit.** The version npm approved is not shown to be
+  this run's code. Inspect it (`npm pack <name>@<version>`). If it is not what you meant to
+  release, deprecate it (`npm deprecate <name>@<version> "<reason>"`) and release a new version:
+  npm never allows publishing a version again.
 - **No provenance (or npm did not return it).** This workflow always publishes with provenance, so
   the version was staged some other way, such as a local `npm publish`. The run cannot tell which
   commit it came from. Compare `npm pack <name>@<version>` with a build of the commit by hand. If
@@ -54,8 +60,14 @@ tagging nothing more:
 
 `gitHead` alone is never enough. pnpm publishes a packed tarball, so npm records no `gitHead` for
 this repository's versions (none of the 0.1.0 versions has one). And `gitHead` is whatever the
-publisher's `package.json` says. Provenance is signed for the workflow run and checked by npm when
-it accepts the version.
+publisher's `package.json` says.
+
+Known limit: the step checks npm's attestation as the registry serves it. It does not verify the
+Sigstore bundle itself (the signature, or the source repository, commit and workflow that the
+Fulcio certificate records), so it relies on the registry having checked the provenance when it
+accepted the version. Treat the check as a guard against staging the wrong commit, not as proof:
+if anything about a staged version is unexpected, review it by hand before tagging or releasing
+more.
 
 `changeset publish` tags only what it publishes itself, so a staged version gets no tag from the
 workflow: once the check passes, tag it at the run's commit by hand as above.
