@@ -3,5 +3,12 @@
   "framework": "nextjs",
   "installCommand": "pnpm install --frozen-lockfile --filter example-next-pages-router...",
   "buildCommand": "pnpm --filter \"example-next-pages-router^...\" build && pnpm run build",
-  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] && exit 1 || exit 0"
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] && exit 1 || exit 0",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/shop",
+      "permanent": false
+    }
+  ]
 }
