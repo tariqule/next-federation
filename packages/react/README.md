@@ -1,6 +1,16 @@
 # @next-federation/react
 
-React components for `next-federation`. Peer dependencies: `react ^19` and `react-dom ^19`.
+React components for `next-federation` hosts: `IslandMount` hydrates a remote island,
+`FederationErrorBoundary` contains its failures, and `createRemoteComponent` renders a remote's
+client component. Peer dependencies: `react ^19` and `react-dom ^19`.
+
+## Install
+
+```sh
+pnpm add @next-federation/react react react-dom
+```
+
+## Usage
 
 ```tsx
 import { FederationErrorBoundary } from '@next-federation/react'
@@ -13,12 +23,6 @@ A failing island renders `fallback` instead of crashing the host page. The bound
 when `resetKey` changes. The entry is marked `'use client'`, so it can be imported from
 Server Components in the App Router.
 
-## Install
-
-```sh
-pnpm add @next-federation/react react react-dom
-```
-
 ## API
 
 | Export                         | Purpose                                                   |
@@ -30,6 +34,7 @@ pnpm add @next-federation/react react react-dom
 | `getLiveIslandCount`           | Number of island roots mounted on the page.               |
 | `ISLAND_EVENT`                 | `'nf:island'`, the bubbling DOM event of every island.    |
 | `IslandClientEvent`            | The detail type of that event (and of `onEvent`).         |
+| `clearIslandTokens()`          | Forget every cached island token; call it on sign-out.    |
 
 `IslandMount` writes the island HTML once and keeps the island root alive across host
 re-renders, StrictMode and hidden `<Activity>`. It tears the root down once its container has
@@ -105,7 +110,6 @@ server HTML gets `fallback`, marked for the browser, which renders the component
 Stylesheets listed in the descriptor are React stylesheet resources (`precedence="next-federation"`,
 one link per URL): rendered with a server-rendered component, inserted with `preinit` by one first
 mounted in the browser; a server render also modulepreloads the remote entry and chunks.
-Guide: [Remote components](../../docs/guides/remote-components.md).
 
 **Trust.** The server never trusts a `descriptor` prop by itself: it evaluates a build only when
 `verifyComponentDescriptor` recorded the descriptor in this process, or it re-verifies the carried
@@ -127,14 +131,18 @@ provides that version. Call it before the first island bootstraps; calling it la
 On such a host `IslandMount` destroys a redeployed island's old root after its effect, since that
 root runs on the host's own React.
 
-The island wire format is specified in [`docs/protocol/v1.md`](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md).
-
-License: MIT
-
 ## Constraints
 
 `IslandMount` hydrates server-rendered island HTML, so props are plain JSON and React context does not
-cross into an island. See [Limits](../../docs/guides/limits.md) and the guides for the
-[App Router](../../docs/guides/getting-started-app-router.md),
-[Pages Router](../../docs/guides/getting-started-pages-router.md) and
-[SPA](../../docs/guides/getting-started-spa.md).
+cross into an island.
+
+## Learn more
+
+- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md)
+- [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.md)
+- [SPA guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-spa.md)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
+- [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md)
+- [Island protocol v1](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md)
+
+License: MIT

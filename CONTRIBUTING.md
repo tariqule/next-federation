@@ -1,7 +1,8 @@
 # Contributing
 
-Thanks for helping. Please read [AGENTS.md](AGENTS.md) (repo map, commands, hard rules) and
-[docs/conventions.md](docs/conventions.md) first, and the README of any package you edit.
+Thanks for helping. Read [AGENTS.md](AGENTS.md) (repo map, commands, hard rules),
+[docs/conventions.md](docs/conventions.md) and [docs/architecture.md](docs/architecture.md) first,
+and the README of any package you edit.
 
 ## Setup
 
@@ -31,6 +32,7 @@ pnpm build
 - Never use Next.js internals: no `next/dist/**` imports, no `__next_*` globals, never `connection()`.
   `pnpm guardrail` and ESLint enforce this.
 - Add a changeset (`pnpm changeset`) for any change to a published package.
+- Update the docs (guides, package READMEs, error pages) when behavior changes.
 - Run format, lint, typecheck, build and tests before you push.
 
 ## Reporting problems

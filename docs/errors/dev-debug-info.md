@@ -13,6 +13,10 @@ awaits for a private island:
 - what your `getIdentity` returns,
 - the island token minted for the remote.
 
+Production builds never contain it.
+
+## Why
+
 The message names the cause:
 
 - **Linked library**: `@next-federation/next` runs from outside `node_modules` (a workspace
@@ -23,7 +27,7 @@ The message names the cause:
   reach the browser, but nothing guarantees it, so the host warns.
 
 Installed from npm with Next's default dev source maps, the library is left out of the debug info.
-Production builds never contain it. See [Limits](../guides/limits.md#next-dev-and-linked-installs).
+See [Limits](../guides/limits.md#next-dev-and-linked-installs).
 
 ## How to fix
 

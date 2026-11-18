@@ -1,6 +1,6 @@
 # example-react-spa
 
-A client-only React app (Vite) on port 3303 that uses **both remotes**:
+A client-only React app (Vite) on port 3303 that uses both remotes:
 
 - `src/ProductPanel.tsx`: fetches the `ProductPanel` island envelope in the browser (CORS: the
   island remote lists `http://localhost:3303` in `hosts`) and mounts it with `IslandMount`, which

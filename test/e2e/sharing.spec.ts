@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { lanePort } from './lane.ts'
 import { LOGS_DIR } from './servers.ts'
 
-// Island React sharing (Task 18B): production remotes share React through the
+// Island React sharing: production remotes share React through the
 // island share scope of `@next-federation/vite` (on by default for builds).
 // SPA host `/shared`. Servers: NF_MODE=prod NF_APPS=remote-a,remote-b,remote-c,host-spa
 // (skew case: NF_SUITE=skew, remote-a serves v1 and v2). NF_SHARE=0 builds
@@ -445,7 +445,7 @@ test.describe('sharing measurements', () => {
           },
         ])
       )
-      // The numbers for docs/spike/island-sharing-proof.md (Task 18B section).
+      // Size numbers for each sharing scenario, printed for the run log.
       console.log(
         `[measure] share=${SHARE ? 'on' : 'off'} ${query} ${JSON.stringify(report)}`
       )

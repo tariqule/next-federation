@@ -1,9 +1,11 @@
 # Getting started: client-side React host (Vite SPA)
 
+Runnable example: [examples/react-spa](../../examples/react-spa)
+
 A single-page app has no server to fetch envelopes, so the browser fetches them (CORS) and mounts
 them with `IslandMount`. Per-user islands need a server to mint tokens and are not covered here.
 
-**Supported:** React 19 (required: `IslandMount` uses React 19 APIs). This guide builds the SPA with
+Supported: React 19 (required: `IslandMount` uses React 19 APIs). This guide builds the SPA with
 Vite; the library packages target Node.js 20.9 or newer.
 
 ## Choosing between remote components and islands
@@ -49,24 +51,10 @@ The remote must list your app's origin in its `hosts` option, or the browser req
 
 ### Timeout and retries
 
-Each island fetch has a total budget of `timeoutMs` (default `3000`), which covers every attempt.
-A network error or a `502`, `503` or `504` is retried `retries` times (default `1`) after a short
-pause, while the budget lasts; a timeout (`NF-008`), another status or an invalid envelope is not
-retried. Set them for all remotes or per remote:
-
-```ts
-export const federation = defineFederation({
-  islands: { timeoutMs: 5000, retries: 2 },
-  remotes: {
-    shop: { origin: 'https://shop.example.com' },
-    // A slow remote gets more time; a flaky one more retries.
-    reports: { origin: 'https://reports.example.com', timeoutMs: 8000, retries: 0 },
-  },
-})
-```
-
-When the budget runs out, `fetchIsland` resolves with `{ ok: false, code }` (`NF-007`, `NF-008`)
-instead of throwing, and your page renders its fallback.
+`timeoutMs` and `retries` work as in the App Router host
+([Timeout and retries](getting-started-app-router.md#timeout-and-retries)). When the budget runs
+out, `fetchIsland` resolves with `{ ok: false, code }` (`NF-007`, `NF-008`) instead of throwing, and
+your page renders its fallback.
 
 ## 3. Mount an island
 

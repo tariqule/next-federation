@@ -1,5 +1,7 @@
 # Writing an island remote
 
+Runnable example: [examples/vite-remote](../../examples/vite-remote)
+
 A remote is a Vite 8 app that runs React Server Components on its own server and answers island
 requests. Hosts embed the result. This guide builds one with `@next-federation/vite`.
 
@@ -8,31 +10,31 @@ Requires Node `^20.19.0 || >=22.12.0` (Vite 8's floor).
 ## Start from create-vite
 
 `npm create vite@latest shop -- --template react-ts` gives you a Vite 8 project, but it is a browser
-app and a remote is not. These are the edits that made the scaffold work (checked against Vite 8.3.8):
+app and a remote is not. Make these edits (checked against Vite 8.3.8):
 
-1. **Remove `@vitejs/plugin-react`** (and `@vitejs/plugin-react-swc`) from `package.json` and from
+1. Remove `@vitejs/plugin-react` (and `@vitejs/plugin-react-swc`) from `package.json` and from
    `vite.config.ts`. The build fails with `NF-002` while either is present: Fast Refresh needs a
    preamble that only a Vite-served page has. Vite's own compiler handles JSX without them.
-2. **Delete what only a browser app uses:** `index.html`, `src/main.tsx`, `src/App.tsx`,
+2. Delete what only a browser app uses: `index.html`, `src/main.tsx`, `src/App.tsx`,
    `src/App.css`, `src/index.css` and `src/assets/`. A remote has no page. The island handler answers
    `/_nf/*` and the build serves `dist/<buildId>/client/assets/`.
-3. **Replace `vite.config.ts`** with the config in step 2 below, and put your islands in
+3. Replace `vite.config.ts` with the config in step 2 below, and put your islands in
    `src/islands/`.
-4. **Change the build script** from `tsc -b && vite build` to `vite build`, and add
+4. Change the build script from `tsc -b && vite build` to `vite build`, and add
    `"start": "nf-serve --dir dist --port 4100"`. If you keep `tsc -b` as a type check, make sure
    step 2 removed `src/main.tsx` too: it imports `App.tsx` and `index.css`, which step 2 deletes, so
    it no longer type-checks. `vite preview` does not serve a remote: use `nf-serve`.
-5. **Pin React** ([React versions](../../README.md)). The scaffold installs a caret range and
+5. Pin React ([React versions](../../README.md#status-and-compatibility)). The scaffold installs a caret range and
    `react-server-dom-webpack` is not in it: add it at the same exact version as `react`.
-6. **oxlint** (the scaffold's `lint` script and `.oxlintrc.json`) is independent of the build. Keep
+6. oxlint (the scaffold's `lint` script and `.oxlintrc.json`) is independent of the build. Keep
    it or delete it; nothing in next-federation reads it. Its `react/only-export-components` rule
    protects Fast Refresh, which a remote does not have, so you can turn it off.
-7. **TypeScript:** any version installs, and an island remote works with any (it does not use
+7. TypeScript: any version installs, and an island remote works with any (it does not use
    `types`). A components remote with `types: true`
    ([Remote components](remote-components.md#types)) needs TypeScript 5 or 6: with TypeScript 7,
    which create-vite currently installs, the build still succeeds, warns `NF-002` naming
    `npm install -D typescript@6`, and publishes no types.
-8. **`node:*` imports in island code:** island Server Components and Server Actions run on Node, so
+8. `node:*` imports in island code: island Server Components and Server Actions run on Node, so
    they can read files or a database (`import { readFile } from 'node:fs/promises'`). The
    scaffold's `tsconfig.app.json` lists only `"types": ["vite/client"]`, so `tsc -b` fails with
    "Cannot find module 'node:fs'". Add `"node"` to that list (`"types": ["vite/client", "node"]`) and
@@ -215,8 +217,8 @@ build retention.
 client" ... may not be preserved when bundling` once per client component, including the ones in
 `@next-federation/island`. They are harmless. They come from the client build, where Rolldown
 drops the directive from a file it bundles; the client references were already found in the
-earlier "analyze client references" pass. Islands built with these warnings hydrated, ran their
-actions and loaded their CSS in every validation run. Ignore them.
+earlier "analyze client references" pass. Islands built with these warnings hydrate, run their
+actions and load their CSS. Ignore them.
 
 ## Develop against a host
 

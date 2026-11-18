@@ -11,3 +11,5 @@ Islands receive props across a network boundary. Functions, class instances, `Da
 ## How to fix
 
 Convert props to plain JSON before passing them (ISO strings for dates, arrays for maps) and pass callbacks through events rather than props.
+
+See [Limits](../guides/limits.md).

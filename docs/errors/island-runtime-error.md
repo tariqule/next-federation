@@ -11,3 +11,5 @@ The island's own component code failed during render or in an effect. The host s
 ## How to fix
 
 Fix the error in the remote. Wrap the island in an error boundary in the host if you want a fallback while it is broken.
+
+See [Limits](../guides/limits.md).

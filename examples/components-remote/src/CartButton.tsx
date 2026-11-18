@@ -1,6 +1,6 @@
 import { useCart } from 'example-cart-context'
 
-// A client component hosts load at runtime (Mode A). It runs on the host's
+// A client component hosts load at runtime (a remote component). It runs on the host's
 // React and reads the host's cart through the shared context module.
 export default function CartButton({ sku }: { sku: string }) {
   const cart = useCart()

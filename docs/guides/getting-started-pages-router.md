@@ -1,5 +1,7 @@
 # Getting started: Next.js Pages Router host
 
+Runnable example: [examples/next-pages-router](../../examples/next-pages-router)
+
 This guide embeds an island from a remote app in a Next.js 16 or 15 Pages Router page. It covers the
 host only. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
 
@@ -8,21 +10,11 @@ On Next 15 the adapter uses the legacy caching model (fetch `revalidate` and tag
 `cacheComponents` needs Next 16 ([Limits](limits.md#nextjs-15)). Next 14 is not supported. Next 15
 uses webpack unless you pass `--turbopack`; both work.
 
-## Choosing between remote components and islands
+## Remote components or islands
 
-This guide sets up islands. A remote can also ship remote components, and a host can use both.
-
-| | Remote components | Islands |
-| --- | --- | --- |
-| What the remote ships | A client component module | Server-rendered HTML from its own server |
-| React | The host's | The remote's own |
-| Host context and router | Readable; `next/link` and the router come from the host | Do not cross in; pass data as props |
-| Props | Anything a client component takes | Plain JSON |
-| Server rendering | On the host, for signed or pinned builds | Always, on the remote |
-| Remote code on the host's server | Yes, for verified builds | Never |
-| Choose it for | Interactive pieces that must feel native: menus, carts, widgets in a client-heavy app | Server-rendered content the remote owns: product pages, data the remote fetches with its secrets |
-
-Remote components: see [Remote components](remote-components.md).
+This guide sets up islands. A remote can also ship remote components, and a host can use both. The
+[App Router guide](getting-started-app-router.md#choosing-between-remote-components-and-islands)
+compares them, and [Remote components](remote-components.md) covers the setup.
 
 ## 1. Install
 
@@ -77,23 +69,9 @@ but not under plain Node: see [Remote components](remote-components.md#types) fo
 
 ### Timeout and retries
 
-Each island fetch has a total budget of `timeoutMs` (default `3000`), which covers every attempt.
-A network error or a `502`, `503` or `504` is retried `retries` times (default `1`) after a short
-pause, while the budget lasts; a timeout (`NF-008`), another status or an invalid envelope is not
-retried. Set them for all remotes or per remote:
-
-```ts
-export const federation = defineFederation({
-  islands: { timeoutMs: 5000, retries: 2 },
-  remotes: {
-    shop: { origin: 'https://shop.example.com' },
-    // A slow remote gets more time; a flaky one more retries.
-    reports: { origin: 'https://reports.example.com', timeoutMs: 8000, retries: 0 },
-  },
-})
-```
-
-A failed island renders `errorFallback` (default: `fallback`) and the page still answers `200`.
+`timeoutMs` and `retries` work as in the App Router host
+([Timeout and retries](getting-started-app-router.md#timeout-and-retries)). A failed island renders
+`errorFallback` (default: `fallback`) and the page still answers `200`.
 
 ## 4. Render an island
 

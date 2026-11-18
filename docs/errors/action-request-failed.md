@@ -22,3 +22,5 @@ proxy in front of it. A `5xx` is not retried by the island runtime: retry the ac
 code if it is safe to run twice. A `404` without an NF code is reported as `NF-031`, and a `413` as
 `NF-032`. For a timeout ("did not answer within N ms"), find what makes the action slow on the
 remote, or raise `actions.timeoutMs` in its `nextFederationIslands` options.
+
+See [Server Actions: errors](../guides/server-actions.md#errors).

@@ -11,3 +11,5 @@ Host and remote are on different major versions of the island protocol, so the h
 ## How to fix
 
 Upgrade the older side so both run compatible `@next-federation/*` versions. The error detail lists the versions seen.
+
+See the [island protocol](../protocol/v1.md).

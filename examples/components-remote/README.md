@@ -1,11 +1,11 @@
 # example-components-remote
 
-A **components remote** (remote components) built with `nextFederationComponents` from
+A components remote built with `nextFederationComponents` from
 `@next-federation/vite`. It exposes one component, `./CartButton`, that hosts load at runtime and
 render inside their own React tree: it runs on the host's React and reads the host's cart through
 the shared [`example-cart-context`](../cart-context/README.md) module.
 
-The Next.js example hosts **server-render** it, then hydrate it. The SPA renders it in the browser.
+The Next.js example hosts server-render it, then hydrate it. The SPA renders it in the browser.
 
 ## Run it
 
@@ -28,11 +28,11 @@ server file; when `NF_COMPONENTS_SIGNING_KEY` (a private EC P-256 JWK) is set at
 descriptor is signed with it (ES256). The hosts list the matching public key in
 `components.ssr.publicKeys`.
 
-- **Here** the key is a demo key in the git-ignored `.env.local` (`pnpm examples:keys`).
+- Here the key is a demo key in the git-ignored `.env.local` (`pnpm examples:keys`).
   `vite.config.ts` copies it to `process.env`, because Vite does not do that for `.env` files.
-- **In production** set `NF_COMPONENTS_SIGNING_KEY` as a secret of the remote's build (CI) only; it
+- In production set `NF_COMPONENTS_SIGNING_KEY` as a secret of the remote's build (CI) only; it
   never leaves the build. Give hosts the public key.
-- **Pinning** instead of signing: each build's `dist/<buildId>/nf-components.json` has a `digest`;
+- Pinning instead of signing: each build's `dist/<buildId>/nf-components.json` has a `digest`;
   a host can allow exact builds with `components.ssr.pinned: { '<buildId>': '<digest>' }`.
 
 Without a trusted key or pin, hosts render the component in the browser only (and log `NF-028`).

@@ -23,7 +23,7 @@ export const getProductPageProps =
         island: 'Links',
         props: { current: sku },
       }),
-      // Mode A: names the `cart` remote build to server-render.
+      // Remote component: names the `cart` remote build to server-render.
       getComponentDescriptor(federation, 'cart'),
     ])
     return { props: { sku, locale, product, links, cart } }

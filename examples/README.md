@@ -1,11 +1,12 @@
 # Examples
 
-Small apps you can copy. Two remotes serve UI, three hosts embed it:
+Small apps you can copy. Two remotes serve UI, three hosts embed it. Each folder has its own README
+with what it shows, how to run it and the guide that explains it.
 
 | Folder                                    | What it is                                                         | Port               |
 | ----------------------------------------- | ------------------------------------------------------------------ | ------------------ |
 | [`vite-remote`](vite-remote/)             | Island remote (Vite): `ProductPanel`, `Links`, private `MyOrders`  | 3300 (`127.0.0.1`) |
-| [`components-remote`](components-remote/) | Components remote (remote components, Vite): `CartButton`          | 3304 (`127.0.0.1`) |
+| [`components-remote`](components-remote/) | Components remote (Vite): `CartButton`                             | 3304 (`127.0.0.1`) |
 | [`next-app-router`](next-app-router/)     | Next.js App Router host                                            | 3301 (`localhost`) |
 | [`next-pages-router`](next-pages-router/) | Next.js Pages Router host, `basePath: '/shop'`, English and French | 3302 (`localhost`) |
 | [`react-spa`](react-spa/)                 | Client-only React host (Vite)                                      | 3303 (`localhost`) |
@@ -23,7 +24,7 @@ pnpm examples:dev
 ```
 
 This writes demo keys if they are missing (`pnpm examples:keys`, below), builds the components
-remote, starts every app, and prints the URLs. Ctrl-C stops everything. Hosts and the island remote
+remote, starts every app, and prints the URLs. Ctrl-C stops everything. The hosts and the island remote
 run their dev servers; the components remote is always a build, because hosts server-render client
 components from a build only.
 

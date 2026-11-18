@@ -10,4 +10,6 @@ The remote only accepts tokens from issuers listed in its issuer map.
 
 ## How to fix
 
-Add the issuer to the remote's issuer map if it should be trusted, or fix the host so it signs with the right issuer.
+Add the issuer to the remote's issuer map (`issuers`) if it should be trusted, or fix the host so it signs with the right issuer. The token's `iss` must equal a key of the map exactly: a trailing slash makes a different issuer.
+
+See [Identity](../guides/identity.md).

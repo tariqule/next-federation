@@ -1,6 +1,6 @@
 # example-vite-remote
 
-An **island remote** built with `@next-federation/vite`. It renders React Server Components on its
+An island remote built with `@next-federation/vite`. It renders React Server Components on its
 own server and answers island requests from the example hosts.
 
 | Island         | Shows                                                                                                                       |

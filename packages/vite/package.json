@@ -1,7 +1,7 @@
 {
   "name": "@next-federation/vite",
   "version": "0.1.0",
-  "description": "Vite plugin that builds a next-federation island remote on top of @vitejs/plugin-rsc.",
+  "description": "Vite plugins that build next-federation island remotes and remote components remotes.",
   "license": "MIT",
   "author": "tariqule",
   "homepage": "https://github.com/tariqule/next-federation#readme",

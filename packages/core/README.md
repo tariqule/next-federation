@@ -1,7 +1,16 @@
 # @next-federation/core
 
 `defineFederation(config)` validates the host configuration once and returns the `Federation`
-object every `next-federation` adapter consumes.
+object every `next-federation` adapter consumes. The package also fetches island envelopes and
+mints identity tokens. It runs in any server runtime and has no dependency on Next.js.
+
+## Install
+
+```sh
+pnpm add @next-federation/core
+```
+
+## Usage
 
 ```ts
 import { defineFederation } from '@next-federation/core'
@@ -76,27 +85,19 @@ A failed `fetchIsland` result carries `url` (origin and path, never the query) a
 answered HTML or a non-protocol `404`, `hint: 'not-an-island-remote'`; `islandFailureDetail(result)`
 formats both for a log line.
 
-## Install
-
-```sh
-pnpm add @next-federation/core
-```
-
 ## API
 
-| Export                                                  | Entry                              | Purpose                                                                     |
-| ------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
-| `defineFederation(config)`                              | `@next-federation/core`            | Validate the host config and return a `Federation`.                         |
-| `fetchIsland(federation, request)`                      | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
-| `islandTags`, `eventFor`, `MAX_ENVELOPE_BYTES`          | `@next-federation/core`            | Cache tags, event helpers and the default island body limit.                |
-| `islandFailureDetail(result)`                           | `@next-federation/core`            | A failed island's URL, status and hint, for a log line.                     |
-| `generateSigningKey`, `publicJwks`, `validateIdentity`  | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).                  |
-| `mintIslandToken`, `identityKey`                        | `@next-federation/core/identity`   | Mint a per-remote island token and derive its cache identity key.           |
-| `fetchComponentDescriptor`, `verifyComponentDescriptor` | `@next-federation/core/components` | Remote components: fetch and verify a components remote's build descriptor. |
+| Export                                                                                      | Entry                              | Purpose                                                                     |
+| ------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `defineFederation(config)`                                                                  | `@next-federation/core`            | Validate the host config and return a `Federation`.                         |
+| `fetchIsland(federation, request)`                                                          | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
+| `islandTags`, `eventFor`, `MAX_ENVELOPE_BYTES`                                              | `@next-federation/core`            | Cache tags, event helpers and the default island body limit.                |
+| `islandFailureDetail(result)`                                                               | `@next-federation/core`            | A failed island's URL, status and hint, for a log line.                     |
+| `generateSigningKey`, `publicJwks`, `validateIdentity`                                      | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).                  |
+| `mintIslandToken`, `identityKey`                                                            | `@next-federation/core/identity`   | Mint a per-remote island token and derive its cache identity key.           |
+| `fetchComponentDescriptor`, `verifyComponentDescriptor`, `fetchVerifiedComponentDescriptor` | `@next-federation/core/components` | Remote components: fetch and verify a components remote's build descriptor. |
 
 The wire format is specified in [`docs/protocol/v1.md`](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md).
-
-License: MIT
 
 ## Constraints
 
@@ -106,4 +107,12 @@ License: MIT
 - `identity.issuer` is kept exactly as written and compared literally with the token `iss`, so a trailing slash makes a different issuer. Use `https` outside local development.
 - Island props are plain JSON (`NF-009`).
 
-Guides: [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md), [Caching](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching.md), [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md).
+## Learn more
+
+- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md)
+- [Caching](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching.md)
+- [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
+- [Island protocol v1](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md)
+
+License: MIT

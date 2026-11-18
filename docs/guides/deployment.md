@@ -20,9 +20,8 @@ A remote is a server. `vite build` writes `dist/<buildId>/{client,ssr,rsc}` and
 Serve the remote from the project's production domain: static assets plus one Vercel Function for
 `/_nf/*`. A deployment holds only its own build, and the production domain always serves the newest
 deployment, so after a deploy an earlier build's assets answer `404` there. Older deployments stay
-reachable only at their generated URLs, behind Deployment Protection. Without Skew Protection (Hobby,
-verified 2026-11-16) an island from a cached envelope of the previous build goes inert until the
-host renders a fresh one. Setup, observed behaviour and the skew options:
+reachable only at their generated URLs, behind Deployment Protection. Without Skew Protection (observed on the Hobby plan on 2026-11-16), an island from a cached
+envelope of the previous build goes inert until the host renders a fresh one. Setup, observed behaviour and the skew options are in
 [Deploying an island remote on Vercel](deploying-a-remote-on-vercel.md).
 
 Whatever you use, `base` must be the absolute URL that hosts reach the remote at, and the host's

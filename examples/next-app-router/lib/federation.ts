@@ -13,7 +13,7 @@ export const federation = defineFederation({
   remotes: {
     // Islands (server components rendered by the remote).
     shop: { origin: 'http://127.0.0.1:3300' },
-    // Client components (Mode A). Server-rendered here only for builds signed
+    // Remote components (client components). Server-rendered here only for builds signed
     // with the key below; without a key they render in the browser only.
     cart: {
       origin: 'http://127.0.0.1:3304',

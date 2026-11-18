@@ -10,9 +10,9 @@ origin to three directives:
 | `style-src`   | Island stylesheets are linked from the remote.               |
 
 The remote origins are only half of a working policy: Next.js itself needs more than `'self'` to run.
-This policy is what the validated mixed-router host sends (App Router and Pages Router routes,
-`basePath: '/mixed'`, islands and remote components from two remotes, checked in `next dev` and
-`next start`). Put it in `next.config.ts`:
+This policy was checked on a host with App Router and Pages Router routes, `basePath: '/mixed'`, and
+islands and remote components from two remotes, in `next dev` and `next start`. Put it in
+`next.config.ts`:
 
 ```ts
 // next.config.ts
@@ -50,7 +50,7 @@ export default withNextFederation(nextConfig)
 - `'unsafe-eval'` and `ws:`: development only. The production policy has neither.
 - `'unsafe-inline'` in `style-src`: Next and React emit inline styles.
 - Add the remote origin to `img-src` and `font-src` if its islands load images or fonts from it
-  (not part of the validated policy).
+  (the policy above does not include them).
 
 A remote at `https://shop.example.com` contributes this to the three directives:
 
@@ -64,7 +64,7 @@ If a remote serves assets from another origin (a CDN), add that origin too, and 
 `assetOrigins` for that remote in the host's `defineFederation` config. Without it the host refuses
 the envelope (`NF-005`).
 
-Remote components need the remote origin in `script-src` (its `remoteEntry.js` and chunks
+Remote components need the remote origin in `script-src` (their `remoteEntry.js` and chunks
 are ES modules, also `modulepreload`ed by a server render), `style-src` (the stylesheets of its
 exposed modules) and `connect-src` (the browser fetches `mf-manifest.json`; an SPA also fetches
 `/_nf/components.json`). See [Remote components](remote-components.md).
@@ -83,7 +83,7 @@ it: you generate the nonce for each request and send it in the `Content-Security
 scripts. Next's guide notes that a nonce makes every page render per request, so static and
 prerendered pages are given up.
 
-What next-federation does under a nonce policy, from the code:
+Under a nonce policy, next-federation behaves as follows:
 
 - Island HTML contains no scripts. The payloads embedded for hydration travel inside Next.js's own
   nonce'd scripts, so no nonce plumbing is needed for them.
@@ -96,9 +96,8 @@ What next-federation does under a nonce policy, from the code:
   component's entry and chunks carry no nonce, so the browser blocks them. Only the preload is lost:
   the nonce'd script still loads the chunks.
 
-**Not validated.** The validation of this guide ran the `'unsafe-inline'` policy above only. A
-nonce-based policy has no test in this repository, so try it in a preview deployment and watch the
-console for CSP violations before you rely on it.
+**Untested.** This repository has no test for a nonce-based policy. Try one in a preview deployment
+and watch the console for CSP violations before you rely on it.
 
 ## Related
 

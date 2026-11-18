@@ -1,6 +1,7 @@
 # @next-federation/vite
 
-Builds a `next-federation` island remote with Vite 8. It wraps
+Vite plugins that build a `next-federation` island remote (`nextFederationIslands`) or
+remote components (`nextFederationComponents`) with Vite 8. The island plugin wraps
 [`@vitejs/plugin-rsc`](https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-rsc),
 pinned to exactly **0.5.39**.
 
@@ -168,7 +169,7 @@ only (a `NODE_ENV` other than `production` bundles React's development copies, w
 Any version other than 0.5.39 fails with `NF-025`. A CI canary job may set `NF_ALLOW_PLUGIN_RSC=1`
 to turn that into a warning while testing a newer plugin-rsc.
 
-## Components remote (remote components)
+## Remote components
 
 ```ts
 import { nextFederationComponents } from '@next-federation/vite'
@@ -225,8 +226,7 @@ project cannot run on its own (`createContext is not a function`), and the dev s
 once when a browser opens one. To keep a standalone app, use two Vite configs: `vite.config.ts` for
 the app (with `@vitejs/plugin-react`) and `vite.remote.config.ts` for the remote, built with
 `vite build --config vite.remote.config.ts` into its own `outDir`
-([Keeping a standalone app](../../docs/guides/remote-components.md#keeping-a-standalone-app)).
-Guide: [Remote components](../../docs/guides/remote-components.md).
+([Keeping a standalone app](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md#keeping-a-standalone-app)).
 
 ## API
 
@@ -241,5 +241,11 @@ Guide: [Remote components](../../docs/guides/remote-components.md).
 | `SharedModuleOptions`                    | One `shared` entry: `{ requiredVersion, fallback }`. |
 | `ComponentsBuildInfo`                    | Its `nf-build.json` shape (`kind: 'components'`).    |
 
-Guide: [Writing an island remote](../../docs/guides/writing-an-island-remote.md). For what islands cost
-and cannot do, see [Limits](../../docs/guides/limits.md).
+## Learn more
+
+- [Writing an island remote](https://github.com/tariqule/next-federation/blob/main/docs/guides/writing-an-island-remote.md)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
+- [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md)
+- [Deployment](https://github.com/tariqule/next-federation/blob/main/docs/guides/deployment.md)
+
+License: MIT

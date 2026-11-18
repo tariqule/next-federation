@@ -25,3 +25,5 @@ descriptor it trusts.
 - For pinned builds, copy the `digest` from the build's `nf-components.json`.
 - A file mismatch means the served files are not the ones that were built (a proxy or CDN
   rewriting them, a partial upload, or tampering). Re-deploy the build unchanged.
+
+See [Remote components: integrity](../guides/remote-components.md#integrity-server-rendering).

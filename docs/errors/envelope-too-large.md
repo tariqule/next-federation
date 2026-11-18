@@ -10,4 +10,6 @@ Large envelopes usually mean big serialized props or markup, which slows every p
 
 ## How to fix
 
-Trim props, paginate data, or fetch it from the client after hydration. This is a warning; rendering still proceeds.
+Trim props, paginate data, or fetch it from the client after hydration. This is a warning; rendering still proceeds. The threshold is `islands.warnBytes` in `defineFederation()` (102400 bytes by default).
+
+See [Limits](../guides/limits.md).

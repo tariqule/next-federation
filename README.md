@@ -1,97 +1,178 @@
 # next-federation
 
-Runtime composition of React UI from separately deployed apps, for **Next.js 16 and 15**
-(App Router and Pages Router, Turbopack or webpack) and, later, **React Router**.
+Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
+renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App
+Router and Pages Router (Turbopack or webpack) and client-side React hosts, and remotes built with
+Vite. It uses public Next.js APIs only, so a Next.js upgrade does not break it.
 
-> **Status: Phase 1 library, feature-complete, not yet published to npm.** Both modes are
-> implemented: islands (React Server Components) for Next.js App Router, Pages Router and client-side
-> React hosts, and remote components (client components with server rendering) for the same hosts,
-> both with Vite remotes.
-> See the [design document](docs/specs/2026-11-13-federation-lib-design.md).
+There are two ways to embed a remote's UI:
 
-**Supported:** React 19 (required), Next.js 16 or 15 (`>=15.5.28 <17`; `cacheComponents` is Next 16
-only; Next 14 is not supported), Node.js 20.9 or newer (server rendering of remote
-components needs Node 20.16 or newer; older Node renders them in the browser only). Remotes build
-with Vite 8.
+- **Islands**: the remote renders real React Server Components on its own server, and your host
+  embeds the result as a server-rendered, hydrated island.
+- **Remote components**: the remote ships a client component that runs inside your host's React tree
+  and shares its context and router. Verified builds are server-rendered.
 
-**React versions:** every package in this repo is tested on React and React DOM **19.3.1**
-(`react-server-dom-webpack` 19.3.1 in island remotes), plus one island remote on 19.3.0 to prove
-mixed versions. The peer range is `^19.0.0`, but React 19.1.0 (what some Next.js scaffolds install)
-is not covered by the tests: pin `react` and `react-dom` to the same exact version in the host and in
-each remote (`"react": "19.3.1"`, no `^`), and in an island remote pin `react-server-dom-webpack` to
-that exact version too. Fresh `create-next-app` and `create-vite` projects in 2026-11 installed
-React 19.1.0 or 19.3.0, so check `package.json` after scaffolding.
+## Who it is for
+
+Use it when separate teams deploy parts of one product on their own schedules, and the host page
+needs to show UI that the host's team does not build: a checkout owned by another team, a catalog
+panel with its own data, a widget that must feel like part of the app.
+
+It is not a fit if you need route-level splitting (use multi-zones or `@vercel/microfrontends`), CSS
+isolation (there is no Shadow DOM), Next.js 14 or React 18, non-React frameworks, or the Edge runtime
+in the host. [Limits](docs/guides/limits.md) lists what islands cannot do and what they cost.
+[Architecture](docs/architecture.md) explains how it works.
+
+## Islands
+
+The host renders an island with one component:
+
+```tsx
+// app/page.tsx (App Router host)
+import { RemoteIsland } from '../lib/federation'
+
+export default function Page() {
+  return <RemoteIsland remote="shop" island="ProductPanel" props={{ sku: 'A1' }} fallback={<p>Loading…</p>} />
+}
+```
+
+The remote declares its islands in its Vite config:
+
+```ts
+// vite.config.ts (island remote)
+import { nextFederationIslands } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: nextFederationIslands({
+    name: 'shop',
+    base: 'https://shop.example.com/',
+    hosts: ['https://www.example.com'],
+    islands: { ProductPanel: './src/islands/ProductPanel.tsx' },
+  }),
+})
+```
+
+## Remote components
+
+The remote exposes a client component:
+
+```ts
+// vite.config.ts (components remote)
+import { nextFederationComponents } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [
+    nextFederationComponents({
+      name: 'cart',
+      base: 'https://cart.example.com/',
+      exposes: { './CartButton': './src/CartButton.tsx' },
+    }),
+  ],
+})
+```
+
+The host binds it once, then renders it with the remote's descriptor:
+
+```tsx
+// lib/CartButton.tsx (host, a client file)
+'use client'
+import { createRemoteComponent } from '@next-federation/react/components'
+
+export const CartButton = createRemoteComponent<{ sku: string }>({
+  expose: './CartButton',
+  fallback: <p>Loading…</p>,
+})
+```
+
+```tsx
+// lib/RemoteCartButton.tsx (host, a Server Component)
+import { getComponentDescriptor } from '@next-federation/next/server'
+import { CartButton } from './CartButton'
+import { federation } from './federation'
+
+export async function RemoteCartButton({ sku }: { sku: string }) {
+  const descriptor = await getComponentDescriptor(federation, 'cart')
+  return <CartButton descriptor={descriptor} sku={sku} />
+}
+```
+
+## Install
+
+For a Next.js host:
+
+```sh
+pnpm add @next-federation/core @next-federation/next @next-federation/react
+```
+
+For a remote built with Vite, add `@next-federation/vite` and `@next-federation/server` as dev
+dependencies. Each [getting-started guide](#getting-started) lists the exact packages for its setup
+and how to pin React.
+
+## Getting started
+
+Pick the guide for what you are building:
+
+| You are building                        | Guide                                                               | Example                                         |
+| --------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------- |
+| A Next.js App Router host               | [App Router](docs/guides/getting-started-app-router.md)             | [next-app-router](examples/next-app-router)     |
+| A Next.js Pages Router host             | [Pages Router](docs/guides/getting-started-pages-router.md)         | [next-pages-router](examples/next-pages-router) |
+| A client-side React host (Vite SPA)     | [SPA](docs/guides/getting-started-spa.md)                           | [react-spa](examples/react-spa)                 |
+| A remote that serves islands            | [Writing an island remote](docs/guides/writing-an-island-remote.md) | [vite-remote](examples/vite-remote)             |
+| A remote that exposes client components | [Remote components](docs/guides/remote-components.md)               | [components-remote](examples/components-remote) |
+
+To run every example together, run `pnpm examples:dev` in a checkout of this repository. See
+[examples/README.md](examples/README.md).
+
+## Documentation
+
+The [docs index](docs/README.md) lists every guide. A few places to start:
+
+- [Architecture](docs/architecture.md): how islands and remote components work, and what a host trusts
+- [Identity](docs/guides/identity.md): private islands and key rotation
+- [Caching](docs/guides/caching.md): islands with static pages, ISR and `cacheComponents`
+- [Deployment](docs/guides/deployment.md): serving remotes, skew and build retention
+- [Island protocol v1](docs/protocol/v1.md): the wire contract
+- [Error codes](docs/README.md#errors): every `NF-0xx` code has a page that says what to do
 
 ## Packages
 
-| Package                                          | Purpose                                                                                |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| [`@next-federation/sdk`](packages/sdk)           | Error codes (`NF-001` to `NF-030`, `NF-036`) and the category logger.                  |
-| [`@next-federation/protocol`](packages/protocol) | Island protocol v1: envelope, request codec, bootstrap types.                          |
-| [`@next-federation/core`](packages/core)         | `defineFederation`, `fetchIsland`, identity tokens, remote component descriptors.      |
-| [`@next-federation/react`](packages/react)       | `IslandMount`, `FederationErrorBoundary`, remote components (`createRemoteComponent`). |
-| [`@next-federation/server`](packages/server)     | Island request handler, identity verifier, `nf-serve`.                                 |
-| [`@next-federation/island`](packages/island)     | Remote-side runtime: `Link`, `getIdentity`, browser bootstrap.                         |
-| [`@next-federation/vite`](packages/vite)         | Vite 8 plugins that build an island remote or a components remote.                     |
-| [`@next-federation/next`](packages/next)         | Next.js adapter: `withNextFederation`, `RemoteIsland`, JWKS/token routes.              |
+| Package                                          | Purpose                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`@next-federation/sdk`](packages/sdk)           | Error codes and the category logger                                                   |
+| [`@next-federation/protocol`](packages/protocol) | Island protocol v1: envelope, request codec, bootstrap types                          |
+| [`@next-federation/core`](packages/core)         | `defineFederation`, `fetchIsland`, identity tokens, remote component descriptors      |
+| [`@next-federation/react`](packages/react)       | `IslandMount`, `FederationErrorBoundary`, remote components (`createRemoteComponent`) |
+| [`@next-federation/server`](packages/server)     | Island request handler, identity verifier, `nf-serve`                                 |
+| [`@next-federation/island`](packages/island)     | Remote-side runtime: `Link`, `Form`, `getIdentity`, browser bootstrap                 |
+| [`@next-federation/vite`](packages/vite)         | Vite 8 plugins that build an island remote or a components remote                     |
+| [`@next-federation/next`](packages/next)         | Next.js adapter: `withNextFederation`, `RemoteIsland`, JWKS and token routes          |
 
-`provideHostReact` (a SPA or Pages Router host lends islands its React) is
-`@next-federation/react/share`; remote components live in `@next-federation/react/components`
-(Next.js hosts: `@next-federation/next/components` and `@next-federation/next/pages/components`,
-which also share the host's `next/link` and router with remotes).
+## Status and compatibility
 
-The wire contract is published at [`docs/protocol/v1.md`](docs/protocol/v1.md).
+`next-federation` is at 0.x, so the API can still change between minor versions. Pin the version and
+read the changelogs. All packages are versioned together.
 
-## Guides
+|         | Supported                                                                                                              |
+| ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| React   | 19 (required)                                                                                                          |
+| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only                                                      |
+| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer; older Node renders them in the browser only |
+| Remotes | Vite 8. Remote components can also come from Rspack or webpack with Module Federation 2.0                              |
 
-- Host setup: [App Router](docs/guides/getting-started-app-router.md),
-  [Pages Router](docs/guides/getting-started-pages-router.md),
-  [client-side React (SPA)](docs/guides/getting-started-spa.md)
-- Remotes: [Writing an island remote](docs/guides/writing-an-island-remote.md),
-  [Remote components](docs/guides/remote-components.md),
-  [Sharing components from a Next app](docs/guides/sharing-components-from-a-next-app.md),
-  [Server Actions in islands](docs/guides/server-actions.md)
-- Operations: [Identity and key rotation](docs/guides/identity.md), [CSP](docs/guides/csp.md),
-  [Caching](docs/guides/caching.md), [Deployment](docs/guides/deployment.md),
-  [Deploying a remote on Vercel](docs/guides/deploying-a-remote-on-vercel.md)
-- [Limits](docs/guides/limits.md): what islands cannot do and what they cost
-- [Migrating from nextjs-mf](docs/guides/migrating-from-nextjs-mf.md): concept map and a Pages
-  Router path for Next 15 or 16 apps
-- [Examples](examples/README.md): a Vite island remote, a components remote and three hosts
-  (App Router, Pages Router, SPA) you can run with `pnpm examples:dev`
+The tests run on React and React DOM 19.3.1 (`react-server-dom-webpack` 19.3.1 in island remotes),
+plus one island remote on 19.3.0 to cover mixed versions. React 19.1.0, which some scaffolds install,
+is not covered. Pin `react` and `react-dom` to the same exact version in the host and in each remote
+(`"react": "19.3.1"`, no `^`), and pin `react-server-dom-webpack` the same way in an island remote.
+Check `package.json` after you scaffold a project.
 
-## What it does
+## Contributing
 
-- **Remote components:** load interactive components from a remote app at runtime and render
-  them inside your React tree, sharing context and the host's Next.js router, with server rendering
-  of verified (signed or pinned) builds. Shared libraries are version-checked, with an optional
-  copy in the remote. Built on the Module Federation 2.0 runtime.
-- **Islands (React Server Components):** remotes run **real React Server Components** on their own
-  servers. Your app embeds the result as a self-contained, server-rendered, hydrated island. It
-  supports per-user content, remotes on any origin, smooth client-side navigation and Server
-  Actions that run on the remote ([Server Actions in islands](docs/guides/server-actions.md)).
+See [CONTRIBUTING.md](CONTRIBUTING.md). [AGENTS.md](AGENTS.md) has the repo map, the commands and
+the rules every change must keep. Report a vulnerability through [SECURITY.md](SECURITY.md).
 
-## Principles
+## License
 
-- **No Next.js private internals.** Adapters use public framework APIs only, so Next upgrades don't
-  break you. The predecessor, `@module-federation/nextjs-mf`, broke on Next upgrades because it relied
-  on those internals.
-- **No dependence on upstream changes.** It works with Next.js as it ships today.
-- **Runtime first.** No build step is required in the host app.
-
-## Why
-
-`@module-federation/nextjs-mf` is in maintenance mode (module-federation/core#3153) and never supported the
-App Router. `next-federation` is a fresh successor designed for the App Router era.
-
----
-
-`next-federation` is a community project and is not affiliated with or endorsed by Vercel.
-Next.js is a trademark of Vercel, Inc.
-
-## Development
-
-Requires Node >= 24 and pnpm 10 for the workspace; the published packages target Node >= 20.9.
-See [AGENTS.md](AGENTS.md) for the repo map and commands, and [docs/conventions.md](docs/conventions.md)
-for code conventions, [CONTRIBUTING.md](CONTRIBUTING.md) to contribute, and
-[SECURITY.md](SECURITY.md) to report a vulnerability. Released under the [MIT licence](LICENSE).
+[MIT](LICENSE). `next-federation` is a community project and is not affiliated with or endorsed by
+Vercel. Next.js is a trademark of Vercel, Inc.
