@@ -23,7 +23,7 @@ docs/
   protocol/v1.md                published island protocol spec
   errors/<slug>.md              one page per NF code
   guides/                       task guides (getting started, remotes, operations)
-  maintainers/                  notes for maintainers (dependency bump checks)
+  maintainers/                  notes for maintainers (dependency bump checks, live demo on Vercel)
 docs-site/                      the documentation site (syncs Markdown from docs/ and packages/)
 packages/
   sdk/        logger.ts, error-codes.ts, nf-error.ts, index.ts
@@ -69,7 +69,8 @@ test/
   fixtures/components-context/ the React context hosts share with it
   e2e/                      playwright.config.ts, servers.ts, *.spec.ts, fixtures/jwks-server.ts,
                             data/measurements.json (island size report written by measure.spec.ts)
-examples/                   runnable remotes and hosts (README.md, scripts/run.mjs; `pnpm examples:dev`)
+examples/                   runnable remotes and hosts (README.md, scripts/run.mjs; `pnpm examples:dev`);
+                            each has a vercel.json for the live demo (scripts/demo-keys.mjs)
 ```
 
 

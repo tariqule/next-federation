@@ -12,6 +12,15 @@ function CartCount() {
 function App() {
   return (
     <CartProvider>
+      {/* Vercel sets VITE_VERCEL_ENV at build time: deployments only. */}
+      {import.meta.env.VITE_VERCEL_ENV && (
+        <p className="demo-banner">
+          Live demo of next-federation ·{' '}
+          <a href="https://github.com/tariqule/next-federation">
+            source on GitHub
+          </a>
+        </p>
+      )}
       <header>
         <strong>React SPA host</strong>
         <CartCount />

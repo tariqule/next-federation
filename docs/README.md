@@ -105,3 +105,5 @@ why, and how to fix it.
 - [Code conventions](conventions.md) and [Releasing](releasing.md).
 - [Maintainer notes](maintainers/mf-vite-init-keys.md): checks to run when bumping
   `@module-federation/vite`.
+- [Live demo](maintainers/live-demo.md): the examples' Vercel projects, environment variables and
+  deploy order.

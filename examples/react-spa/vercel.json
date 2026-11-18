@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile --filter example-react-spa...",
+  "buildCommand": "pnpm --filter \"example-react-spa^...\" build && pnpm run build",
+  "outputDirectory": "dist"
+}

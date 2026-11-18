@@ -4,6 +4,7 @@ import {
   fetchDescriptorInBrowser,
 } from '@next-federation/react/components'
 import { Suspense, use } from 'react'
+import { CART_ORIGIN } from './federation'
 
 const RemoteCartButton = createRemoteComponent<{ sku: string }>({
   expose: './CartButton',
@@ -15,7 +16,7 @@ const RemoteCartButton = createRemoteComponent<{ sku: string }>({
 // A client component from the `cart` remote, rendered in the browser only
 // (an SPA never runs remote server code). Fetched once per page load.
 const descriptor = fetchDescriptorInBrowser(
-  'http://127.0.0.1:3304/_nf/components.json',
+  `${CART_ORIGIN}/_nf/components.json`,
   { remote: 'cart' }
 )
 

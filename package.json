@@ -29,6 +29,7 @@
     "e2e:installed:webpack": "NF_MIN_PASSED=4 NF_MODE=dev NF_BUNDLER=webpack NF_SUITE=installed NF_APPS=remote-a,host-installed-15,host-installed-16,host-installed-15-no-source-maps,host-installed-16-no-source-maps pnpm --filter e2e test -- installed-dev",
     "e2e:browsers": "NF_BROWSERS=all pnpm e2e:prod",
     "examples:keys": "node examples/scripts/keys.mjs",
+    "examples:demo-keys": "node examples/scripts/demo-keys.mjs",
     "examples:dev": "node examples/scripts/run.mjs dev",
     "examples:start": "node examples/scripts/run.mjs start",
     "examples:smoke": "node examples/scripts/run.mjs smoke",

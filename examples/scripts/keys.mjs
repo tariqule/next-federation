@@ -18,7 +18,7 @@ const FILES = {
 }
 
 /** A private EC P-256 JWK (ES256), with a key id. */
-function privateJwk(kid) {
+export function privateJwk(kid) {
   const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
   return { ...privateKey.export({ format: 'jwk' }), kid }
 }
