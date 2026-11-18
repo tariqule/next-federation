@@ -12,8 +12,13 @@ Vite; the library packages target Node.js 20.9 or newer.
 
 This guide sets up islands. A remote can also ship remote components, and a host can use both.
 
+Both come from a remote: a separate app that another team builds and deploys. The difference is
+where the remote's code runs. An island runs on the remote's server, and the host embeds the result.
+A remote component is code the remote ships that runs inside the host app.
+
 | | Remote components | Islands |
 | --- | --- | --- |
+| Where the remote's code runs | Inside the host app, in the browser | On the remote's own server |
 | What the remote ships | A client component module | HTML rendered on the remote's server |
 | React | The host's | The remote's own (or the host's, with `provideHostReact`) |
 | Host context | Readable | Does not cross in; pass data as props |

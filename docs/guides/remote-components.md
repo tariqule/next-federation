@@ -11,8 +11,13 @@ it. SPA hosts render it in the browser.
 
 ## Islands or remote components?
 
+Both come from a remote: a separate app that another team builds and deploys. The difference is
+where the remote's code runs. An island runs on the remote's server, and the host embeds the result.
+A remote component is code the remote ships that runs inside the host app.
+
 | | Islands | Remote components |
 | --- | --- | --- |
+| Where the remote's code runs | On the remote's own server | Inside the host app (browser and host server) |
 | What the remote ships | Server-rendered HTML + its own React tree | A client component module |
 | React | The remote's own (shared between islands when versions match) | Always the host's |
 | Host React context | Does not cross into the island | Readable (shared context modules) |
