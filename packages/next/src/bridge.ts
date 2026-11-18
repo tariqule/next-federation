@@ -1,6 +1,6 @@
 /**
  * Both Next routers add `basePath` in `push()`, so the island bridge strips it
- * from island hrefs first (design §6, navigation bridge).
+ * from island hrefs first.
  */
 export function stripBasePath(href: string, basePath: string): string {
   if (!basePath) return href

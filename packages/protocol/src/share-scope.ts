@@ -1,5 +1,5 @@
 /**
- * The page-wide React share scope of next-federation islands (Task 18B).
+ * The page-wide React share scope of next-federation islands.
  *
  * It lives in the Module Federation global map, `__FEDERATION__.__SHARE__`,
  * and keeps Module Federation's entry shape, but under a key that only this

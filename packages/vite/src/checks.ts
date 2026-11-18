@@ -28,7 +28,7 @@ const FAST_REFRESH_PLUGIN =
 /**
  * NF-002 if a Fast Refresh plugin is installed: its code expects a preamble
  * that only Vite-served pages have, so island modules loaded into a host would
- * fail (phase 0 finding 5).
+ * fail.
  */
 export function assertNoFastRefresh(pluginNames: readonly string[]): void {
   const found = pluginNames.find((name) => FAST_REFRESH_PLUGIN.test(name))

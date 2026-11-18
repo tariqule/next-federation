@@ -10,15 +10,16 @@ import type {
 } from './component-descriptor.ts'
 
 /**
- * App Router: the build of a components remote this render uses, for
- * `RemoteComponent`'s `descriptor` prop. Call it in a Server Component.
- * Cached per the host's caching model (`next: { revalidate }`, or
- * `'use cache'` + `cacheLife` with cacheComponents); `dynamic: true` fetches
- * per request (inside `<Suspense>` with cacheComponents). Returns the last
- * known build when the remote is down, null when none was ever fetched.
- * With cacheComponents, a render in a server process that has not loaded the
- * build yet is left out of the static shell (`NF-039` is logged), so a
- * static regeneration never keeps the components' fallback as the page.
+ * App Router: the build of a components remote this render uses, for the
+ * `descriptor` prop of a component made with `createRemoteComponent`. Call it
+ * in a Server Component. Cached per the host's caching model
+ * (`next: { revalidate }`, or `'use cache'` + `cacheLife` with
+ * cacheComponents); `dynamic: true` fetches per request (inside `<Suspense>`
+ * with cacheComponents). Returns the last known build when the remote is down,
+ * null when none was ever fetched. With cacheComponents, a render in a server
+ * process that has not loaded the build yet is left out of the static shell
+ * (`NF-039` is logged), so a static regeneration never keeps the components'
+ * fallback as the page.
  */
 export async function getComponentDescriptor(
   federation: Federation,

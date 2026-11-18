@@ -114,7 +114,7 @@ for (const key of NEXT_RUNTIME_ONLY) {
 }
 
 {
-  // Task 6: mint an island token with the built identity entry, verify it with Web Crypto.
+  // Mint an island token with the built identity entry, verify it with Web Crypto.
   const identity = imported.get(
     '@next-federation/core:./dist/identity/index.js'
   )
@@ -164,7 +164,7 @@ for (const key of NEXT_RUNTIME_ONLY) {
 }
 
 {
-  // Task 7: the built boundary must keep its 'use client' directive.
+  // The built boundary must keep its 'use client' directive.
   const file = join(packagesDir, 'react', 'dist', 'error-boundary.js')
   if (existsSync(file)) {
     if (!/^['"]use client['"]/.test(readFileSync(file, 'utf8'))) {
@@ -176,7 +176,7 @@ for (const key of NEXT_RUNTIME_ONLY) {
 }
 
 {
-  // Task 16: the built island mount keeps 'use client' and the bundler-ignore
+  // The built island mount keeps 'use client' and the bundler-ignore
   // comments on the bootstrap import(), so host bundlers leave the remote URL alone.
   const file = join(packagesDir, 'react', 'dist', 'island-mount.js')
   if (existsSync(file)) {
@@ -202,7 +202,7 @@ for (const key of NEXT_RUNTIME_ONLY) {
 }
 
 {
-  // Task 10: the built server verifier accepts a token minted by built core/identity.
+  // The built server verifier accepts a token minted by built core/identity.
   const server = imported.get('@next-federation/server:./dist/index.js')
   const identity = imported.get(
     '@next-federation/core:./dist/identity/index.js'
@@ -254,7 +254,7 @@ for (const key of NEXT_RUNTIME_ONLY) {
 }
 
 {
-  // Task 12: the built multi-build server runs each build in a child process and 410s retired builds.
+  // The built multi-build server runs each build in a child process and 410s retired builds.
   const node = imported.get('@next-federation/server:./dist/node/index.js')
   if (node) {
     const { mkdtempSync, mkdirSync, writeFileSync, rmSync } =

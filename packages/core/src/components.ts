@@ -1,6 +1,6 @@
-// Mode A: fetch and verify a components remote's build descriptor. The host
-// evaluates a remote's server code only for a build verified here; every
-// other build renders in the browser only (secure by default).
+// Remote components: fetch and verify a components remote's build descriptor.
+// The host evaluates a remote's server code only for a build verified here;
+// every other build renders in the browser only (secure by default).
 import {
   COMPONENTS_JWS_TYPE,
   canonicalJson,
@@ -331,9 +331,10 @@ async function trustOf(
 
 /**
  * Decides whether the host may evaluate this build's server code. Returns the
- * descriptor `RemoteComponent` takes, with `ssr` kept only for a verified
- * build: a JWS from one of `ssr.publicKeys` whose payload equals the
- * descriptor, a `pinned` digest equal to the payload's, or `unsafe-dev`.
+ * descriptor a component made with `createRemoteComponent` takes, with `ssr`
+ * kept only for a verified build: a JWS from one of `ssr.publicKeys` whose
+ * payload equals the descriptor, a `pinned` digest equal to the payload's, or
+ * `unsafe-dev`.
  */
 export async function verifyComponentDescriptor(
   target: ComponentTarget,

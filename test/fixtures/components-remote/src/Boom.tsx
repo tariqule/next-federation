@@ -1,5 +1,5 @@
 /**
- * Throws while rendering (B1): on the server only (`where="server"`, like a
+ * Throws while rendering: on the server only (`where="server"`, like a
  * component that reads `window` during render), or everywhere.
  */
 export default function Boom({

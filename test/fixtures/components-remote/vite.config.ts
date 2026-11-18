@@ -1,4 +1,4 @@
-// The Mode A (client components) remote fixture, built by
+// The components remote (client components) fixture, built by
 // @next-federation/vite's nextFederationComponents and served by nf-serve.
 // Env (set by test/e2e/servers.ts and mode-a.spec.ts):
 //   PORT                       listen port, baked into `base` at build time

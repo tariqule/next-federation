@@ -64,8 +64,8 @@ function fetchedAt(date: string | null, now: number): number {
 export function shortenEnclosingCache(): void {}
 
 /**
- * Mode A: a components remote's verified build descriptor, for hosts without
- * `cacheComponents`: a fetch with `next: { revalidate, tags }`.
+ * Remote components: a components remote's verified build descriptor, for
+ * hosts without `cacheComponents`: a fetch with `next: { revalidate, tags }`.
  */
 export function getDescriptorFile(
   target: ComponentTarget

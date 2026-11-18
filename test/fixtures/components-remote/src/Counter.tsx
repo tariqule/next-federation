@@ -7,7 +7,7 @@ declare const __NF_FIXTURE_BUILD__: string
 declare const __NF_BALLAST__: number
 
 /**
- * A Mode A remote client component: a hook (fails with "Invalid hook call"
+ * A remote component: a hook (fails with "Invalid hook call"
  * on a second React) and the host's context value (reads the default value
  * if the context module is not shared). Its stylesheet (Counter.css) reaches
  * the host page through the build descriptor's signed assets.

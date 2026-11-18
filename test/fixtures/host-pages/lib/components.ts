@@ -1,4 +1,4 @@
-// Server-side only (getServerSideProps): the Mode A remotes.
+// Server-side only (getServerSideProps): the components remotes.
 import { defineFederation } from '@next-federation/core'
 import {
   COMPONENTS_PORTS,

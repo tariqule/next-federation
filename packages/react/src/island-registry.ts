@@ -1,7 +1,7 @@
 import type { IslandEnvelope, IslandHandle } from '@next-federation/protocol'
 import { logger } from '@next-federation/sdk'
 
-/** One island root, keyed to its container node (design §6 rule 3). */
+/** One island root, keyed to its container node. */
 export type IslandEntry = {
   el: HTMLElement
   /** Set once `mountIsland` returned; `null` while booting, inert or destroyed. */

@@ -26,7 +26,7 @@ for (const [name, port] of [
     const log = buildLog(port)
     expect(log).toMatch(/^[├└┌] [○●◐] \/static\b/m)
     // Private island: dynamic by design. With cacheComponents it is a dynamic
-    // hole in a partial prerender (ruling 5).
+    // hole in a partial prerender.
     if (name === 'legacy') expect(log).toMatch(/^[├└┌] ƒ \/orders\b/m)
     else expect(log).toMatch(/^[├└┌] ◐ \/orders\b/m)
     const res = await request.get(`${url}/static`)
@@ -83,11 +83,11 @@ for (const [name, port] of [
   })
 }
 
-// B1/B2 (validation round 3) and B5 (round 4): a static page with a public
-// island must stay static through an island outage, regenerate on its
-// revalidate time, answer client navigations (RSC) with 200, and keep the
-// island's last good envelope while the remote fails (stale-if-error).
-// `/flaky-static` and `/flaky-cold` revalidate their island every 2 s.
+// A static page with a public island must stay static through an island outage,
+// regenerate on its revalidate time, answer client navigations (RSC) with 200,
+// and keep the island's last good envelope while the remote fails
+// (stale-if-error). `/flaky-static` and `/flaky-cold` revalidate their island
+// every 2 s.
 
 /** The page's cache state: never a partial prerender (`x-nextjs-postponed`). */
 function staticState(res: APIResponse, what: string): string {

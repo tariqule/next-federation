@@ -21,7 +21,7 @@ type SsrEntry = typeof import('./entry.ssr.tsx')
 const loadSsr = (): Promise<SsrEntry> =>
   import.meta.viteRsc.loadModule<SsrEntry>('ssr', 'index')
 
-// Buffered (design §13): the RSC stream is teed into the payload text and the
+// Buffered: the RSC stream is teed into the payload text and the
 // SSR HTML, and both are awaited before the envelope is sent.
 const render: RenderIsland = async (island, props, ctx) => {
   const mod = await islands[island]!.load()

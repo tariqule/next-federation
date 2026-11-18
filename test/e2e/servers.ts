@@ -15,7 +15,7 @@
 //   NF_APPS     optional comma list of app keys (see APPS below) to start a
 //               subset, e.g. NF_APPS=issuer,remote-a,remote-b.
 //   NF_SHARE    '0': remotes build with `share: false` (no React sharing).
-//               Default: production remotes share React (Task 18B). Passed
+//               Default: production remotes share React. Passed
 //               through to the remotes.
 //   NF_MEASURE  '1': remotes build without the fixture's React copy probe,
 //               for the sharing measurements.
@@ -41,9 +41,9 @@
 //   NF_REMOTE_A_ORIGIN    host-app: remote `a`'s origin, set from
 //                         NF_VERCEL_PROD_URL when that is set (vercel.spec.ts).
 //   VITE_NF_ORIGIN_*      host-spa: remote origins (A, B, FAKE, C, RETIRED).
-//   VITE_NF_COMPONENTS_*  host-spa: the Mode A remote (ORIGIN), a down one
-//                         (DOWN) and the Rspack-built one (RSPACK). Mode A
-//                         ports: fixtures/components-keys.ts.
+//   VITE_NF_COMPONENTS_*  host-spa: the components remote (ORIGIN), a down
+//                         one (DOWN) and the Rspack-built one (RSPACK).
+//                         Components remote ports: fixtures/components-keys.ts.
 // Ports below are the lane's: BASE_PORTS plus lane.ts's offset.
 //
 // Origins: hosts are reached as `localhost`, remotes as `127.0.0.1`, so a
@@ -266,7 +266,7 @@ function nextProd(
 
 /**
  * Remote commands. Each remote builds into its own `remoteDist(name)` folder, which
- * is removed first, so `nf-serve` sees only this run's builds (ruling 27).
+ * is removed first, so `nf-serve` sees only this run's builds.
  */
 function remoteCommand(
   name: string,
@@ -374,7 +374,7 @@ export const APPS: App[] = [
     skewOnly: true,
   },
   {
-    // Mode A remotes (signed, tampered, unsigned), built one after the
+    // Components remotes (signed, tampered, unsigned), built one after the
     // other then served by nf-serve, in dev and prod (hosts server-render
     // them only from a build). Listed before the hosts: Playwright starts
     // web servers in order, so cacheComponents prerenders can reach it.
@@ -384,7 +384,7 @@ export const APPS: App[] = [
     command: 'node scripts/e2e.ts',
   },
   {
-    // Mode A remotes built with Rspack + @module-federation/enhanced (not
+    // Components remotes built with Rspack + @module-federation/enhanced (not
     // Vite) and described by nf-describe: signed rs1, unsigned ru1.
     key: 'components-remote-rspack',
     dir: 'components-remote-rspack',

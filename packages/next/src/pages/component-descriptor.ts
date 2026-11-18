@@ -7,10 +7,11 @@ import type {
 } from '../server/component-descriptor.ts'
 
 /**
- * Pages Router: the build of a components remote this render uses, for
- * `RemoteComponent`'s `descriptor` prop. Call it in `getServerSideProps` or
- * `getStaticProps` and return it in `props`. Returns the last known build
- * when the remote is down, null when none was ever fetched.
+ * Pages Router: the build of a components remote this render uses, for the
+ * `descriptor` prop of a component made with `createRemoteComponent`. Call it
+ * in `getServerSideProps` or `getStaticProps` and return it in `props`. Returns
+ * the last known build when the remote is down, null when none was ever
+ * fetched.
  */
 export function getComponentDescriptor(
   federation: Federation,

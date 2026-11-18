@@ -28,7 +28,7 @@ const OUT = new URL('./data/measurements.json', import.meta.url)
 const REMOTES = { a: REMOTE_A, b: REMOTE_B }
 const FIRST_LIVE = { timeout: 30_000 }
 const KB = 1024
-/** Gzip budgets per remote origin (Task 24). */
+/** Gzip budgets per remote origin. */
 const BUDGET = {
   /** A remote with its own React: unshared, or the first shared remote. */
   ownReact: 84 * KB,

@@ -1,5 +1,6 @@
-// Mode A server loader (Node only; the `browser` export condition maps this
-// module to `server-loader.browser.ts`, so it never reaches a client bundle).
+// Remote components server loader (Node only; the `browser` export condition
+// maps this module to `server-loader.browser.ts`, so it never reaches a client
+// bundle).
 //
 // Evaluates a remote build's CommonJS server entry graph, fetched over
 // node:http, inside the host process: only after every file's sha384 matches
@@ -51,7 +52,7 @@ function builtin<T>(id: string): T {
 
 /**
  * GET through node:http(s), not `fetch`: Next's instrumented fetch aborts the
- * loader's I/O when a cacheComponents prerender completes (spike 28S, G7).
+ * loader's I/O when a cacheComponents prerender completes.
  */
 export function loaderGet(
   url: string,

@@ -1,6 +1,7 @@
-// Mode A host runtime: one Module Federation instance per environment (each
-// server layer and the browser), which loads remote builds' exposed modules
-// on the host's own React. Framework-free; the 'use client' entry wires it.
+// Remote components host runtime: one Module Federation instance per
+// environment (each server layer and the browser), which loads remote builds'
+// exposed modules on the host's own React. Framework-free; the 'use client'
+// entry wires it.
 import {
   componentTrustRegistry,
   isNeverFallback,

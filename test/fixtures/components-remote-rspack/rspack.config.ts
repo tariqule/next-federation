@@ -1,4 +1,4 @@
-// The Mode A (client components) remote built with Rspack and Module
+// The components remote (client components) built with Rspack and Module
 // Federation 2.0 (`@module-federation/enhanced`), not Vite: two builds (the
 // browser copy and a CommonJS server copy for host SSR), then `nf-describe`
 // writes the next-federation descriptor (scripts/build.ts runs all three).

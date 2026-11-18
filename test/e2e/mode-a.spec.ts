@@ -1,4 +1,4 @@
-// Mode A (Module Federation client components, Task 28): a host renders a
+// Remote components (Module Federation client components): a host renders a
 // remote's client component in its own React tree on its own React.
 // Next hosts server-render it (verified builds only) and hydrate it; the SPA
 // renders it in the browser. Remotes: test/fixtures/components-remote
@@ -116,9 +116,9 @@ async function html(url: string): Promise<{ status: number; body: string }> {
 
 // `next dev --webpack` re-instantiates the host's server modules when it
 // compiles another route; @module-federation/vite's process-wide share cache
-// keeps the old instances, so the runtime renders Mode A browser-only from
-// then on (NF-028 "stale", documented). Those cells skip the server-HTML
-// checks instead of failing them; every other cell asserts them.
+// keeps the old instances, so the runtime renders remote components
+// browser-only from then on (NF-028 "stale", documented). Those cells skip the
+// server-HTML checks instead of failing them; every other cell asserts them.
 const DEV_WEBPACK = MODE === 'dev' && BUNDLER === 'webpack'
 function expectServerMarkup(body: string, expected: string): void {
   if (

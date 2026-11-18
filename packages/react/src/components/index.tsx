@@ -1,9 +1,9 @@
 'use client'
-// Mode A: Module Federation client components rendered inside the host's
-// React tree. One module for both environments: Next compiles it in the SSR
-// layer on the server and in the browser layer on the client, so the React it
-// imports is the React that renders it in each environment, and that React is
-// what remotes get (they are built with React as host-provided).
+// Remote components: Module Federation client components rendered inside the
+// host's React tree. One module for both environments: Next compiles it in the
+// SSR layer on the server and in the browser layer on the client, so the React
+// it imports is the React that renders it in each environment, and that React
+// is what remotes get (they are built with React as host-provided).
 import * as MFRuntime from '@module-federation/runtime'
 import { createInstance } from '@module-federation/runtime'
 import { parseComponentDescriptorFile } from '@next-federation/protocol'

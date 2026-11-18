@@ -9,7 +9,7 @@ export const ORIGINS = {
   a: env.VITE_NF_ORIGIN_A ?? 'http://127.0.0.1:4100',
   b: env.VITE_NF_ORIGIN_B ?? 'http://127.0.0.1:4101',
   fake: env.VITE_NF_ORIGIN_FAKE ?? 'http://127.0.0.1:4102',
-  // Task 18A: the island remote built against the previous React patch.
+  // The island remote built against the previous React patch.
   c: env.VITE_NF_ORIGIN_C ?? 'http://127.0.0.1:4104',
   // Remote `a` served with `--max-builds 1`: build v1 is retired there.
   retired: env.VITE_NF_ORIGIN_RETIRED ?? 'http://127.0.0.1:4103',

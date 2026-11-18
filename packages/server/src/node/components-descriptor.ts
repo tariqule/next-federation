@@ -1,4 +1,4 @@
-// The Mode A build descriptor, bundler-neutral: shared by
+// The remote components build descriptor, bundler-neutral: shared by
 // @next-federation/vite's nextFederationComponents and `nf-describe` (any
 // Module Federation 2.0 build), so both write exactly the same file.
 import { lstat, readFile, readdir, realpath, writeFile } from 'node:fs/promises'

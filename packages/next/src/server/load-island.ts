@@ -55,7 +55,7 @@ export type LoadedIsland =
 const FAILED: LoadedIsland = { kind: 'failed' }
 
 /**
- * Loads one island for App Router (design §6).
+ * Loads one island for App Router.
  * - Public: through the island cache selected by `withNextFederation`.
  * - Public `dynamic`: `fetchIsland` with `cache: 'no-store'`.
  * - Private: identity read outside any cache scope, token minted per request.
