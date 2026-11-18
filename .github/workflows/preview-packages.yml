@@ -1,0 +1,39 @@
+name: Preview packages
+
+# Publishes an installable preview of every package for each pull request and each push to main,
+# through pkg.pr.new. Nothing goes to npm, and no secret is used: the pkg.pr.new GitHub App
+# (installed on the repository by a maintainer) posts the pull request comment and the check run.
+# `pull_request` (not `pull_request_target`): the PR's code builds here with a read-only token.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Package imports resolve to each package's dist, so build before packing.
+      - run: pnpm build
+      # `--pnpm` packs with `pnpm pack`, which turns `workspace:*` into real versions; pkg.pr.new
+      # then points each sibling dependency at its own preview URL. One run covers all packages.
+      - name: Publish previews to pkg.pr.new
+        run: pnpm exec pkg-pr-new publish --pnpm --comment=update './packages/*'

@@ -1,0 +1,48 @@
+# Path labels for actions/labeler (.github/workflows/labeler.yml).
+# Create the labels first: see .github/labels.md.
+
+'pkg:sdk':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/sdk/**'
+'pkg:protocol':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/protocol/**'
+'pkg:core':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/core/**'
+'pkg:react':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/react/**'
+'pkg:island':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/island/**'
+'pkg:server':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/server/**'
+'pkg:vite':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/vite/**'
+'pkg:next':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/next/**'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file: ['docs/**', '**/*.md', 'docs-site/**']
+
+examples:
+  - changed-files:
+      - any-glob-to-any-file: 'examples/**'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/**', 'scripts/**']
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: ['test/**', 'packages/*/__tests__/**']
+
+deps:
+  - changed-files:
+      - any-glob-to-any-file:
+          ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']

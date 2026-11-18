@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/@next-federation/next?label=npm)](https://www.npmjs.com/package/@next-federation/next)
 [![GitHub release](https://img.shields.io/github/v/release/tariqule/next-federation)](https://github.com/tariqule/next-federation/releases)
 [![CI](https://github.com/tariqule/next-federation/actions/workflows/ci.yml/badge.svg)](https://github.com/tariqule/next-federation/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/tariqule/next-federation/badge)](https://scorecard.dev/viewer/?uri=github.com/tariqule/next-federation)
 
 **Documentation: <https://next-federation-docs.vercel.app>**
 
