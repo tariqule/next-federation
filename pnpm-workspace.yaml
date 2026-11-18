@@ -1,7 +1,7 @@
 packages:
   - 'packages/*'
   - 'test/fixtures/*'
-  # Remote `c` of the React sharing e2e pins the previous React patch: its own
+  # Remote `c` of the React sharing e2e pins an older React (19.2.9): its own
   # install (`pnpm install --ignore-workspace` there; CI does it too).
   - '!test/fixtures/island-remote-old-react'
   - 'test/e2e'

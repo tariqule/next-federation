@@ -177,6 +177,16 @@ URL still answers, behind Vercel Authentication.
 - To test a preview deployment from a host, use a Protection Bypass for Automation secret. This
   was not tested.
 
+## Removing deployments after a security fix
+
+Every earlier deployment keeps its own Function and its own dependencies. After upgrading away from
+a `react-server-dom-webpack` affected by
+[GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), delete the deployments built with an affected version
+(`vercel remove <deployment-url>`, or the dashboard). Until then, keep them behind Deployment
+Protection (Standard Protection covers generated deployment URLs). With Skew Protection on, a request
+that names an old deployment id reaches that deployment through the production domain, so delete
+those deployments. See [NF-041](../errors/vulnerable-react-server-dom.md).
+
 ## CI
 
 `.github/workflows/vercel.yml` is a manual (`workflow_dispatch`) job, `e2e-vercel`. It needs the

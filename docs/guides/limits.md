@@ -9,8 +9,10 @@ React 19 (required). Next.js 16 or 15 (`>=15.5.28 <17`) App Router and Pages Rou
 or webpack, on Node 20.9 or newer (server rendering of remote components needs Node 20.16 or newer).
 React Router hosts are planned after 1.0. Remotes build with Vite 8, which needs Node
 `^20.19.0 || >=22.12.0`. An island remote uses `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
-fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set). A Vite components remote uses
-`@module-federation/vite` 1.24.0 (pinned; `NF-026`).
+fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set), and `react-server-dom-webpack` 19.0.9,
+19.1.10, 19.2.9, 19.3.1 or a later patch: older versions are affected by
+[GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3) and fail the build with
+`NF-041`. A Vite components remote uses `@module-federation/vite` 1.24.0 (pinned; `NF-026`).
 
 ### Next.js 15
 

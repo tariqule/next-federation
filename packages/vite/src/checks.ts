@@ -1,3 +1,4 @@
+import { flightClientAdvisoryDetail } from '@next-federation/protocol'
 import { NFError, logger } from '@next-federation/sdk'
 import { parseSync } from 'vite'
 import { SUPPORTED_PLUGIN_RSC_VERSION } from './plugin-rsc/constants.ts'
@@ -18,6 +19,26 @@ export function assertPluginRscVersion(
     return
   }
   throw new NFError('NF-025', detail)
+}
+
+/**
+ * NF-041 when the `react-server-dom-webpack` installed at `location` is
+ * affected by GHSA-xqc2-xf4c-x3h3 (an island remote runs it on its server), or
+ * is an experimental build (`0.0.0-*`) that cannot be checked against it.
+ * A build fails; the dev server logs NF-041 as a warning and goes on.
+ */
+export function assertPatchedFlightClient(
+  version: string,
+  location: string,
+  command: 'build' | 'serve'
+): void {
+  const detail = flightClientAdvisoryDetail(version, location)
+  if (!detail) return
+  if (command === 'serve') {
+    logger.warn('NF-041', `${detail} A production build refuses it.`)
+    return
+  }
+  throw new NFError('NF-041', detail)
 }
 
 // @vitejs/plugin-react's Babel and Fast Refresh plugins (6.x names), and

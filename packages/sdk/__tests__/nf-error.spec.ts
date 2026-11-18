@@ -35,9 +35,9 @@ test('cause is preserved', () => {
   expect(new NFError('NF-007', 'x').cause).toBeUndefined()
 })
 
-test('codes are contiguous NF-001..NF-040 with unique slugs', () => {
+test('codes are contiguous NF-001..NF-041 with unique slugs', () => {
   const expected = Array.from(
-    { length: 40 },
+    { length: 41 },
     (_, i) => `NF-${String(i + 1).padStart(3, '0')}`
   )
   expect(Object.keys(ERROR_CODES)).toEqual(expected)
@@ -65,5 +65,12 @@ test('a remote component render error has its own code', () => {
   expect(ERROR_CODES['NF-040']).toEqual({
     slug: 'component-render-failed',
     title: 'Remote component threw while rendering',
+  })
+})
+
+test('a react-server-dom-webpack with a known advisory has its own code', () => {
+  expect(ERROR_CODES['NF-041']).toEqual({
+    slug: 'vulnerable-react-server-dom',
+    title: 'Installed `react-server-dom-webpack` has a known security advisory',
   })
 })

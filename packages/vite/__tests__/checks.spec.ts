@@ -1,6 +1,7 @@
 import { isNFError } from '@next-federation/sdk'
 import {
   assertNoFastRefresh,
+  assertPatchedFlightClient,
   assertPluginRscVersion,
   findRawFormActions,
   findServerActions,
@@ -51,6 +52,125 @@ test('the NF-025 message names the installed and the supported version', () => {
     return
   }
   throw new Error('expected NF-025')
+})
+
+describe('react-server-dom-webpack affected by GHSA-xqc2-xf4c-x3h3 (NF-041)', () => {
+  // Each affected version with the first patched release of its minor line.
+  test.each([
+    ['19.0.0', '19.0.9'],
+    ['19.0.8', '19.0.9'],
+    ['19.1.0', '19.1.10'],
+    ['19.1.9', '19.1.10'],
+    ['19.2.0', '19.2.9'],
+    ['19.2.8', '19.2.9'],
+    ['19.3.0', '19.3.1'],
+  ])('build: %s fails, naming the advisory and %s', (version, patched) => {
+    let thrown: unknown
+    try {
+      assertPatchedFlightClient(version, '/app/node_modules', 'build')
+    } catch (error) {
+      thrown = error
+    }
+    expect(isNFError(thrown)).toBe(true)
+    expect((thrown as { code: string }).code).toBe('NF-041')
+    const message = String((thrown as Error).message)
+    expect(message).toContain('GHSA-xqc2-xf4c-x3h3')
+    expect(message).toContain(`react-server-dom-webpack ${version}`)
+    expect(message).toContain(`${patched} or later`)
+    expect(message).toContain('/app/node_modules')
+  })
+
+  test('dev server: an affected version warns NF-041 and goes on', () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      codeOf(() => assertPatchedFlightClient('19.2.4', '/app', 'serve'))
+    ).toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.join(' '))).toMatch(
+      /NF-041.*19\.2\.4.*GHSA-xqc2-xf4c-x3h3.*19\.2\.9 or later/
+    )
+  })
+
+  test('a prerelease below the patched release of an affected line fails', () => {
+    expect(
+      codeOf(() =>
+        assertPatchedFlightClient(
+          '19.3.1-canary-1234-20261101',
+          '/app',
+          'build'
+        )
+      )
+    ).toBe('NF-041')
+  })
+
+  test('a 19.3.0 canary fails, even one published after the fix', () => {
+    // React keeps naming canaries `19.3.0-canary-*`: no release line covers them.
+    expect(
+      codeOf(() =>
+        assertPatchedFlightClient(
+          '19.3.0-canary-df6aa4ec-20261120',
+          '/app',
+          'build'
+        )
+      )
+    ).toBe('NF-041')
+  })
+
+  test.each([
+    '0.0.0-experimental-df6aa4ec-20261112',
+    '0.0.0-df6aa4ec-20261112',
+  ])(
+    'build: the experimental %s fails (it cannot be checked against the advisory)',
+    (version) => {
+      let thrown: unknown
+      try {
+        assertPatchedFlightClient(version, '/app/node_modules', 'build')
+      } catch (error) {
+        thrown = error
+      }
+      expect((thrown as { code?: string }).code).toBe('NF-041')
+      const message = String((thrown as Error).message)
+      expect(message).toContain(`react-server-dom-webpack ${version}`)
+      expect(message).toContain('GHSA-xqc2-xf4c-x3h3')
+      expect(message).toMatch(/experimental builds cannot be checked/i)
+      expect(message).toContain('/app/node_modules')
+    }
+  )
+
+  test('dev server: an experimental build warns NF-041 and goes on', () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      codeOf(() =>
+        assertPatchedFlightClient('0.0.0-experimental-abc', '/app', 'serve')
+      )
+    ).toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.join(' '))).toMatch(
+      /NF-041.*0\.0\.0-experimental-abc.*experimental builds cannot be checked/i
+    )
+  })
+
+  test.each([
+    '19.0.9',
+    '19.0.10',
+    '19.1.10',
+    '19.2.9',
+    '19.2.12',
+    '19.3.1',
+    '19.3.2',
+    '19.4.0',
+    '18.3.1',
+    '20.0.0',
+  ])('%s passes', (version) => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      codeOf(() => assertPatchedFlightClient(version, '/app', 'build'))
+    ).toBeUndefined()
+    expect(
+      codeOf(() => assertPatchedFlightClient(version, '/app', 'serve'))
+    ).toBeUndefined()
+    expect(warn).not.toHaveBeenCalled()
+  })
 })
 
 test.each([

@@ -30,6 +30,7 @@ packages/
   protocol/   constants.ts, envelope.ts, request.ts, props.ts, id-prefix.ts, bootstrap.ts (types),
               share-scope.ts (island React share scope), secure-url.ts (https rule),
               components.ts (remote components descriptor, trust registry), semver.ts (shared-module ranges),
+              rsc-advisory.ts (react-server-dom-webpack advisory table, NF-041),
               action.ts (Server Action request), index.ts
   core/       config.ts (defineFederation), fetch-island.ts, events.ts, index.ts,
               identity/ (keys.ts, mint.ts, identity-key.ts, index.ts)   → export "./identity",

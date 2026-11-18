@@ -8,7 +8,8 @@ import { LOGS_DIR } from './servers.ts'
 
 // Island React sharing: production remotes share React through the
 // island share scope of `@next-federation/vite` (on by default for builds).
-// SPA host `/shared`. Servers: NF_MODE=prod NF_APPS=remote-a,remote-b,remote-c,host-spa
+// SPA host `/shared`. Servers: NF_MODE=prod
+// NF_APPS=remote-a,remote-b,remote-c,host-spa,components-remote
 // (skew case: NF_SUITE=skew, remote-a serves v1 and v2). NF_SHARE=0 builds
 // the remotes with `share: false`. Measurements: NF_MEASURE=1, `-g measure`,
 // first with NF_SHARE=0 (the unshared control), then with sharing (asserts).
@@ -170,13 +171,13 @@ test.describe('island React sharing (nf-islands)', () => {
       // Remote c really resolved the older React, server and browser.
       await expect(page.locator('[data-remote="c"]')).toHaveAttribute(
         'data-react-version',
-        '19.3.0'
+        '19.2.9'
       )
       await expect(page.locator('[data-remote="a"]')).toHaveAttribute(
         'data-react-version',
         '19.3.1'
       )
-      expect(await sortedProbe(page)).toEqual(copies('19.3.0', '19.3.1'))
+      expect(await sortedProbe(page)).toEqual(copies('19.2.9', '19.3.1'))
       const origins = new Set(
         reactChunks(seen.js).map((u) => new URL(u).origin)
       )
@@ -204,7 +205,7 @@ test.describe('island React sharing (nf-islands)', () => {
         FIRST_LIVE
       )
       // a and b still share; c is separate.
-      expect(await sortedProbe(page)).toEqual(copies('19.3.0', '19.3.1'))
+      expect(await sortedProbe(page)).toEqual(copies('19.2.9', '19.3.1'))
       const origins = new Set(
         reactChunks(seen.js).map((u) => new URL(u).origin)
       )

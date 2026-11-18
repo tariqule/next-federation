@@ -1,7 +1,7 @@
 # @next-federation/sdk
 
 Shared building blocks for every `next-federation` package: a category logger and the `NF-001` to
-`NF-040` error codes, each with a page under
+`NF-041` error codes, each with a page under
 [`docs/errors`](https://github.com/tariqule/next-federation/tree/main/docs/errors).
 
 ## Install

@@ -9,10 +9,10 @@ nf-serve --dir ./builds --port 4100 [--host 127.0.0.1] [--current <buildId>] \
   [--max-builds 3] [--min-age-hours 24]
 ```
 
-`<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` (`{ "buildId", "builtAt" }`) is one build.
-Each live island build runs in its own process (with `NODE_ENV=production`) behind a router. A
-components remote build is the exception: it is served as static files, with no process. The router
-answers these routes:
+`<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` (`{ "buildId", "builtAt" }`, and for an
+island build `"reactServerDomWebpack"`) is one build. Each live island build runs in its own process
+(with `NODE_ENV=production`) behind a router. A components remote build is the exception: it is
+served as static files, with no process. The router answers these routes:
 
 | Route                | Served by                                                           |
 | -------------------- | ------------------------------------------------------------------- |
@@ -39,4 +39,22 @@ rebuild into an output directory, delete that build's folder first so stale file
 new build. On Vercel the production domain serves only the newest deployment's build: see
 [Deploying an island remote on Vercel](deploying-a-remote-on-vercel.md).
 
-See [NF-023](../errors/build-retired.md).
+## Builds with a security advisory
+
+Every live build runs and answers `/b/<build>/_nf/*`, Server Actions included, whether or not a page
+still links to it. After upgrading away from a `react-server-dom-webpack` affected by
+[GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), delete every build folder made with an affected version
+and restart `nf-serve`, or restart it once with `--max-builds 1 --min-age-hours 0`.
+
+`nf-build.json` records the `react-server-dom-webpack` versions a build used
+(`"reactServerDomWebpack": ["19.3.1"]`). `nf-serve` checks them when it starts (`NF-041`):
+
+- the current build is affected (or experimental): `nf-serve` does not start;
+- an older live build is affected: it is retired, so its process is not started and its routes
+  answer `410 NF-023`, as for any retired build (it will not come back, so `410` rather than `503`),
+  and `nf-serve` logs `NF-041` naming the build and the version;
+- a malformed or empty field (not a list, a non-string entry, or `[]`) is refused the same way;
+- builds without the field (made with an older `@next-federation/vite`) are served and logged once as
+  an `NF-041` error: they are probably builds with an affected version, so remove those yourself.
+
+See [NF-023](../errors/build-retired.md) and [NF-041](../errors/vulnerable-react-server-dom.md).

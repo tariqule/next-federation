@@ -77,3 +77,9 @@ export {
 } from './secure-url.ts'
 export type { InsecureHttpOptions } from './secure-url.ts'
 export { isSemverRange, isSemverVersion, satisfies } from './semver.ts'
+export {
+  RSC_ADVISORY,
+  checkFlightClientVersion,
+  flightClientAdvisoryDetail,
+} from './rsc-advisory.ts'
+export type { FlightClientCheck } from './rsc-advisory.ts'

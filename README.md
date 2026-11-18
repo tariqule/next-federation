@@ -169,15 +169,15 @@ The [docs index](docs/README.md) lists every guide. A few places to start:
 `next-federation` is at 0.x, so the API can still change between minor versions. Pin the version and
 read the changelogs. All packages are versioned together.
 
-|         | Supported                                                                                                                                                                      |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| React   | 19 (required)                                                                                                                                                                  |
-| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only                                                                                                              |
-| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer (older Node renders them in the browser only). A Vite remote needs 20.19 or newer, or 22.12 or newer |
-| Remotes | Vite 8. Remote components can also come from Rspack (tested) or webpack (documented, untested) with Module Federation 2.0                                                      |
+|         | Supported                                                                                                                                                                                                  |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React   | 19 (required). An island remote's `react-server-dom-webpack` must be 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), `NF-041`) |
+| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only                                                                                                                                          |
+| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer (older Node renders them in the browser only). A Vite remote needs 20.19 or newer, or 22.12 or newer                             |
+| Remotes | Vite 8. Remote components can also come from Rspack (tested) or webpack (documented, untested) with Module Federation 2.0                                                                                  |
 
 The tests run on React and React DOM 19.3.1 (`react-server-dom-webpack` 19.3.1 in island remotes),
-plus one island remote on 19.3.0 to cover mixed versions. Other React 19 versions are not covered.
+plus one island remote on 19.2.9 to cover mixed versions. Other React 19 versions are not covered.
 Scaffolds move on: at the time of writing `create-vite` writes a caret range (`"react": "^19.3.1"`) and
 `create-next-app` writes `19.3.0`. Pin `react` and `react-dom` to the same exact version in the host
 and in each remote (`"react": "19.3.1"`, no `^`), and pin `react-server-dom-webpack` the same way in

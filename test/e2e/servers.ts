@@ -140,7 +140,7 @@ export const INSTALLED_HOSTS = [
 ] as const
 export const INSTALLED_NEXT = { 15: '15.5.28', 16: '16.4.6' } as const
 /**
- * Remote `c` (the previous React patch, for the sharing e2e) runs in prod
+ * Remote `c` (an older React, 19.2.9, for the sharing e2e) runs in prod
  * only: dev remotes never share React. It lives outside the pnpm workspace
  * (`pnpm install --ignore-workspace` in its folder).
  */

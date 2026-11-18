@@ -42,6 +42,7 @@ export type NFErrorCode =
   | 'NF-038'
   | 'NF-039'
   | 'NF-040'
+  | 'NF-041'
 
 export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
   {
@@ -185,6 +186,11 @@ export const ERROR_CODES: Record<NFErrorCode, { slug: string; title: string }> =
     'NF-040': {
       slug: 'component-render-failed',
       title: 'Remote component threw while rendering',
+    },
+    'NF-041': {
+      slug: 'vulnerable-react-server-dom',
+      title:
+        'Installed `react-server-dom-webpack` has a known security advisory',
     },
   }
 

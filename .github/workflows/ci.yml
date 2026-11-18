@@ -26,7 +26,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Old-React island remote (outside the workspace)
-        # The React sharing e2e's remote `c` pins the previous React patch,
+        # The React sharing e2e's remote `c` pins an older React (19.2.9),
         # so it has its own install (pnpm-workspace.yaml excludes it).
         run: pnpm install --frozen-lockfile --ignore-workspace
         working-directory: test/fixtures/island-remote-old-react

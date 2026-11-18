@@ -170,7 +170,7 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
 // served.live, served.retired, served.current, served.port; await served.close()
 ```
 
-- Layout: `<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` (`{ buildId, builtAt }`).
+- Layout: `<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` (`{ buildId, builtAt }`, and `reactServerDomWebpack` for an island build).
 - Routes: `/b/<build>/assets/*` (immutable, CORS `*`, traversal-safe), `/b/<build>/_nf/*` (that build's
   handler), `/_nf/*` (the current build).
 - One child process per live build, each with `NODE_ENV=production`; the router streams request
@@ -187,6 +187,13 @@ const served = await serveBuilds({ dir: './builds', port: 4100 })
 - Retention: the current build (`--current`, or the newest) is always live; so are the newest
   `--max-builds` (3) and any build younger than `--min-age-hours` (24). Others are retired and answer
   `410 {"error":"NF-023"}` (with `Access-Control-Allow-Origin: *`).
+- Security advisories: `nf-build.json` records the `react-server-dom-webpack` versions an island
+  build used (`reactServerDomWebpack`, written by `@next-federation/vite`). A build whose versions are
+  affected by GHSA-xqc2-xf4c-x3h3, or experimental, is refused (`NF-041`): the current build stops
+  `serveBuilds` from starting, an older one is retired (`410 NF-023`). A malformed or empty field is
+  refused the same way. Builds without the field are served and logged once as an `NF-041` error.
+  After upgrading, remove every build made with an affected version
+  ([NF-041](../../docs/errors/vulnerable-react-server-dom.md)).
 - Compression: text files of at least 1 KB (`.js`, `.mjs`, `.cjs`, `.css`, `.json`, `.svg`, `.html`,
   `.map`, `.txt`), descriptors and public JSON envelopes are sent brotli- or gzip-encoded per
   `Accept-Encoding` (q-values honoured), with `Vary: Accept-Encoding`; cache and CORS headers are

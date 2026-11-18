@@ -1,5 +1,5 @@
 // The island-remote fixture (root `../island-remote`, its sources
-// and plugins) built against the previous React 19 patch, as remote `c` on
+// and plugins) built against an older React 19 (19.2.9), as remote `c` on
 // port 4104. `react`, `react-dom` and `react-server-dom-webpack` resolve from
 // this folder's own node_modules. Outside the pnpm workspace:
 // install with `pnpm install --ignore-workspace` in this folder.

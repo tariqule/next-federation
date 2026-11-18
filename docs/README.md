@@ -98,6 +98,7 @@ why, and how to fix it.
 - [NF-038](errors/action-request-failed.md): Server Action request failed
 - [NF-039](errors/component-deferred.md): Remote component deferred to request time
 - [NF-040](errors/component-render-failed.md): Remote component threw while rendering
+- [NF-041](errors/vulnerable-react-server-dom.md): Installed `react-server-dom-webpack` has a known security advisory
 
 ## For contributors
 
