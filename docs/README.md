@@ -2,7 +2,8 @@
 
 Guides and reference for `next-federation`. New here? Read the [project README](../README.md) for
 what it is, then pick a getting-started guide. [Architecture](architecture.md) explains how the
-pieces fit together.
+pieces fit together. The [live demo](live-demo.md) runs the examples: three hosts and two remotes,
+with what each one embeds or serves and what to try.
 
 ## Getting started
 
@@ -105,5 +106,5 @@ why, and how to fix it.
 - [Code conventions](conventions.md) and [Releasing](releasing.md).
 - [Maintainer notes](maintainers/mf-vite-init-keys.md): checks to run when bumping
   `@module-federation/vite`.
-- [Live demo](maintainers/live-demo.md): the examples' Vercel projects, environment variables and
-  deploy order.
+- [Live demo setup](maintainers/live-demo.md): the examples' Vercel projects, environment variables
+  and deploy order. The public page is [Live demo](live-demo.md).

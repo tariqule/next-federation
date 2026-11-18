@@ -35,6 +35,7 @@ const entries = []
 const add = (src, slug) => entries.push({ src, slug })
 
 add('docs/README.md', 'index')
+add('docs/live-demo.md', 'live-demo')
 add('docs/architecture.md', 'architecture')
 add('docs/guides/getting-started-app-router.md', 'getting-started/app-router')
 add(
@@ -232,6 +233,7 @@ writeFileSync(
     {
       pages: [
         'index',
+        'live-demo',
         'architecture',
         'getting-started',
         'guides',

@@ -33,6 +33,12 @@ export default function App({ Component, pageProps }: AppProps) {
         </Link>
         <CartCount />
       </header>
+      <p className="role">
+        This app is a <b>host</b> (Next.js Pages Router, basePath{' '}
+        <code>/shop</code>). It embeds islands from the <code>shop</code> remote
+        (vite-remote) and a remote component from the <code>cart</code> remote
+        (components-remote).
+      </p>
       <Component {...pageProps} />
     </CartProvider>
   )

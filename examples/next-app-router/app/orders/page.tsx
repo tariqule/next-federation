@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import { Embedded } from '../../lib/Embedded'
 import { RemoteIsland } from '../../lib/federation'
 
 // A private island, rendered by the remote for the signed-in user. Without a
@@ -19,13 +20,15 @@ export default async function Orders() {
           <button>Sign in</button>
         </form>
       )}
-      <RemoteIsland
-        remote="shop"
-        island="MyOrders"
-        private
-        fallback={<p>loading orders…</p>}
-        errorFallback={<p>Sign in to see your orders.</p>}
-      />
+      <Embedded remote="shop" name="MyOrders" isPrivate>
+        <RemoteIsland
+          remote="shop"
+          island="MyOrders"
+          private
+          fallback={<p>loading orders…</p>}
+          errorFallback={<p>Sign in to see your orders.</p>}
+        />
+      </Embedded>
     </main>
   )
 }

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cart: components remote</title>
+    <meta
+      name="description"
+      content="The components remote of the next-federation live demo. Hosts render the client components it exposes."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --text: #1b1b1f;
+        --muted: #5d5d66;
+        --line: #dedee3;
+        --card: #f6f6f8;
+        --accent: #2b8a5e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141417;
+          --text: #ececf0;
+          --muted: #a2a2ad;
+          --line: #2e2e35;
+          --card: #1c1c21;
+          --accent: #69db9f;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 48px 16px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.55 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 620px;
+        margin: 0 auto;
+      }
+      a {
+        color: var(--accent);
+      }
+      code {
+        font-size: 0.92em;
+      }
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      h1 {
+        margin: 4px 0 12px;
+        font-size: 30px;
+        line-height: 1.2;
+      }
+      h2 {
+        margin: 32px 0 8px;
+        font-size: 15px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .serves li {
+        padding: 10px 14px;
+        margin-bottom: 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+      }
+      .serves code {
+        font-weight: 600;
+      }
+      .links li {
+        padding: 4px 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      footer {
+        margin-top: 40px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        font-size: 14px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">
+        next-federation live demo · <code>cart</code> remote
+      </p>
+      <h1>This is a remote</h1>
+      <p>
+        It has no UI of its own; hosts embed what it serves. This one serves
+        <b>remote components</b> and is built with Vite
+        (<code>examples/components-remote</code>): hosts load its client
+        components at runtime and render them in their own React tree. Its files
+        are static; each build is signed, so the Next.js hosts can also render
+        it on their server.
+      </p>
+
+      <h2>Component it exposes</h2>
+      <ul class="serves">
+        <li>
+          <code>./CartButton</code>: an <b>Add to cart</b> button. It runs on
+          the host's React and updates the host's own cart count, through the
+          shared <code>example-cart-context</code> module.
+        </li>
+      </ul>
+
+      <h2>See it in a host</h2>
+      <ul class="links">
+        <li>
+          <a href="https://next-federation-example-app-router.vercel.app"
+            >App Router host</a
+          >
+          <span class="muted">(Next.js): server-rendered, then hydrated</span>
+        </li>
+        <li>
+          <a href="https://next-federation-example-pages-router.vercel.app/shop"
+            >Pages Router host</a
+          >
+          <span class="muted">(Next.js): server-rendered, then hydrated</span>
+        </li>
+        <li>
+          <a href="https://next-federation-example-react-spa.vercel.app"
+            >React SPA host</a
+          >
+          <span class="muted">(Vite): rendered in the browser</span>
+        </li>
+      </ul>
+
+      <footer>
+        <a href="/_nf/components.json">/_nf/components.json</a> describes the
+        current build ·
+        <a href="https://next-federation-docs.vercel.app/docs/live-demo"
+          >every live app</a
+        >
+        ·
+        <a
+          href="https://github.com/tariqule/next-federation/tree/main/examples/components-remote"
+          >source on GitHub</a
+        >
+      </footer>
+    </main>
+  </body>
+</html>

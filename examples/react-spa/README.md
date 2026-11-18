@@ -1,5 +1,10 @@
 # example-react-spa
 
+**Host** (React SPA, Vite). Embeds the `ProductPanel` island from
+[`vite-remote`](../vite-remote/README.md) and a remote component from
+[`components-remote`](../components-remote/README.md), both in the browser.
+Live: <https://next-federation-example-react-spa.vercel.app>.
+
 A client-only React app (Vite) on port 3303 that uses both remotes:
 
 - `src/ProductPanel.tsx`: fetches the `ProductPanel` island envelope in the browser (CORS: the
@@ -8,6 +13,9 @@ A client-only React app (Vite) on port 3303 that uses both remotes:
 - `src/CartButton.tsx`: the `CartButton` client component, from `fetchDescriptorInBrowser`. An SPA
   has no server, so it always renders in the browser (no keys needed).
 - `src/main.tsx`: the host's `CartProvider`; the remote button updates the header's count.
+- `src/Embedded.tsx`: demo only. The dashed outline and tag around each embedded piece, and the
+  caption under the header, say which remote serves what. They wrap the island or component and
+  never go inside it; leave them out of your app.
 
 There is no server render: the island's HTML appears once its envelope arrives. Private islands
 need a server to sign tokens and are not shown here.

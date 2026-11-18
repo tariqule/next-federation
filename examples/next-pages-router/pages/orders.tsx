@@ -2,6 +2,7 @@ import type { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
 import { RemoteIsland } from '@next-federation/next/pages'
 import type { IslandProps } from '@next-federation/next/pages'
+import { Embedded } from '../lib/Embedded'
 import { getIslandProps } from '../lib/federation'
 
 type Props = { user: string | null; orders: IslandProps }
@@ -38,7 +39,12 @@ export default function Orders({ user, orders }: Props) {
           </>
         )}
       </form>
-      <RemoteIsland {...orders} fallback={<p>Sign in to see your orders.</p>} />
+      <Embedded remote="shop" name="MyOrders" isPrivate>
+        <RemoteIsland
+          {...orders}
+          fallback={<p>Sign in to see your orders.</p>}
+        />
+      </Embedded>
     </main>
   )
 }

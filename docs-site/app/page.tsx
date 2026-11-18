@@ -14,8 +14,8 @@ const jsonLd = {
   license: 'https://opensource.org/licenses/MIT',
 }
 
-// The examples on Vercel (examples/README.md, "Live demo").
-const DEMO_URL = 'https://next-federation-example-app-router.vercel.app'
+// Every app of the live demo, its role and what to try (docs/live-demo.md).
+const DEMO_URL = '/docs/live-demo'
 
 const links = [
   { href: '/docs/getting-started/app-router', label: 'App Router host' },
@@ -75,9 +75,9 @@ export default function HomePage() {
             ))}
           </ul>
           <p className="flex gap-4">
-            <a className="underline" href={DEMO_URL}>
+            <Link className="underline" href={DEMO_URL}>
               Live demo
-            </a>
+            </Link>
             <a
               className="underline"
               href="https://github.com/tariqule/next-federation"

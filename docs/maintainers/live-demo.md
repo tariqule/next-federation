@@ -1,8 +1,9 @@
 # Live demo on Vercel
 
 Maintainer note. Read it when you set up, change or rotate the keys of the live demo: the five apps
-in `examples/`, deployed to Vercel from `main` and linked from the README, the docs site home and
-[examples/README.md](../../examples/README.md#live-demo).
+in `examples/`, deployed to Vercel from `main`. The public page that lists them is
+[docs/live-demo.md](../live-demo.md) (`/docs/live-demo` on the docs site), linked from the README,
+the docs site home and [examples/README.md](../../examples/README.md#live-demo).
 
 The other projects' environment variables name each project's URL, so each project's domain must
 be fixed before the first deploy.
@@ -109,7 +110,7 @@ when Vercel's `NEXT_PUBLIC_VERCEL_ENV` / `VITE_VERCEL_ENV` is set at build time,
    the settings and variables above.
 2. Deploy **vite-remote** and **components-remote**. Check
    `https://<vite-remote>/_nf/health` (`ok`) and `https://<components-remote>/_nf/components.json`
-   (JSON with a `jws` field).
+   (JSON with a `jws` field), and that `/` on each shows its landing page (`landing/index.html`).
 3. Deploy the three hosts. The App Router build prerenders `/` and `/products/{A1,B2,C3}` from the
    remotes, so the remotes must answer first; a page prerendered without them shows the fallbacks
    until it revalidates (60 s).

@@ -1,5 +1,9 @@
 # example-components-remote
 
+**Remote** (remote components, Vite, remote name `cart`). Exposes the client component
+`./CartButton`, which the three hosts render. It has no UI of its own.
+Live: <https://next-federation-example-components-remote.vercel.app>.
+
 A components remote built with `nextFederationComponents` from
 `@next-federation/vite`. It exposes one component, `./CartButton`, that hosts load at runtime and
 render inside their own React tree: it runs on the host's React and reads the host's cart through
@@ -42,7 +46,8 @@ Without a trusted key or pin, hosts render the component in the browser only (an
 Static files only. `vercel.json` runs `scripts/vercel-build.ts` (production deployments only):
 `vite build` with `NF_VERCEL=1` (`base` from `NF_PUBLIC_ORIGIN`, this remote's https origin; else
 `VERCEL_PROJECT_PRODUCTION_URL`), then the layout `nf-serve` serves: `b/<buildId>/*` and
-`_nf/components.json`. Set `NF_COMPONENTS_SIGNING_KEY` on this project only; the script fails
+`_nf/components.json`, plus `index.html` at `/` (`landing/index.html`: a page that says this is a
+remote and what it exposes; locally `nf-serve` answers `/` with `404`). Set `NF_COMPONENTS_SIGNING_KEY` on this project only; the script fails
 without it, so a deployment is always signed. Hosts get the public key as `NF_COMPONENTS_PUBLIC_KEY`.
 
 Guide: [Remote components](../../docs/guides/remote-components.md) (integrity, rotation, limits).
