@@ -16,11 +16,11 @@ what a remote provides and how the host uses it:
 | | Islands | Remote components |
 | --- | --- | --- |
 | The remote ships | Server-rendered HTML and its own React tree | A client component module |
-| Where the remote's code runs | On the remote's server, then in the browser | In the host's browser, and on the host's server for signed or pinned builds |
+| Where the remote's code runs | On the remote's server, then in the browser | In the host's browser, and on the host's server for signed or pinned builds (or `ssr.integrity: 'unsafe-dev'` in development or test) |
 | React it runs on | The remote's own | The host's |
 | Props | Plain JSON | Anything, including functions and children |
 | Host context | Does not cross over | Shared |
-| Remote code on the host server | Never | Only for signed or pinned builds (see [Server rendering and the trust model](#server-rendering-and-the-trust-model)) |
+| Remote code on the host server | Never | Only for signed or pinned builds, or `ssr.integrity: 'unsafe-dev'` in development or test (see [Server rendering and the trust model](#server-rendering-and-the-trust-model)) |
 
 Both work with remotes on any origin, and neither uses Next.js internals. Framework-specific code is
 confined to small adapters that call public Next.js APIs, so a Next.js upgrade does not need a change

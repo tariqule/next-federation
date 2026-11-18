@@ -7,18 +7,19 @@ A remote component is a remote's client component, loaded at runtime through the
 Federation 2.0 runtime and rendered inside the host's own React tree. The component runs on the
 host's React, reads the host's React context, and can take any props, including functions and
 children. Next.js hosts (App Router and Pages Router) **server-render** it when the remote's build
-is signed or pinned (see [Integrity](#integrity-server-rendering)), and the browser hydrates it. Any
-other build, and every SPA host, renders it in the browser only.
+is signed or pinned (or `ssr.integrity: 'unsafe-dev'` in development or test) (see [Integrity](#integrity-server-rendering)), and the browser hydrates it.
+Any other build, and every SPA host, renders it in the browser only.
 
 ## Islands or remote components?
 
 Both come from a remote: a separate app that another team builds and deploys. The difference is
-where the remote's code runs. An island runs on the remote's server, and the host embeds the result.
-A remote component is code the remote ships that runs inside the host app.
+where the remote's code runs. An island renders on the remote's server; the host embeds the HTML, and
+the island then hydrates in the browser as its own React root inside the host page. A remote
+component is code the remote ships that runs inside the host's own React tree.
 
 | | Islands | Remote components |
 | --- | --- | --- |
-| Where the remote's code runs | On the remote's own server | Inside the host app (browser and host server) |
+| Where the remote's code runs | On the remote's server, then in the browser (its own React root in the host page) | Inside the host's React tree: in the browser, and on the host's server for signed or pinned builds |
 | What the remote ships | Server-rendered HTML + its own React tree | A client component module |
 | React | The remote's own (shared between islands when versions match) | Always the host's |
 | Host React context | Does not cross into the island | Readable (shared context modules) |

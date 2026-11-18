@@ -33,10 +33,11 @@ router, share it as a remote component instead. It is still a separate build, wi
 remote. The host renders it with `createRemoteComponent` and it runs on the host's React.
 
 - Only `next/link`, `next/navigation` and `next/router` can be shared, and the host provides
-  them (which ones depends on its router). Other `next/*` modules (`next/image`, `next/head`, …) cannot be shared
-  ([NF-002](../errors/invalid-config.md)): pass what the component needs as props.
-- Next.js hosts server-render it only when the remote's build is signed or pinned. Any other
-  build renders in the browser only.
+  them (which ones depends on its router). Other `next/*` modules (`next/image`, `next/head`, …) cannot be shared. The Vite plugin refuses them
+  ([NF-002](../errors/invalid-config.md)), and with Rspack and `nf-describe` the host reports them at runtime
+  ([NF-036](../errors/component-shared-unavailable.md)). Pass what the component needs as props.
+- Next.js hosts server-render it only when the remote's build is signed or pinned (or `ssr.integrity: 'unsafe-dev'` in development or test). Any
+  other build renders in the browser only.
 
 Keep the island path for anything the remote should render on its own server. See
 [Remote components](remote-components.md) and its

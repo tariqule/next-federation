@@ -15,7 +15,7 @@ There are two ways to embed a remote's UI:
   embeds the result as a server-rendered, hydrated island.
 - **Remote components**: the remote ships a client component as a Module Federation 2.0 module. Your
   host loads it through the Module Federation runtime and renders it inside its own React tree, where
-  it shares the host's context and router. In a Next.js host, a signed or pinned build is
+  it shares the host's context and router. In a Next.js host, a signed or pinned build (or `ssr.integrity: 'unsafe-dev'` in development or test) is
   server-rendered; any other build renders in the browser only.
 
 ## Who it is for

@@ -11,7 +11,8 @@ nf-serve --dir ./builds --port 4100 [--host 127.0.0.1] [--current <buildId>] \
 
 `<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` (`{ "buildId", "builtAt" }`) is one build.
 Each live island build runs in its own process (with `NODE_ENV=production`) behind a router. A
-components remote build is served as static files, with no process:
+components remote build is the exception: it is served as static files, with no process. The router
+answers these routes:
 
 | Route                | Served by                                                           |
 | -------------------- | ------------------------------------------------------------------- |

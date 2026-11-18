@@ -15,12 +15,13 @@ uses webpack unless you pass `--turbopack`; both work.
 This guide sets up islands. A remote can also ship remote components, and a host can use both.
 
 Both come from a remote: a separate app that another team builds and deploys. The difference is
-where the remote's code runs. An island runs on the remote's server, and the host embeds the result.
-A remote component is code the remote ships that runs inside the host app.
+where the remote's code runs. An island renders on the remote's server; the host embeds the HTML, and
+the island then hydrates in the browser as its own React root inside the host page. A remote
+component is code the remote ships that runs inside the host's own React tree.
 
 | | Remote components | Islands |
 | --- | --- | --- |
-| Where the remote's code runs | Inside the host app (browser and host server) | On the remote's own server |
+| Where the remote's code runs | Inside the host's React tree: in the browser, and on the host's server for signed or pinned builds | On the remote's server, then in the browser (its own React root in the host page) |
 | What the remote ships | A client component module | Server-rendered HTML from its own server |
 | React | The host's | The remote's own |
 | Host context and router | Readable; `next/link` and the router come from the host | Do not cross in; pass data as props |
