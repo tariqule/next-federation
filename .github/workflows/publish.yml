@@ -2,7 +2,8 @@ name: Publish to npm
 
 # Manual only: Actions -> "Publish to npm" -> Run workflow (on main).
 # Publishes every @next-federation/* package whose version is not on npm yet,
-# with provenance, then pushes the release tags. Merge the "Version Packages"
+# with provenance, pushes the release tags and creates the GitHub Release
+# v<version> (all packages share one version). Merge the "Version Packages"
 # pull request first. The job runs in the `npm-publish` environment: add
 # required reviewers there to get an approval step before anything publishes.
 # First publish: an NPM_TOKEN secret (environment or repository). Afterwards:
@@ -55,12 +56,28 @@ jobs:
           for p in packages/*/package.json; do
             node -e "const p=require('./$p'); console.log(p.name + '@' + p.version)"
           done
+      # The packages must all have one version, and a changelog must have its
+      # section, or this fails before anything is published.
+      - name: Release version and notes
+        id: release
+        run: |
+          version=$(node scripts/release-notes.mjs --version)
+          node scripts/release-notes.mjs "$version" > "$RUNNER_TEMP/release-notes.md"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Dry run (build, pack, publish nothing)
         if: inputs.dry_run
         run: |
           pnpm build
           pnpm check:pack
           pnpm -r --filter "./packages/*" publish --dry-run --no-git-checks
+      - name: Dry run, GitHub Release that would be created
+        if: inputs.dry_run
+        run: |
+          echo "Would create GitHub Release v$RELEASE_VERSION at $GITHUB_SHA (latest) with these notes:"
+          echo "----------------------------------------"
+          cat "$RUNNER_TEMP/release-notes.md"
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
       # `pnpm release`; when npm holds a version as staged (E409 "Cannot
       # publish over previously staged version"), waits up to 15 min until npm
       # shows it and, if its provenance names this commit, publishes the rest.
@@ -74,3 +91,20 @@ jobs:
       - name: Push release tags
         if: ${{ !inputs.dry_run }}
         run: git push origin --tags
+      # One release for the whole version, at the published commit. The tag
+      # v<version> is created by `gh release create` (the "release tags"
+      # ruleset allows creating v* tags). A re-run leaves an existing release
+      # alone, so notes edited by hand are kept.
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          tag="v$RELEASE_VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "::notice::Release $tag already exists; leaving it unchanged."
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" --latest
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}

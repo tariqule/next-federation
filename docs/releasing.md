@@ -6,8 +6,8 @@ Versioning is automatic. Publishing is manual.
 - `.github/workflows/release.yml` ("Version Packages") runs on every push to `main` and opens or
   updates a "Version Packages" pull request from the pending changesets. It never publishes.
 - `.github/workflows/publish.yml` ("Publish to npm") runs only when a maintainer starts it. It
-  publishes every package whose version is not on npm yet, with provenance, and pushes the release
-  tags.
+  publishes every package whose version is not on npm yet, with provenance, pushes the release tags
+  and creates the GitHub Release.
 
 ## Flow
 
@@ -19,11 +19,48 @@ Versioning is automatic. Publishing is manual.
      `pnpm publish --dry-run` for each package, so you can read what would be published.
    - Run it again with **Dry run** unticked to publish. It refuses to run while changesets are
      pending (merge the Version Packages pull request first), runs `pnpm release` (`pnpm build`,
-     then `changeset publish`, which skips versions already on npm) and pushes the tags.
+     then `changeset publish`, which skips versions already on npm), pushes the tags and creates the
+     GitHub Release (below).
 
 The job runs in the `npm-publish` GitHub environment. Add yourself as a **required reviewer** of
 that environment (Settings → Environments → `npm-publish`) to get an approval step between
 starting the workflow and anything being published.
+
+## GitHub Release
+
+Every release gets one GitHub Release, `v<version>`, so the repository page shows the current version
+and what changed. The packages share one version, so there is one release for all of them, not one
+per package.
+
+- `node scripts/release-notes.mjs [version]` builds the notes: the `## <version>` section of every
+  `packages/*/CHANGELOG.md`, merged by bump type, identical entries once, without the "Updated
+  dependencies" lines, with the package list, an install line and links to npm and the docs. It fails
+  when no changelog has that version. `node scripts/release-notes.mjs --version` prints the version
+  the packages share and fails if they differ.
+- The publish workflow runs it before building, so a version mismatch or a missing changelog section
+  stops the run before anything is published. A dry run prints the notes and the release it would
+  create. A real run, after the npm publish and the tag push, runs `gh release create v<version>
+  --target <commit> --latest` with those notes (`GITHUB_TOKEN`, `contents: write`). The release's tag
+  `v<version>` is created at the commit the workflow ran on. If the release already exists (a re-run),
+  it is left unchanged, so notes edited by hand are kept.
+- The "release tags" ruleset covers `v*` and `@next-federation/*`: it blocks deleting, moving and
+  rewriting those tags, and allows creating them. Fix a wrong release body by editing the release
+  (`gh release edit`), not by moving the tag.
+
+### Backfill a release
+
+To create a release by hand, for example `0.1.0` (published before this step existed; its
+`@next-federation/*@0.1.0` tags all point at commit `33a902b03d6763bc6166caff26420c05337e5c55`), from a
+checkout of `main` with the gh CLI signed in as a maintainer:
+
+```sh
+node scripts/release-notes.mjs 0.1.0 > notes.md
+gh release create v0.1.0 --target 33a902b03d6763bc6166caff26420c05337e5c55 \
+  --title v0.1.0 --notes-file notes.md --latest=false
+```
+
+Read `notes.md` first. `--latest=false` keeps the newest version marked as latest; leave it off when
+backfilling the newest release. Look up a commit with `git rev-list -n1 '@next-federation/next@<version>'`.
 
 ## If npm stages a version
 

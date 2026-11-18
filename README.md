@@ -1,5 +1,9 @@
 # next-federation
 
+[![npm](https://img.shields.io/npm/v/@next-federation/next?label=npm)](https://www.npmjs.com/package/@next-federation/next)
+[![GitHub release](https://img.shields.io/github/v/release/tariqule/next-federation)](https://github.com/tariqule/next-federation/releases)
+[![CI](https://github.com/tariqule/next-federation/actions/workflows/ci.yml/badge.svg)](https://github.com/tariqule/next-federation/actions/workflows/ci.yml)
+
 **Documentation: <https://next-federation-docs.vercel.app>**
 
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
