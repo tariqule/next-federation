@@ -1,5 +1,12 @@
 # @next-federation/core
 
+## 0.1.1
+
+### Patch Changes
+
+- @next-federation/protocol@0.1.1
+  - @next-federation/sdk@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/vite",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vite plugins that build next-federation island remotes and remote components remotes.",
   "license": "MIT",
   "author": "tariqule",
