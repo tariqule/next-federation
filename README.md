@@ -1,5 +1,7 @@
 # next-federation
 
+**Documentation: <https://next-federation-docs.vercel.app>**
+
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
 renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App
 Router and Pages Router (Turbopack or webpack) and client-side React hosts, and remotes built with
@@ -9,8 +11,9 @@ There are two ways to embed a remote's UI:
 
 - **Islands**: the remote renders real React Server Components on its own server, and your host
   embeds the result as a server-rendered, hydrated island.
-- **Remote components**: the remote ships a client component that runs inside your host's React tree
-  and shares its context and router. Verified builds are server-rendered.
+- **Remote components**: the remote ships a client component as a Module Federation 2.0 module. Your
+  host loads it through the Module Federation runtime and renders it inside its own React tree, where
+  it shares the host's context and router. Verified builds are server-rendered.
 
 ## Who it is for
 
