@@ -6,8 +6,9 @@ Runnable example: [examples/components-remote](../../examples/components-remote)
 A remote component is a remote's client component, loaded at runtime through the Module
 Federation 2.0 runtime and rendered inside the host's own React tree. The component runs on the
 host's React, reads the host's React context, and can take any props, including functions and
-children. Next.js hosts (App Router and Pages Router) **server-render** it and the browser hydrates
-it. SPA hosts render it in the browser.
+children. Next.js hosts (App Router and Pages Router) **server-render** it when the remote's build
+is signed or pinned (see [Integrity](#integrity-server-rendering)), and the browser hydrates it. Any
+other build, and every SPA host, renders it in the browser only.
 
 ## Islands or remote components?
 
@@ -362,7 +363,7 @@ export const federation = defineFederation({
         ssr: { publicKeys: [JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)] },
         // descriptor: 'https://shop.example.com/_nf/components.json' (default)
         // revalidate: 60      seconds the descriptor is cached (default islands.revalidate)
-        // maxBuilds: 5        distinct builds a process keeps loaded
+        // maxBuilds: 5        distinct builds kept loaded per router layer (see Mixed-router hosts)
       },
     },
   },
@@ -559,7 +560,7 @@ renders every other build in the browser only (secure by default, `NF-028` logge
 1. **Signed descriptor** (recommended): the remote build signs its descriptor with an ES256 key.
 2. **Pinned builds**: the host lists allowed `buildId → digest` pairs, for teams that deploy host
    and remote together.
-3. **`integrity: 'unsafe-dev'`**: trusts the descriptor as served. Allowed only when `NODE_ENV` is
+3. **`ssr: { integrity: 'unsafe-dev' }`**: trusts the descriptor as served. Allowed only when `NODE_ENV` is
    `development` or `test` (`NF-002` at `defineFederation` otherwise).
 
 Optional checks: `components.name` (the expected container name; a descriptor naming another is

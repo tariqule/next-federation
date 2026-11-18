@@ -92,7 +92,7 @@ only `@module-federation/runtime` (`NF-030`), it uses `node:http` with a 3 s tim
 Node ≥ 20.16 (`process.getBuiltinModule`; otherwise browser-only, `NF-028`). Loaded builds are cached
 per remote up to the descriptor's `maxBuilds` (oldest evicted); failures are cached too (the server
 retries after 1 s, the browser retries 3 times with backoff while keeping the server HTML), and
-one load attempt times out after 10 s. A host module that the process-wide share cache holds in
+one load attempt times out after 10 s. A host module that this runtime's share cache holds in
 another instance (two Reacts, or a dev server reload) makes the server render browser-only.
 Shared modules: `version` must be the module's real semver version. Before loading an exposed
 module, the host checks the descriptor's `shared` list for the modules that expose imports: one the

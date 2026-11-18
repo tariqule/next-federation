@@ -10,16 +10,17 @@ For the wire format see the [island protocol](protocol/v1.md); for task-oriented
 A **host** is the app your users visit. A **remote** is a separate app, deployed on its own, that
 provides UI to the host at runtime. Neither needs a rebuild when the other deploys.
 
-`next-federation` offers two ways to put a remote's UI in a host page:
+`next-federation` offers two ways to put a remote's UI in a host page. Both columns below describe
+what a remote provides and how the host uses it:
 
 | | Islands | Remote components |
 | --- | --- | --- |
 | The remote ships | Server-rendered HTML and its own React tree | A client component module |
-| Runs on | The remote's server, then the browser | The host's React, in the host's tree |
-| React | The remote's own | The host's |
+| Where the remote's code runs | On the remote's server, then in the browser | In the host's browser, and on the host's server for signed or pinned builds |
+| React it runs on | The remote's own | The host's |
 | Props | Plain JSON | Anything, including functions and children |
 | Host context | Does not cross over | Shared |
-| Remote code on the host server | Never | Only for verified builds |
+| Remote code on the host server | Never | Only for signed or pinned builds (see [Server rendering and the trust model](#server-rendering-and-the-trust-model)) |
 
 Both work with remotes on any origin, and neither uses Next.js internals. Framework-specific code is
 confined to small adapters that call public Next.js APIs, so a Next.js upgrade does not need a change
@@ -144,7 +145,9 @@ remote's server build only when both of these hold:
 The host evaluates the code with `new Function`, never writes it to disk and never `import()`s it,
 and it refuses its own Node script loader. A build whose manifest lists further remotes, or that has
 no manifest the loader can check, renders in the browser only. Memory is bounded: each router layer
-keeps at most `maxBuilds` builds of a remote (default 5) and evicts the oldest. Details and
+keeps at most `maxBuilds` builds of a remote (default 5) and evicts the oldest. A host with both
+routers has two layers, because the App Router and the Pages Router run separate copies of React in
+one server process. Details and
 options are in [Remote components](guides/remote-components.md).
 
 ## What the host trusts

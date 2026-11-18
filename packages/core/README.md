@@ -60,7 +60,7 @@ remotes: {
     components: {
       ssr: { publicKeys: [SHOP_PUBLIC_JWK] }, // or { pinned: { b1: 'sha384-…' } }, or false
       revalidate: 60, // descriptor cache, seconds (default islands.revalidate)
-      maxBuilds: 5, // distinct builds a process keeps loaded
+      maxBuilds: 5, // distinct builds kept loaded per router layer
       // name: 'shop',      expected container name
       // ssr.maxAge: 86400  seconds a signed build is accepted after its build time (iat)
     },
@@ -90,7 +90,7 @@ formats both for a log line.
 | Export                                                                                      | Entry                              | Purpose                                                                     |
 | ------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
 | `defineFederation(config)`                                                                  | `@next-federation/core`            | Validate the host config and return a `Federation`.                         |
-| `fetchIsland(federation, request)`                                                          | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
+| `fetchIsland(target, request)`                                                              | `@next-federation/core`            | Fetch and validate an island envelope, with timeout and retry.              |
 | `islandTags`, `eventFor`, `MAX_ENVELOPE_BYTES`                                              | `@next-federation/core`            | Cache tags, event helpers and the default island body limit.                |
 | `islandFailureDetail(result)`                                                               | `@next-federation/core`            | A failed island's URL, status and hint, for a log line.                     |
 | `generateSigningKey`, `publicJwks`, `validateIdentity`                                      | `@next-federation/core/identity`   | Signing keys, JWKS and boot-time validation (server only).                  |

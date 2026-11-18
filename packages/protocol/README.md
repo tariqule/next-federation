@@ -36,7 +36,7 @@ const envelope = parseEnvelope(await (await fetch(req.url, req)).json())
 | `PROTOCOL_VERSION`, `ISLAND_PATH`, ...                                                  | Protocol constants.                                                                                          |
 | `IslandBootstrapModule` and related types                                               | The browser bootstrap contract.                                                                              |
 | `parseComponentDescriptorFile`, `componentDescriptorDigest`, `sha384Integrity`          | Remote components build descriptor (`/_nf/components.json`): validation, pinned digest, SRI hashes.          |
-| `RemoteComponentDescriptor` and related types                                           | What a host passes to `RemoteComponent`.                                                                     |
+| `RemoteComponentDescriptor` and related types                                           | What a host passes to a component made with `createRemoteComponent`.                                         |
 | `ComponentSharedModule`                                                                 | One entry of a descriptor's signed `shared` list: `requiredVersion`, `fallback`, the exposes that import it. |
 | `satisfies`, `isSemverVersion`, `isSemverRange`                                         | The npm semver subset shared-module negotiation uses (no dependencies).                                      |
 | `ISLAND_SHARE_SCOPE`, `ISLAND_SHARE_NAMESPACE`, `islandShareScope`, `islandSharedEntry` | The page-wide share scope islands use for React.                                                             |

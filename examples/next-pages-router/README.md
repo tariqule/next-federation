@@ -11,7 +11,9 @@ A Next.js 16 Pages Router host on port 3302, with `basePath: '/shop'` and the lo
 - `/shop/orders`: the private `MyOrders` island. The token is minted and used in
   `getServerSideProps`; the page props carry the rendered envelope only.
 - `lib/federation.ts`: imported from `getServerSideProps` and API routes only, so Next keeps it out
-  of the browser bundle. The identity issuer includes the basePath.
+  of the browser bundle. The identity issuer includes the basePath. The guides keep
+  `defineFederation` in a separate `lib/federation.config.ts` so `nf-types` can load it; this
+  example does not run `nf-types`, so it keeps everything in one file.
 - `pages/api/session.ts`: demo-only sign-in (any name, a plain cookie, no password).
 
 ## Run it

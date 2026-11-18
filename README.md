@@ -5,7 +5,9 @@
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
 renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App
 Router and Pages Router (Turbopack or webpack) and client-side React hosts, and remotes built with
-Vite. It uses public Next.js APIs only, so a Next.js upgrade does not break it.
+Vite. It calls only public Next.js APIs, never Next.js internals, which lowers the risk that a
+Next.js upgrade breaks it. See [Status and compatibility](#status-and-compatibility) for the
+versions that are tested.
 
 There are two ways to embed a remote's UI:
 
@@ -13,7 +15,8 @@ There are two ways to embed a remote's UI:
   embeds the result as a server-rendered, hydrated island.
 - **Remote components**: the remote ships a client component as a Module Federation 2.0 module. Your
   host loads it through the Module Federation runtime and renders it inside its own React tree, where
-  it shares the host's context and router. Verified builds are server-rendered.
+  it shares the host's context and router. In a Next.js host, a signed or pinned build is
+  server-rendered; any other build renders in the browser only.
 
 ## Who it is for
 
@@ -157,12 +160,12 @@ The [docs index](docs/README.md) lists every guide. A few places to start:
 `next-federation` is at 0.x, so the API can still change between minor versions. Pin the version and
 read the changelogs. All packages are versioned together.
 
-|         | Supported                                                                                                              |
-| ------- | ---------------------------------------------------------------------------------------------------------------------- |
-| React   | 19 (required)                                                                                                          |
-| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only                                                      |
-| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer; older Node renders them in the browser only |
-| Remotes | Vite 8. Remote components can also come from Rspack or webpack with Module Federation 2.0                              |
+|         | Supported                                                                                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| React   | 19 (required)                                                                                                                                                                  |
+| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only                                                                                                              |
+| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer (older Node renders them in the browser only). A Vite remote needs 20.19 or newer, or 22.12 or newer |
+| Remotes | Vite 8. Remote components can also come from Rspack (tested) or webpack (documented, untested) with Module Federation 2.0                                                      |
 
 The tests run on React and React DOM 19.3.1 (`react-server-dom-webpack` 19.3.1 in island remotes),
 plus one island remote on 19.3.0 to cover mixed versions. Other React 19 versions are not covered.

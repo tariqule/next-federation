@@ -3,7 +3,8 @@
 `@module-federation/nextjs-mf` is in maintenance mode (module-federation/core#3153). It works only
 with the Pages Router, only with webpack (`NEXT_PRIVATE_LOCAL_WEBPACK`), and it makes Next apps
 expose and consume each other's code. next-federation keeps runtime composition but changes who
-builds what: **remotes are Vite builds**, and **Next apps are hosts only**. This guide maps the
+builds what: **remotes are Vite builds** (remote components can also come from Rspack), and **Next
+apps are hosts only**. This guide maps the
 concepts, then walks a Pages Router app from nextjs-mf to next-federation.
 
 **Next 15 is supported; Next 14 is not.** next-federation needs React 19, so a Next 15 app can stay on
@@ -156,8 +157,10 @@ A remote that is down renders the fallback with status 200, as before. Replace `
 
 ### 6. Check sharing and styles
 
-- Every module the remote lists in `shared` must be passed by the host in `createRemoteComponent`;
-  there is no version negotiation (the host's copy is used whatever its version).
+- Every module the remote lists in `shared` must be passed by the host in `createRemoteComponent`
+  (or `registerSharedModules`), unless the remote bundles a `fallback` copy. The host checks the
+  remote's `requiredVersion` range before it loads the component and renders the fallback when the
+  host's version is outside it (`NF-036`).
 - Add the remote's origin to `script-src`, `style-src` and `connect-src` if you have a CSP
   ([CSP](csp.md)).
 
@@ -178,8 +181,11 @@ The same remote works in App Router pages: `getComponentDescriptor` from
   `fallback` only; the host checks the range before loading (`NF-036`), and React is always the
   host's.
 - **Static `import 'shop/Cart'`** in host code (a host import loader is planned after v1).
-- **Rspack or webpack remotes**: untested. Remotes build with `@module-federation/vite`.
-- **Type generation from the remote** (the MF `dts` plugin is off). Type the props in
+- **webpack remotes**: documented but untested. Rspack remotes are tested; both need `nf-describe`
+  ([Remote components](remote-components.md#remotes-built-with-rspack-or-webpack)). Vite remotes use
+  `nextFederationComponents`.
+- **Module Federation's own `dts` type generation** (off). `nf-types` downloads the remote's prop
+  types instead ([Types](remote-components.md#types)), or type the props by hand in
   `createRemoteComponent<Props>()`.
 - **Server rendering of an unverified build**: without a signed descriptor, a pinned digest or
   `unsafe-dev` in development, the component renders in the browser only.

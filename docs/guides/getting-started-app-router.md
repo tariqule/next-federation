@@ -88,8 +88,9 @@ throws [`NF-002`](../errors/invalid-config.md) on Next 15 when either of them, o
 
 ## 3. Define the federation
 
-Use two files. The first is the federation config and imports nothing from Next.js. The second
-creates the island components and may import `server-only` and `next/*`.
+Use two files. The first is the federation config and imports nothing from Next.js, so that
+`nf-types` (the command that downloads the prop types of remote components) can load it with plain
+Node. The second creates the island components and may import `server-only` and `next/*`.
 
 ```ts
 // lib/federation.config.ts

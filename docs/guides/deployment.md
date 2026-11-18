@@ -10,8 +10,10 @@ fallback; it does not fail the page.
 
 ## The remote
 
-A remote is a server. `vite build` writes `dist/<buildId>/{client,ssr,rsc}` and
-`dist/<buildId>/nf-build.json`. Assets are pinned to the build: `<base>b/<buildId>/assets/*`.
+An island remote is a server. `vite build` writes `dist/<buildId>/{client,ssr,rsc}` and
+`dist/<buildId>/nf-build.json`. Assets are pinned to the build: `<base>b/<buildId>/assets/*`. A
+components remote has no server of its own: its build is static files, and `nf-serve` serves them
+without a process per build ([Remote components](remote-components.md#remote-build-it)).
 
 `NF_BUILD_ID` sets the build id. Without it a build uses a timestamp.
 
@@ -34,8 +36,8 @@ nf-serve --dir ./dist --port 4100 [--host 127.0.0.1] [--current <buildId>] \
   [--max-builds 3] [--min-age-hours 24]
 ```
 
-`nf-serve` runs each live build in its own process behind one router, so old pages keep working
-after a deploy.
+`nf-serve` runs each live island build in its own process behind one router, so old pages keep
+working after a deploy.
 
 | Route                 | Served by                                                      |
 | --------------------- | -------------------------------------------------------------- |
