@@ -63,7 +63,8 @@ jobs:
           pnpm -r --filter "./packages/*" publish --dry-run --no-git-checks
       # `pnpm release`; when npm holds a version as staged (E409 "Cannot
       # publish over previously staged version"), waits up to 15 min until npm
-      # shows it, then publishes the rest. Any other failure fails the job.
+      # shows it and, if its provenance names this commit, publishes the rest.
+      # Any other failure fails the job (docs/releasing.md).
       - name: Publish
         if: ${{ !inputs.dry_run }}
         run: node scripts/publish-wait.mjs

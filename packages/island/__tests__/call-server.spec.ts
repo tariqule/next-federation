@@ -313,37 +313,51 @@ describe('timeoutMs: the remote must start answering in time (NF-038)', () => {
 
   test('one deadline covers the 401 token refresh and the retry: never twice timeoutMs', async () => {
     // First answer: 401 NF-014 after 60 ms (of 100). The retry hangs; it is
-    // aborted at the first request's deadline, not 100 ms after it started.
-    globalThis.fetch = ((url: string, init: RequestInit) => {
-      sent.push({ url, init })
-      if (sent.length === 1) {
-        return new Promise((resolve) =>
-          setTimeout(() => resolve(failure(401, 'NF-014')()), 60)
-        )
-      }
-      return new Promise((_resolve, reject) => {
-        init.signal?.addEventListener('abort', () =>
-          reject(init.signal!.reason)
-        )
+    // aborted at the first request's deadline (100 ms), not 100 ms after it
+    // started (160 ms). Fake timers: the check is exact, not a wall-clock race.
+    rs.useFakeTimers()
+    try {
+      globalThis.fetch = ((url: string, init: RequestInit) => {
+        sent.push({ url, init })
+        if (sent.length === 1) {
+          return new Promise((resolve) =>
+            setTimeout(() => resolve(failure(401, 'NF-014')()), 60)
+          )
+        }
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(init.signal!.reason)
+          )
+        })
+      }) as typeof fetch
+      const { callServer, reports } = make({
+        timeoutMs: 100,
+        getToken: async () => (sent.length === 0 ? 'old' : 'new'),
+        invalidateToken: () => {},
       })
-    }) as typeof fetch
-    const { callServer, reports } = make({
-      timeoutMs: 100,
-      getToken: async () => (sent.length === 0 ? 'old' : 'new'),
-      invalidateToken: () => {},
-    })
-    const started = performance.now()
-    const error = (await callServer('src/a.ts#slow', []).catch(
-      (e: unknown) => e
-    )) as Error & { code?: string }
-    const elapsed = performance.now() - started
-    expect(sent).toHaveLength(2)
-    expect(error.code).toBe('NF-038')
-    expect(error.message).toContain('did not answer within 100 ms')
-    expect(elapsed).toBeLessThan(150)
-    expect(reports).toEqual([
-      expect.objectContaining({ ok: false, code: 'NF-038', retried: true }),
-    ])
+      let settled = false
+      const outcome = callServer('src/a.ts#slow', [])
+        .catch((e: unknown) => e as Error & { code?: string })
+        .finally(() => {
+          settled = true
+        })
+      await rs.advanceTimersByTimeAsync(99)
+      expect(sent).toHaveLength(2)
+      expect(settled).toBe(false)
+      await rs.advanceTimersByTimeAsync(1)
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+      expect(settled).toBe(true)
+      const error = (await outcome) as Error & { code?: string }
+      expect(error.code).toBe('NF-038')
+      expect(error.message).toContain('did not answer within 100 ms')
+      expect(reports).toEqual([
+        expect.objectContaining({ ok: false, code: 'NF-038', retried: true }),
+      ])
+    } finally {
+      // Without one deadline the retry's own timer is still pending.
+      await rs.advanceTimersByTimeAsync(1000)
+      rs.useRealTimers()
+    }
   })
 
   test('a retry whose deadline already passed is not sent', async () => {
