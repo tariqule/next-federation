@@ -8,6 +8,7 @@
 
 /** @typedef {{ name: string, version: string }} PackageVersion */
 /** @typedef {{ code: number, stdout: string }} ViewResult */
+/** @typedef {{ status: number, json: unknown }} FetchResult */
 
 const MARKER = 'Some packages failed to publish:'
 const STAGED = /previously staged version/i
@@ -88,7 +89,7 @@ export function isVisible(result, version) {
  * Polls npm until each version is visible or `deadline` passes.
  * @param {PackageVersion[]} versions
  * @param {{
- *   view: (spec: string) => Promise<ViewResult>,
+ *   view: (spec: string, field: string) => Promise<ViewResult>,
  *   now: () => number,
  *   sleep: (ms: number) => Promise<void>,
  *   deadline: number,
@@ -101,7 +102,7 @@ export async function waitUntilVisible(versions, io) {
   for (;;) {
     const still = []
     for (const v of pending) {
-      const result = await io.view(`${v.name}@${v.version}`)
+      const result = await io.view(`${v.name}@${v.version}`, 'version')
       if (!isVisible(result, v.version)) still.push(v)
     }
     pending = still
@@ -110,6 +111,120 @@ export async function waitUntilVisible(versions, io) {
     if (left <= 0) return pending
     await io.sleep(Math.min(io.intervalMs, left))
   }
+}
+
+const COMMIT = /^[0-9a-f]{40}$/
+const SLSA_PROVENANCE = 'https://slsa.dev/provenance/v1'
+
+/**
+ * The commit `npm view <spec> gitHead --json` names. npm records it only when
+ * it publishes a git checkout's folder: pnpm (and so `changeset publish`)
+ * publishes a packed tarball, which records none. It is whatever the
+ * publisher's package.json says, so it can show that a version came from
+ * another commit, never prove that it came from this one.
+ * @param {ViewResult} result
+ * @returns {{ kind: 'commit', commit: string } | { kind: 'none' } | { kind: 'unreadable' }}
+ */
+export function readGitHead(result) {
+  if (result.code !== 0) return { kind: 'unreadable' }
+  const text = result.stdout.trim()
+  if (text === '') return { kind: 'none' }
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === 'string' && COMMIT.test(parsed))
+      return { kind: 'commit', commit: parsed }
+  } catch {
+    // not JSON
+  }
+  return { kind: 'unreadable' }
+}
+
+/**
+ * npm's attestations for a version (the registry checked them when it
+ * accepted the version).
+ * @param {string} name
+ * @param {string} version
+ */
+export function attestationsUrl(name, version) {
+  return `https://registry.npmjs.org/-/npm/v1/attestations/${name.replace('/', '%2f')}@${version}`
+}
+
+/** @param {unknown} value */
+const isRecord = (value) => typeof value === 'object' && value !== null
+
+/**
+ * The repository and commit a version's SLSA provenance names (GitHub
+ * Actions: the workflow's repository and the commit it ran at), from npm's
+ * attestations response.
+ * @param {FetchResult} response
+ * @returns {{ kind: 'build', commit: string, repository: string } | { kind: 'none' } | { kind: 'unreadable' }}
+ */
+export function readProvenance(response) {
+  if (response.status === 404) return { kind: 'none' }
+  const { json } = response
+  if (response.status !== 200 || !isRecord(json)) return { kind: 'unreadable' }
+  if (!Array.isArray(json.attestations)) return { kind: 'unreadable' }
+  const slsa = json.attestations.find(
+    (a) => isRecord(a) && a.predicateType === SLSA_PROVENANCE
+  )
+  if (!slsa) return { kind: 'none' }
+  try {
+    const payload = slsa.bundle.dsseEnvelope.payload
+    if (typeof payload !== 'string') return { kind: 'unreadable' }
+    const statement = JSON.parse(Buffer.from(payload, 'base64').toString())
+    if (statement.predicateType !== SLSA_PROVENANCE)
+      return { kind: 'unreadable' }
+    const build = statement.predicate.buildDefinition
+    const repository = build.externalParameters.workflow.repository
+    const commit = build.resolvedDependencies[0].digest.gitCommit
+    if (typeof repository !== 'string' || typeof commit !== 'string')
+      return { kind: 'unreadable' }
+    if (!COMMIT.test(commit)) return { kind: 'unreadable' }
+    return { kind: 'build', commit, repository }
+  } catch {
+    return { kind: 'unreadable' }
+  }
+}
+
+/**
+ * Whether npm's `name@version` was built from `head` of `repository`: its
+ * provenance must name both (this workflow always publishes with
+ * provenance), and a gitHead, if npm has one, must name `head` too. Returns
+ * the error to log, or null. Only validated values appear in it: the name
+ * and version (PACKAGE_LINE), commit SHAs and our own repository URL.
+ * @param {PackageVersion} v
+ * @param {string} head
+ * @param {{
+ *   view: (spec: string, field: string) => Promise<ViewResult>,
+ *   fetchJson: (url: string) => Promise<FetchResult>,
+ *   repository: string,
+ * }} io
+ * @returns {Promise<string | null>}
+ */
+async function checkOrigin(v, head, io) {
+  const spec = `${v.name}@${v.version}`
+  const other = (/** @type {string} */ what) =>
+    `::error::npm shows ${spec}, but ${what}, and this run is at ${head}: the version npm approved is not this commit's code, so this run publishes and tags nothing more. Inspect it (\`npm pack ${spec}\`). If it is not what you meant to release, deprecate it (\`npm deprecate ${spec} "<reason>"\`) and release a new version: npm never allows publishing a version again.`
+  const gitHead = readGitHead(await io.view(spec, 'gitHead'))
+  if (gitHead.kind === 'commit' && gitHead.commit !== head)
+    return other(`its gitHead is ${gitHead.commit}`)
+  const provenance = readProvenance(
+    await io.fetchJson(attestationsUrl(v.name, v.version))
+  )
+  if (provenance.kind === 'build') {
+    if (provenance.repository !== io.repository)
+      return other(
+        `its provenance names a repository other than ${io.repository}`
+      )
+    if (provenance.commit !== head)
+      return other(`its provenance names commit ${provenance.commit}`)
+    return null
+  }
+  const why =
+    provenance.kind === 'none'
+      ? 'it has no provenance (this workflow always publishes with provenance, so it was staged some other way)'
+      : 'npm did not return a readable provenance for it'
+  return `::error::npm shows ${spec}, but ${why}, so this run cannot tell which commit it was built from and publishes and tags nothing more. Check it by hand: compare \`npm pack ${spec}\` with a build of ${head}. If they match, tag it (\`git tag ${spec} ${head}\`, then \`git push origin ${spec}\`) and run this workflow again: it skips the versions npm shows and publishes the rest. If not, deprecate it (\`npm deprecate ${spec} "<reason>"\`) and release a new version.`
 }
 
 /** @param {PackageVersion[]} versions */
@@ -121,13 +236,19 @@ const MAX_RUNS = 10
 /**
  * `pnpm release`, tolerating npm's staged publishing: when the only failures
  * are E409 "previously staged version", waits (up to `timeoutMs` in all)
- * until npm shows those versions, then runs `changeset publish` again, which
- * skips what npm shows and publishes what the failed run never reached (it
- * stops after a failed chunk) and creates the missing git tags. Any other
- * failure fails at once.
+ * until npm shows those versions, checks that npm's provenance for each
+ * names this repository and `head` (see checkOrigin), then runs `changeset
+ * publish` again, which skips what npm shows and publishes what the failed
+ * run never reached (it stops after a failed chunk), tagging what it
+ * publishes at HEAD (never the staged versions: it tags only what it
+ * publishes itself). Any other failure, or a staged version this run cannot
+ * show was built from HEAD, fails at once.
  * @param {{
  *   run: (command: string[]) => Promise<{ code: number, output: string }>,
- *   view: (spec: string) => Promise<ViewResult>,
+ *   view: (spec: string, field: string) => Promise<ViewResult>,
+ *   fetchJson: (url: string) => Promise<FetchResult>,
+ *   head: () => Promise<string | null>,
+ *   repository: string,
  *   now: () => number,
  *   sleep: (ms: number) => Promise<void>,
  *   log: (line: string) => void,
@@ -156,11 +277,32 @@ export async function publishWithStagedWait(io) {
       )
       return 1
     }
+    const head = await io.head()
+    if (head === null || !COMMIT.test(head)) {
+      io.log(
+        '::error::`git rev-parse HEAD` gave no commit, so this run cannot check which commit npm built the staged versions from.'
+      )
+      return 1
+    }
+    const errors = []
+    for (const v of staged) {
+      const error = await checkOrigin(v, head, io)
+      if (error) errors.push(error)
+    }
+    if (errors.length > 0) {
+      for (const error of errors) io.log(error)
+      return 1
+    }
     if (runs >= MAX_RUNS) {
       io.log(`::error::Still failing after ${runs} publish runs.`)
       return 1
     }
-    io.log(`npm shows ${list(staged)}: publishing the rest.`)
+    io.log(
+      `npm shows ${list(staged)}, built from ${head}: publishing the rest.`
+    )
+    io.log(
+      `::warning::changeset publish tags only what it publishes: tag ${list(staged)} at ${head} by hand (docs/releasing.md).`
+    )
     result = await io.run(['pnpm', 'exec', 'changeset', 'publish'])
   }
 }

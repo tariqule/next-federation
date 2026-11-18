@@ -9,7 +9,9 @@ A host asked a remote for an island it does not expose.
 The island name is misspelled, was removed or renamed, or the remote build in use predates it.
 
 The host logs it as [NF-007](island-fetch-failed.md) (HTTP 404) and renders the island's fallback at
-once: an island the remote removed is not served from its last good envelope
+once. A JSON 404 from the remote counts as a deliberate removal, whatever its body (this one, or a
+gateway's `{"message":"Not Found"}`), so it is not served from the island's last good envelope. An
+HTML 404 from a proxy or a CDN is still served stale
 ([stale-if-error](../guides/caching.md#stale-if-error)).
 
 ## How to fix
