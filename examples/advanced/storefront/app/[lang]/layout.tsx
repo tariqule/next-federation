@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
+import { notFound } from 'next/navigation'
 import { ARRIVALS_SCRIPT } from 'example-inspect'
 import { ActivityToasts, InspectToggle } from 'example-inspect/client'
 import 'example-inspect/inspect.css'
-import { LOCALES } from '../../lib/federation.config'
+import { LOCALES, type Locale } from '../../lib/federation.config'
 import { SiteHeader } from '../../lib/HeaderParts'
 import { Providers } from '../../lib/Providers'
 import '../styles.css'
@@ -24,6 +25,9 @@ export default async function RootLayout({
   params: Promise<{ lang: string }>
 }) {
   const { lang } = await params
+  // Only the configured locales: anything else would be cached as a new page
+  // and passed to every remote as the island locale.
+  if (!LOCALES.includes(lang as Locale)) notFound()
   return (
     <html lang={lang}>
       <head>

@@ -61,11 +61,13 @@ function writeAdvancedKeys() {
         ...privateJwk(`example-storefront-${month}`),
         alg: 'ES256',
       }) +
-      line('NF_COMPONENTS_PUBLIC_KEY', headerPublic)
+      line('NF_COMPONENTS_PUBLIC_KEY', headerPublic),
+    { mode: 0o600 }
   )
   writeFileSync(
     ADVANCED.header,
-    HEADER + line('NF_COMPONENTS_SIGNING_KEY', header)
+    HEADER + line('NF_COMPONENTS_SIGNING_KEY', header),
+    { mode: 0o600 }
   )
 }
 
@@ -82,12 +84,14 @@ function writeSimpleKeys() {
           ...privateJwk(`example-${host}-${month}`),
           alg: 'ES256',
         }) +
-        line('NF_COMPONENTS_PUBLIC_KEY', componentsPublic)
+        line('NF_COMPONENTS_PUBLIC_KEY', componentsPublic),
+      { mode: 0o600 }
     )
   }
   writeFileSync(
     FILES.components,
-    HEADER + line('NF_COMPONENTS_SIGNING_KEY', components)
+    HEADER + line('NF_COMPONENTS_SIGNING_KEY', components),
+    { mode: 0o600 }
   )
 }
 

@@ -15,6 +15,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // Refuse cross-site form posts (login CSRF): only this storefront may post.
+  const origin = request.headers.get('origin')
+  if (origin !== null && origin !== new URL(request.url).origin) {
+    return new Response('Forbidden', { status: 403 })
+  }
   const form = await request.formData()
   const user = String(form.get('user') ?? '')
     .replace(/[^\w-]/g, '')
@@ -27,7 +32,11 @@ export async function POST(request: Request) {
     status: 303,
     headers: { Location: `/store${path}` },
   })
-  const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : ''
+  const secure =
+    process.env.NODE_ENV === 'production' ||
+    new URL(request.url).protocol === 'https:'
+      ? '; Secure'
+      : ''
   const cookie = (name: string, value: string) =>
     value
       ? `${name}=${value}; Path=/store; HttpOnly; SameSite=Lax${secure}`

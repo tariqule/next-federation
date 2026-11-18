@@ -8,7 +8,8 @@ export type Session = { user: string; role: Role }
 
 export function sessionFrom(read: (name: string) => string | undefined) {
   const user = read('demo-user')
-  if (!user) return null
+  // Same rule as the sign-in form: never trust a raw cookie value.
+  if (!user || !/^[\w-]{1,32}$/.test(user)) return null
   const role: Role = read('demo-role') === 'admin' ? 'admin' : 'customer'
   return { user, role } satisfies Session
 }

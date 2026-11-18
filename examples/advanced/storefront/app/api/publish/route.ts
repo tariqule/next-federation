@@ -7,7 +7,12 @@ import { sessionFrom } from '../../../lib/session'
 // The admin page posts here. In production, the remotes' deploy pipeline
 // would call a route like this (as a webhook with its own secret) after a
 // deploy or a catalog change.
-export async function POST() {
+export async function POST(request: Request) {
+  // Refuse cross-site form posts: only this storefront may post.
+  const origin = request.headers.get('origin')
+  if (origin !== null && origin !== new URL(request.url).origin) {
+    return new Response('Forbidden', { status: 403 })
+  }
   const store = await cookies()
   const session = sessionFrom((name) => store.get(name)?.value)
   if (session?.role !== 'admin') {

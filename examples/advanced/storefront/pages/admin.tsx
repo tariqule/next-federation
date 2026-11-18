@@ -40,7 +40,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     }),
   ])
   const published =
-    typeof ctx.query.published === 'string' ? ctx.query.published : null
+    typeof ctx.query.published === 'string' &&
+    /^\d{1,15}$/.test(ctx.query.published)
+      ? ctx.query.published
+      : null
   return { props: { session, published, header, inventory, grid } }
 }
 
