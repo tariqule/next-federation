@@ -4,7 +4,7 @@
 // bindings catch it, render the fallback marked for the browser, and report
 // NF-040. In the browser the boundary reports it (componentDidCatch) and
 // renders `errorFallback`.
-import { act, use } from 'react'
+import { act, use, useId } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { prerender } from 'react-dom/static'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
@@ -145,6 +145,28 @@ test('server: a component that suspends (use) still renders; React control flow 
   expect(events).toEqual([])
 })
 
+test("the workspace React's suspension error still starts with 'Suspense Exception:' (render.tsx isControlFlow relies on it)", async () => {
+  // React throws this Error (not the thenable) from `use()` on a pending
+  // promise. If a React upgrade renames it, the renderer would catch React's
+  // own suspension as a render error: update isControlFlow, then this test.
+  let thrown: unknown
+  let resolve!: (v: string) => void
+  const data = new Promise<string>((r) => (resolve = r))
+  function Probe() {
+    try {
+      return <span>{use(data)}</span>
+    } catch (error) {
+      thrown ??= error
+      throw error
+    }
+  }
+  setTimeout(() => resolve('ready'), 5)
+  await serverHtml(<Probe />)
+  expect(thrown).toBeInstanceOf(Error)
+  expect((thrown as Error).message).toMatch(/^Suspense Exception:/)
+  expect(typeof (thrown as { then?: unknown }).then).not.toBe('function')
+})
+
 test('server: a framework control-flow error (it carries a digest) passes through', async () => {
   const events: ComponentEvent[] = []
   function Bailout(): never {
@@ -197,6 +219,51 @@ test('hydrating a server render error: the browser renders it, its error goes to
       error: expect.objectContaining({ message: 'boom' }),
     }),
   ])
+  container.remove()
+})
+
+test('hydrating a server render error: a fallback that uses useId gets the same id on both sides', async () => {
+  const ids: string[] = []
+  function IdFallback() {
+    const id = useId()
+    ids.push(id)
+    return (
+      <i id={id} data-testid="fallback">
+        loading
+      </i>
+    )
+  }
+  const make = (isServer: boolean) =>
+    createBindings({
+      runtime: runtimeOf(fulfilled(boom)),
+      isServer,
+      emit: () => {},
+    }).createRemoteComponent<{ message?: string }>({
+      expose: './Boom',
+      fallback: <IdFallback />,
+      errorFallback: <b>failed</b>,
+    })
+  const Server = make(true)
+  const Client = make(false)
+  const { html } = await serverHtml(<Server descriptor={descriptor} />)
+  const serverId = /<i id="([^"]+)"/.exec(html)?.[1]
+  expect(serverId).toBeDefined()
+  ids.length = 0
+  const container = document.createElement('div')
+  container.innerHTML = html
+  document.body.appendChild(container)
+  await act(async () => {
+    hydrateRoot(container, <Client descriptor={descriptor} />, {
+      onRecoverableError: () => {},
+      onCaughtError: () => {},
+    })
+  })
+  // The first client render is the hydration of the server's fallback.
+  expect(ids[0]).toBe(serverId)
+  const mismatch = consoleError.mock.calls.filter((args: unknown[]) =>
+    args.some((a) => typeof a === 'string' && /didn't match|hydrat/i.test(a))
+  )
+  expect(mismatch).toEqual([])
   container.remove()
 })
 

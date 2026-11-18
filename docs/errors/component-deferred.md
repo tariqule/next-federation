@@ -11,11 +11,16 @@ they render per request, on the server, and each request waits for the build.
 The visitor still gets server-rendered markup for the components. Until the next regeneration the
 page is a partial prerender: its static shell is served with `x-nextjs-postponed: 1` and
 `Cache-Control: private, no-cache, no-store`, and the components stream in per request. The shell
-keeps the page's other cached data (the components descriptor at least), so Next regenerates it on
+keeps the page's other cached data (including the components descriptor), so Next regenerates it on
 the descriptor's revalidate time (`components.revalidate`, 60 s by default). That regeneration,
 once the build has loaded (or was refused), puts the components back in the static page, which is
 served from the cache again (`x-nextjs-cache`). Next may also log `Unexpected cache miss after cache
 warming phase` for that one regeneration; it does not change the outcome.
+
+When the descriptor is read inside a `'use cache'` component of the host, that component is not
+deferred (it would take the descriptor out of the shell, which Next would then never regenerate):
+it keeps the components' fallback in the static page and is regenerated within seconds (revalidate
+5 s), by when the build has usually loaded.
 
 It is logged once per build, as a warning.
 

@@ -14,7 +14,7 @@
 // `next dev`. Run with NF_SUITE=installed NF_MODE=dev.
 import { randomBytes } from 'node:crypto'
 import { expect, test } from '@playwright/test'
-import { warmUp } from './lib/warm-up.ts'
+import { warmUpWithin } from './lib/warm-up.ts'
 import { INSTALLED_HOSTS, INSTALLED_NEXT, SUITE } from './servers.ts'
 
 test.skip(SUITE !== 'installed', 'NF_SUITE=installed only')
@@ -36,19 +36,29 @@ const REACT_DEBUG_CHUNK = 0
 // the host's 3 s island timeout runs, so a cold host can render the
 // fallback once (NF-008). Warm each host first, outside the browser, as a
 // different user than the test's: the test still makes and inspects every
-// request it asserts on, and starts with no state for its user. The result
-// is ignored; a host that stays cold fails the assertions below.
+// request it asserts on, and starts with no state for its user. Both pages
+// of a host share one budget, which fits the hook's timeout; a host still
+// cold after it fails its test with that message, not a hook timeout.
+const WARM_UP_BUDGET_MS = 75_000
+const coldPages = new Map<number, string[]>()
 test.beforeAll(async () => {
-  test.setTimeout(90_000)
+  test.setTimeout(WARM_UP_BUDGET_MS + 15_000)
   await Promise.all(
     INSTALLED_HOSTS.map(async (host) => {
       const url = `http://localhost:${host.port}`
-      await warmUp(`${url}/orders`, {
-        headers: { cookie: 'nf-user=warm-up' },
-        ready: /Orders for (<!-- -->)?warm-up/,
-      })
-      // The page the test navigates to and back from.
-      await warmUp(`${url}/`, { ready: /Installed-library host/ })
+      const cold = await warmUpWithin(
+        [
+          {
+            url: `${url}/orders`,
+            headers: { cookie: 'nf-user=warm-up' },
+            ready: /Orders for (<!-- -->)?warm-up/,
+          },
+          // The page the test navigates to and back from.
+          { url: `${url}/`, ready: /Installed-library host/ },
+        ],
+        WARM_UP_BUDGET_MS
+      )
+      coldPages.set(host.port, cold)
     })
   )
 })
@@ -61,6 +71,10 @@ for (const host of INSTALLED_HOSTS) {
     browser,
   }) => {
     test.setTimeout(120_000)
+    expect(
+      coldPages.get(host.port) ?? [],
+      `${name}: still not rendering after the ${WARM_UP_BUDGET_MS / 1000} s warm-up (the dev server is still compiling, or remote a is down)`
+    ).toEqual([])
     const cookieCanary = `cc${randomBytes(8).toString('hex')}`
     const headerCanary = `hc${randomBytes(8).toString('hex')}`
     const authCanary = `ac${randomBytes(8).toString('hex')}`

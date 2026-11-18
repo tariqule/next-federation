@@ -14,6 +14,7 @@ import {
   lastGood,
   lastGoodKey,
   rememberGood,
+  servesStale,
 } from './last-good.ts'
 import type { KeptIsland } from './last-good.ts'
 
@@ -64,7 +65,8 @@ const FAILED: LoadedIsland = { kind: 'failed' }
  * this call (`takeFresh`); with cacheComponents a cache hit is not reported.
  * A cached public island whose fetch fails renders its last good envelope
  * from this process instead of the fallback (stale-if-error), for at most
- * the island cache entry's lifetime (`keepSeconds`).
+ * the island cache entry's lifetime (`keepSeconds`); not when the remote
+ * answered that it no longer has the island (`servesStale`).
  * No wall-clock reads here: Next aborts cacheComponents prerenders on them.
  * There is no `catch`: Next's control-flow errors (from `cookies()`, for
  * example) always propagate, and caller mistakes (NF-001, NF-009, NF-013,
@@ -125,7 +127,7 @@ export async function loadIsland(
     let kept: KeptIsland | null = null
     if (cached.ok && cached.at !== undefined) {
       rememberGood(key, cached, cached.at)
-    } else if (!cached.ok && cached.at !== undefined) {
+    } else if (!cached.ok && cached.at !== undefined && servesStale(cached)) {
       kept = lastGood(key, cached.at, keepSeconds(revalidate))
     }
     // Reported only when the fetch ran for this call, not for a cache hit

@@ -65,9 +65,11 @@ rendering its last good envelope (42 s old)") and emitted as `island:error`, and
 retried soon (above). The envelope's build stays loadable because remotes retain builds
 ([Build cache and remote retention](#build-cache-and-remote-retention)).
 
-The last good envelopes live in the server process's memory (at most 500, 50 MiB in all). A fresh
+The last good envelopes live in the server process's memory (at most 500, 50 MiB in all, keys and props included). A fresh
 process, a new serverless instance, or `next build` has none, so a failure there renders the
-fallback. Private and `dynamic` islands are never served stale.
+fallback. Private and `dynamic` islands are never served stale, nor is an island the remote no longer
+exposes (its `404` with `{"error":"NF-021"}`, logged as `NF-007`): that is a deliberate removal, so
+the fallback renders at once.
 
 ## Private islands
 

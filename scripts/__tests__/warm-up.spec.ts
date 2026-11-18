@@ -4,7 +4,7 @@
 // *.spec.ts under test/e2e.
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { warmUp } from '../../test/e2e/lib/warm-up.ts'
+import { warmUp, warmUpWithin } from '../../test/e2e/lib/warm-up.ts'
 
 let server: Server | undefined
 
@@ -76,4 +76,26 @@ test('a server that is not answering counts as cold', async () => {
   expect(
     await warmUp(url, { ready: /x/, deadlineMs: 200, intervalMs: 20 })
   ).toBe(false)
+})
+
+test('warmUpWithin: one budget across the steps, so a cold host ends in time and says which page stayed cold', async () => {
+  const url = await serve(() => [200, 'orders unavailable'])
+  const started = Date.now()
+  const cold = await warmUpWithin(
+    [
+      { url, ready: /Orders for warm-up/, intervalMs: 20 },
+      { url: `${url}?home`, ready: /Installed-library host/, intervalMs: 20 },
+    ],
+    300
+  )
+  // Not 2 x 300 ms: the second step only gets what the first left.
+  expect(Date.now() - started).toBeLessThan(600)
+  expect(cold).toEqual([url, `${url}?home`])
+})
+
+test('warmUpWithin: nothing cold when every step gets ready', async () => {
+  const url = await serve(() => [200, '<h2>Orders for warm-up</h2>'])
+  expect(
+    await warmUpWithin([{ url, ready: /Orders for warm-up/ }], 1000)
+  ).toEqual([])
 })

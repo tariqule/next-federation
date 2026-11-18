@@ -1,5 +1,6 @@
 // The Vite config the components remote plugin adds in dev.
 import type { Plugin, UserConfig } from 'vite'
+import { logger } from '@next-federation/sdk'
 import { nextFederationComponents } from '../src/components/plugin.ts'
 
 const ENV_KEYS = ['NF_VITE_COMMAND', 'MFE_VITE_NO_TEST_ENV_CHECK']
@@ -83,6 +84,48 @@ describe('dev: a page of the project served by the remote (B3)', () => {
       )
     } finally {
       warn.mockRestore()
+    }
+  })
+
+  test('a browser tab opening the manifest, the descriptor or another file of the remote does not warn; a page does', () => {
+    // logger.warnOnce itself, so an earlier warning in this file does not hide a call.
+    const warnOnce = rs.spyOn(logger, 'warnOnce').mockImplementation(() => {})
+    try {
+      const mws = devMiddlewares()
+      const tab = (url: string): Req => ({
+        url,
+        method: 'GET',
+        headers: {
+          accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+          'sec-fetch-dest': 'document',
+        },
+      })
+      for (const url of [
+        '/mf-manifest.json',
+        '/mf-manifest.json?x=1',
+        '/_nf/components.json',
+        '/remoteEntry.js',
+        '/src/Counter.tsx',
+        '/assets/logo.svg',
+      ]) {
+        run(mws, tab(url))
+      }
+      expect(warnOnce).not.toHaveBeenCalled()
+      run(mws, tab('/'))
+      run(mws, tab('/about'))
+      run(mws, tab('/index.html'))
+      expect(warnOnce).toHaveBeenCalledTimes(3)
+      // An HTML-accepting request that is not a document (a fetch, an
+      // iframe-less tool): no warning.
+      warnOnce.mockClear()
+      run(mws, {
+        url: '/',
+        method: 'GET',
+        headers: { accept: 'text/html', 'sec-fetch-dest': 'empty' },
+      })
+      expect(warnOnce).not.toHaveBeenCalled()
+    } finally {
+      warnOnce.mockRestore()
     }
   })
 

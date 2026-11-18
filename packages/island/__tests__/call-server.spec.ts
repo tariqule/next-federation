@@ -311,6 +311,61 @@ describe('timeoutMs: the remote must start answering in time (NF-038)', () => {
     ])
   })
 
+  test('one deadline covers the 401 token refresh and the retry: never twice timeoutMs', async () => {
+    // First answer: 401 NF-014 after 60 ms (of 100). The retry hangs; it is
+    // aborted at the first request's deadline, not 100 ms after it started.
+    globalThis.fetch = ((url: string, init: RequestInit) => {
+      sent.push({ url, init })
+      if (sent.length === 1) {
+        return new Promise((resolve) =>
+          setTimeout(() => resolve(failure(401, 'NF-014')()), 60)
+        )
+      }
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () =>
+          reject(init.signal!.reason)
+        )
+      })
+    }) as typeof fetch
+    const { callServer, reports } = make({
+      timeoutMs: 100,
+      getToken: async () => (sent.length === 0 ? 'old' : 'new'),
+      invalidateToken: () => {},
+    })
+    const started = performance.now()
+    const error = (await callServer('src/a.ts#slow', []).catch(
+      (e: unknown) => e
+    )) as Error & { code?: string }
+    const elapsed = performance.now() - started
+    expect(sent).toHaveLength(2)
+    expect(error.code).toBe('NF-038')
+    expect(error.message).toContain('did not answer within 100 ms')
+    expect(elapsed).toBeLessThan(150)
+    expect(reports).toEqual([
+      expect.objectContaining({ ok: false, code: 'NF-038', retried: true }),
+    ])
+  })
+
+  test('a retry whose deadline already passed is not sent', async () => {
+    replies.push(failure(401, 'NF-014'), flight({ returnValue: 'late' }))
+    let calls = 0
+    const { callServer } = make({
+      timeoutMs: 30,
+      // The token refresh itself outlives the deadline.
+      getToken: async () => {
+        calls++
+        if (calls === 2) await new Promise((r) => setTimeout(r, 50))
+        return calls === 1 ? 'old' : 'new'
+      },
+      invalidateToken: () => {},
+    })
+    const error = (await callServer('src/a.ts#slow', []).catch(
+      (e: unknown) => e
+    )) as Error & { code?: string }
+    expect(error.code).toBe('NF-038')
+    expect(sent).toHaveLength(1)
+  })
+
   test('an answer in time is not aborted afterwards, and no timeoutMs sends no signal', async () => {
     replies.push(flight({ returnValue: 1 }))
     const timed = make({ timeoutMs: 20 })

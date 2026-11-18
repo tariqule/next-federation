@@ -11,6 +11,7 @@ import {
   lastGood,
   lastGoodKey,
   rememberGood,
+  servesStale,
 } from '../server/last-good.ts'
 import { reportIsland } from '../server/report-island.ts'
 import type { PagesIdentity } from './api-handler.ts'
@@ -99,9 +100,9 @@ export function createPagesIslands(
           canonicalJson(props),
           canonicalJson(host)
         )
-        const kept = result.ok
-          ? null
-          : lastGood(key, at, keepSeconds(federation.islands.revalidate))
+        const kept = servesStale(result)
+          ? lastGood(key, at, keepSeconds(federation.islands.revalidate))
+          : null
         if (result.ok) rememberGood(key, result, at)
         reportIsland(federation, target, island, result, kept?.ageSeconds)
         const good = result.ok ? result : kept?.result

@@ -33,7 +33,9 @@ const FAILURE_LIFE = { stale: 30, revalidate: 5, expire: 600 }
 /**
  * NF-039 only: a render deliberately left out of the static shell (Next's
  * built-in 'seconds' values, inlined). The page's descriptor entries stay in
- * the shell, so the page keeps a finite revalidate and is regenerated.
+ * the shell, so the page keeps a finite revalidate and is regenerated. Never
+ * applied to a host's own `'use cache'` scope (see
+ * `skipStaticShellUntilReady`).
  */
 const DEFER_LIFE = { stale: 30, revalidate: 1, expire: 60 }
 
@@ -91,11 +93,14 @@ export function shortenEnclosingCache(): void {
   shortenTo(FAILURE_LIFE)
 }
 
-function shortenTo(life: typeof FAILURE_LIFE): void {
+/** True when it ran inside a `'use cache'` scope (it throws outside one). */
+function shortenTo(life: typeof FAILURE_LIFE): boolean {
   try {
     cacheLife(life)
+    return true
   } catch (error) {
     unstable_rethrow(error)
+    return false
   }
 }
 
@@ -141,8 +146,10 @@ async function notServerReadyYet(base: string): Promise<string> {
  * HTML prerender before the build has loaded) and keep it as the page for a
  * whole revalidate window. Such a render is kept out of the static shell
  * instead: the boundary renders per request (where the server waits for the
- * build) until a regeneration finds the build loaded or refused. Not during
- * `next build` (that would turn a static route dynamic) or `next dev`.
+ * build) until a regeneration finds the build loaded or refused. Inside a
+ * host's own `'use cache'` scope that scope gets the failure profile instead
+ * (still static, regenerated within seconds). Not during `next build` (that
+ * would turn a static route dynamic) or `next dev`.
  */
 export async function skipStaticShellUntilReady(
   descriptor: RemoteComponentDescriptor | null
@@ -155,11 +162,22 @@ export async function skipStaticShellUntilReady(
     return
   }
   if (componentTrustRegistry().serverReady?.has(descriptor.base)) return
+  // Inside the host's own 'use cache' scope (a cached component that reads
+  // the descriptor): a short-lived life there would make the whole scope a
+  // hole, the descriptor entry with it, and a shell left without a
+  // revalidating entry gets `revalidate: false` (stuck as a partial
+  // prerender). The failure profile keeps the scope in the static shell, with
+  // the fallback, and regenerates it within seconds, by when the build has
+  // usually loaded.
+  const inHostCache = shortenTo(FAILURE_LIFE)
   logger.warnOnce(
     'NF-039',
     `not-loaded:${descriptor.base}`,
-    `Build "${descriptor.buildId}" of "${descriptor.remote}" is not loaded in this server process yet: this render leaves its remote components to request time (each request waits for the build) instead of keeping their fallback in the static page, and the page regenerates once it is loaded.`
+    `Build "${descriptor.buildId}" of "${descriptor.remote}" is not loaded in this server process yet: ` +
+      (inHostCache
+        ? "this render runs inside a 'use cache' scope of the host, which keeps the remote components' fallback in the static page for a few seconds; the page regenerates within seconds."
+        : 'this render leaves its remote components to request time (each request waits for the build) instead of keeping their fallback in the static page, and the page regenerates once it is loaded.')
   )
-  shortenTo(DEFER_LIFE)
+  if (inHostCache) return
   await notServerReadyYet(descriptor.base)
 }

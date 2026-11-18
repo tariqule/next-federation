@@ -28,7 +28,7 @@ jobs:
   publish:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: npm-publish
     steps:
       - uses: actions/checkout@v4
@@ -61,9 +61,12 @@ jobs:
           pnpm build
           pnpm check:pack
           pnpm -r --filter "./packages/*" publish --dry-run --no-git-checks
+      # `pnpm release`; when npm holds a version as staged (E409 "Cannot
+      # publish over previously staged version"), waits up to 15 min until npm
+      # shows it, then publishes the rest. Any other failure fails the job.
       - name: Publish
         if: ${{ !inputs.dry_run }}
-        run: pnpm release
+        run: node scripts/publish-wait.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

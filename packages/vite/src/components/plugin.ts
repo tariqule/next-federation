@@ -83,6 +83,28 @@ function viteConfig(
 }
 
 /**
+ * A browser navigating to a page of the project (the B3 warning): a document
+ * request (`Sec-Fetch-Dest: document`, or an HTML `Accept` from a client that
+ * does not send it) for a path that is not a file. A tab opened on
+ * `/mf-manifest.json`, the descriptor or a module is not a page.
+ */
+function isPageRequest(req: {
+  url?: string
+  headers: Record<string, string | string[] | undefined>
+}): boolean {
+  const dest = req.headers['sec-fetch-dest']
+  const accept = req.headers.accept
+  const document =
+    dest === undefined
+      ? typeof accept === 'string' && accept.includes('text/html')
+      : dest === 'document'
+  if (!document) return false
+  const path = (req.url ?? '/').split(/[?#]/)[0]!
+  const last = path.slice(path.lastIndexOf('/') + 1)
+  return !last.includes('.') || last.endsWith('.html')
+}
+
+/**
  * Builds a next-federation **components** remote (Mode A): Module Federation
  * client components that hosts render inside their own React tree, on the
  * host's React. Wraps `@module-federation/vite` (pinned, NF-026) and emits,
@@ -164,10 +186,7 @@ export function nextFederationComponents(
       // manifests and the descriptor): it cannot run here, since React and
       // every shared module are host-provided for the whole project.
       server.middlewares.use((req, _res, next) => {
-        if (
-          req.method === 'GET' &&
-          req.headers.accept?.includes('text/html') === true
-        ) {
+        if (req.method === 'GET' && isPageRequest(req)) {
           logger.warnOnce(
             'NF-002',
             'components-dev-page',
