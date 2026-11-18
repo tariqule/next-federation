@@ -5,15 +5,4 @@ import { withNextFederation } from '@next-federation/next/config'
 export default withNextFederation({
   basePath: '/shop',
   i18n: { locales: ['en', 'fr'], defaultLocale: 'en' },
-  // The app lives under /shop: send `/` there.
-  async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/shop',
-        basePath: false,
-        permanent: false,
-      },
-    ]
-  },
 })

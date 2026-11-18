@@ -138,8 +138,8 @@ Run `pnpm examples:demo-keys` and replace the keys:
 - The sign-in is a demo: any name (letters, digits, `_`, `-`, at most 32), kept in a plain
   `HttpOnly`, `SameSite=Lax` cookie, `Secure` on Vercel and over https, with no password and nothing
   stored. The orders are made-up data.
-- Redirects go to fixed paths (`/orders`, `/shop/orders`, `/` → `/shop`); none takes a URL from the
-  request.
+- Redirects go to fixed paths (`/orders`, `/shop/orders`, and `/` → `/shop`, which the Pages Router's
+  `vercel.json` does on Vercel's router); none takes a URL from the request.
 - Remote origins come from the variables above, never from a request, so a host fetches only its two
   remotes (no SSRF). The island remote answers CORS for the three hosts only, and private islands
   only with a token one of the two hosts signed.
@@ -170,5 +170,7 @@ ignore command under `sh`, `dash`, `bash` and `zsh` (exit `1` for `production`, 
 `pnpm examples:smoke`.
 
 Not checked locally (only on Vercel): Vercel's own install (pnpm version, Node version), its file
-tracing of `api/nf.ts` from a Git build (the guide tested `vercel build` with a prebuilt deploy), the
-framework variables that turn the banner on, and the `/` → `/shop` redirect on Vercel's router.
+tracing of `api/nf.ts` from a Git build (the guide tested `vercel build` with a prebuilt deploy), and the
+framework variables that turn the banner on. The first production deploy confirmed all three. A Next.js
+`redirects()` rule for `/` did not work with `basePath` and `i18n`, so the Pages Router redirects `/` in
+its `vercel.json` instead.
