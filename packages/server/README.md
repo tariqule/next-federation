@@ -215,10 +215,24 @@ in nf-serve's layout: it records the server entry, hashes the server graph and w
 `nf-build.json`.
 
 ```bash
-nf-describe --dir dist/<buildId> (--ssr-entry server/remoteEntry.js | --no-ssr) \
+nf-describe --dir dist/<buildId> [--ssr-entry server/remoteEntry.js | --no-ssr] \
   [--base <url>] [--build-id <id>] [--types] [--allow-insecure-http]
 nf-describe --dir dist/<buildId> --verify [--public-key <JWK JSON | JWK file>]...
 ```
+
+- `--ssr-entry` or `--no-ssr` is needed only when the build's `client/mf-manifest.json` names no
+  server entry (`metaData.ssrRemoteEntry`), as an Rspack or webpack build does not. A Vite build
+  made with `@next-federation/vite` already names one, so `--dir` alone re-describes it. Without
+  either flag on a manifest that names none, the command fails (`NF-002`).
+- **Describing again without `NF_COMPONENTS_SIGNING_KEY` drops an existing signature.** The command
+  prints `described (unsigned; ...)` and exits 0. It warns only when `NODE_ENV=production`. Set the
+  key every time you describe a build you mean to ship, and run `--verify --public-key` afterwards:
+  hosts render an unsigned build in the browser only (`NF-028`).
+- Run the installed binary (`node_modules/.bin/nf-describe`, or a `package.json` script). In one
+  test, `npx nf-describe --dir ... --verify --public-key ...` lost its flags to npm, so the command
+  re-described the build unsigned instead of verifying it. Which npm version caused it is not
+  known. Check the output: a verify run prints `the descriptor and every server file match`, a
+  describe run prints `described`.
 
 - `--types` (off by default) indexes and signs the declarations in `client/@mf-types/` for hosts'
   `nf-types`; without it the folder is never signed. `--types` on a build without the folder fails

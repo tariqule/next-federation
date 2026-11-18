@@ -15,6 +15,9 @@ npm install --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@
 npm install -D @next-federation/vite @next-federation/server vite
 ```
 
+Check `package.json` afterwards: a caret that was already there (`create-vite` writes
+`"react": "^19.3.1"`) may stay, and the range must be exact.
+
 `react-server-dom-webpack` is an optional peer dependency: a components remote
 (`nextFederationComponents`) never uses it, so npm accepts any React 19 there. An island remote
 needs it (its bootstrap imports the browser flight client): `nextFederationIslands` fails with

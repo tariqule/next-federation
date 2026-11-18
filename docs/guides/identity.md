@@ -182,6 +182,11 @@ export function POST() {
 }
 ```
 
+The `Secure` flag is on in production only, so local `next dev` over plain `http` is unaffected. A
+production build served over `http://localhost` (`next start`) works in Chromium and Firefox, which
+treat localhost as secure. Safari may drop `Secure` cookies on plain `http`; this was not tested
+there, so use `https` for local production runs in Safari.
+
 On sign-out the browser must also forget the island tokens it holds:
 `clearIslandTokens()` from `@next-federation/react`.
 
