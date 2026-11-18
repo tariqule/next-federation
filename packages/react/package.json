@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React components for next-federation hosts: the island mount, the error boundary and remote components.",
   "license": "MIT",
   "author": "tariqule",
