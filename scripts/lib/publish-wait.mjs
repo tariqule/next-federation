@@ -146,7 +146,7 @@ export function readGitHead(result) {
  * @param {string} version
  */
 export function attestationsUrl(name, version) {
-  return `https://registry.npmjs.org/-/npm/v1/attestations/${name.replace('/', '%2f')}@${version}`
+  return `https://registry.npmjs.org/-/npm/v1/attestations/${name.replaceAll('/', '%2f')}@${encodeURIComponent(version)}`
 }
 
 /** @param {unknown} value */
