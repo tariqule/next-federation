@@ -1,5 +1,7 @@
 # next-federation
 
+**Documentation: <https://next-federation-docs.vercel.app>**
+
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
 renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App
 Router and Pages Router (Turbopack or webpack) and client-side React hosts, and remotes built with
@@ -9,8 +11,9 @@ There are two ways to embed a remote's UI:
 
 - **Islands**: the remote renders real React Server Components on its own server, and your host
   embeds the result as a server-rendered, hydrated island.
-- **Remote components**: the remote ships a client component that runs inside your host's React tree
-  and shares its context and router. Verified builds are server-rendered.
+- **Remote components**: the remote ships a client component as a Module Federation 2.0 module. Your
+  host loads it through the Module Federation runtime and renders it inside its own React tree, where
+  it shares the host's context and router. Verified builds are server-rendered.
 
 ## Who it is for
 
@@ -162,10 +165,13 @@ read the changelogs. All packages are versioned together.
 | Remotes | Vite 8. Remote components can also come from Rspack or webpack with Module Federation 2.0                              |
 
 The tests run on React and React DOM 19.3.1 (`react-server-dom-webpack` 19.3.1 in island remotes),
-plus one island remote on 19.3.0 to cover mixed versions. React 19.1.0, which some scaffolds install,
-is not covered. Pin `react` and `react-dom` to the same exact version in the host and in each remote
-(`"react": "19.3.1"`, no `^`), and pin `react-server-dom-webpack` the same way in an island remote.
-Check `package.json` after you scaffold a project.
+plus one island remote on 19.3.0 to cover mixed versions. Other React 19 versions are not covered.
+Scaffolds move on: at the time of writing `create-vite` writes a caret range (`"react": "^19.3.1"`) and
+`create-next-app` writes `19.3.0`. Pin `react` and `react-dom` to the same exact version in the host
+and in each remote (`"react": "19.3.1"`, no `^`), and pin `react-server-dom-webpack` the same way in
+an island remote. `pnpm add --save-exact react@19.3.1` does not remove a caret that is already in
+`package.json`, so open `package.json` after you scaffold a project and after you pin, and edit the
+range by hand if it still has a `^`.
 
 ## Contributing
 

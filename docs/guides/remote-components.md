@@ -283,7 +283,8 @@ export default [
 ] satisfies Configuration[]
 ```
 
-Then describe the build (`NF_COMPONENTS_SIGNING_KEY` set signs it) and serve it:
+Then describe the build and serve it. Set `NF_COMPONENTS_SIGNING_KEY` for the `nf-describe` run
+too: without it the descriptor is unsigned (see [Signing](#key-generation)).
 
 ```sh
 NF_BUILD_ID=v1 rspack build
@@ -333,6 +334,10 @@ payload, the assets are the ones `mf-manifest.json` lists, a signed types index 
 descriptor does not sign, as in a build described without `--types`, is not checked), and every
 server file still matches its sha384. With `--public-key <public JWK or file>` (repeatable) it also verifies the ES256
 signature, as hosts do; **without one the signature is not checked**, and the output says so.
+
+Run the installed `nf-describe` binary directly (`node_modules/.bin/nf-describe` or a `package.json`
+script). `npx` can lose the flags (one test saw `npx nf-describe ... --verify` re-describe the build
+instead of verifying it), so check that the output says what you asked for.
 
 ## Host: configure the remote
 
@@ -581,6 +586,13 @@ remotes you would deploy into the host yourself.
 
 ### Key generation
 
+**A build made without the key is unsigned, and nothing stops it.** `vite build` without
+`NF_COMPONENTS_SIGNING_KEY` writes an unsigned descriptor without a warning, and `nf-describe`
+does the same and exits 0 (it warns only when `NODE_ENV=production`). Running `nf-describe --dir` on
+a signed build again without the key drops its signature. The host then renders the build in the browser only (`NF-028`), unless it pins the
+build's digest. Set the key in every build and describe step, and check the result with
+`nf-describe --verify --public-key`.
+
 ```sh
 node -e "
 const { generateKeyPairSync } = require('node:crypto')
@@ -592,7 +604,8 @@ console.log('public key for the host: ' + JSON.stringify(pub))
 "
 ```
 
-Set `NF_COMPONENTS_SIGNING_KEY` (the private JWK) in the remote's build environment only (a CI
+The `kid` is a label for telling keys apart when you rotate; `shop-2026-11` happens to match the
+example remote's name, and it does not have to. Set `NF_COMPONENTS_SIGNING_KEY` (the private JWK) in the remote's build environment only (a CI
 secret); it never leaves the build. Put the public JWK in the host's `components.ssr.publicKeys` (the
 config above reads it from `NF_COMPONENTS_PUBLIC_KEY`, as a JSON string in `.env.local`).
 

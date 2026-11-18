@@ -1,20 +1,24 @@
 {
   "name": "@next-federation/next",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Next.js adapter for next-federation: the withNextFederation config wrapper and island caching for both Next caching models.",
   "license": "MIT",
   "author": "tariqule",
-  "homepage": "https://github.com/tariqule/next-federation#readme",
+  "homepage": "https://next-federation-docs.vercel.app/docs/api/next",
   "bugs": "https://github.com/tariqule/next-federation/issues",
   "keywords": [
-    "module-federation",
     "nextjs",
-    "react-server-components",
+    "next.js",
     "micro-frontends",
+    "microfrontends",
+    "module-federation",
+    "react-server-components",
+    "rsc",
+    "app-router",
     "islands",
     "nextjs-plugin",
-    "app-router",
-    "pages-router"
+    "pages-router",
+    "remote-components"
   ],
   "type": "module",
   "sideEffects": [

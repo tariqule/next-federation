@@ -34,9 +34,15 @@ pnpm add --save-exact react@19.3.1 react-dom@19.3.1
 ```
 
 `server-only` is imported by `lib/federation.ts` below and is not part of a `create-next-app`
-project. Pin React to one exact version, the one the repo's tests run (19.3.1): `create-next-app`
-scaffolds 19.1.0 or 19.3.0, and the pin keeps the host on the tested version. An App Router host
-never shares its React with islands, so the pin is not about sharing a copy with your remotes.
+project. Pin React to one exact version, the one the repo's tests run (19.3.1): the pin keeps the
+host on the tested version, whatever version `create-next-app` scaffolds. An App Router host never
+shares its React with islands, so the pin is not about sharing a copy with your remotes.
+`pnpm add --save-exact` does not remove a caret that is already in `package.json`: check the file,
+and edit the range by hand if `react` or `react-dom` still starts with `^`.
+
+These commands use pnpm 10 or newer: `create-next-app --use-pnpm` writes a `pnpm-workspace.yaml` that
+pnpm 9 rejects (`packages field missing or empty`). With npm, run `npm install <packages>` and
+`npm install --save-exact react@19.3.1 react-dom@19.3.1`.
 
 ## 2. Wrap `next.config.ts`
 
