@@ -57,6 +57,10 @@ Next 14 (React 18) is not supported: islands and remote components need React 19
 - **No Fast Refresh for islands inside a host.** Edits reload the page.
 - **Server Actions have no progressive enhancement.** `<Form>` stays disabled until the island has
   hydrated, and actions reach client components only as props (`NF-034` otherwise).
+- **A click before an island hydrates is lost.** The server-rendered HTML is visible before the
+  island's JavaScript has run, and nothing records an early click or replays it. This holds for any
+  button, not only `<Form>`: in one test a click right after page load registered 1 of 2 clicks. A
+  script that clicks right after navigation must wait for the island to hydrate first.
 
 ## What a remote component cannot do
 

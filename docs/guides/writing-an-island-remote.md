@@ -55,6 +55,9 @@ pnpm add @next-federation/island
 pnpm add -D @next-federation/vite @next-federation/server vite
 ```
 
+`pnpm add --save-exact` does not remove a caret that is already in `package.json` (`create-vite`
+writes `"react": "^19.3.1"`): check the file, and edit the range by hand if it still starts with `^`.
+
 ## 2. Configure Vite
 
 ```ts

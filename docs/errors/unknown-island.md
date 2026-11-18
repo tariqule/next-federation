@@ -8,7 +8,9 @@ A host asked a remote for an island it does not expose.
 
 The island name is misspelled, was removed or renamed, or the remote build in use predates it.
 
-The host logs it as [NF-007](island-fetch-failed.md) (HTTP 404) and renders the island's fallback at
+The remote answers `404` with `{"error":"NF-021"}`, so NF-021 is in the remote's own response and
+log. The host's log line shows [NF-007](island-fetch-failed.md) with `(HTTP 404)` and never names
+NF-021. The host renders the island's fallback at
 once: an island the remote removed is not served from its last good envelope
 ([stale-if-error](../guides/caching.md#stale-if-error)).
 
