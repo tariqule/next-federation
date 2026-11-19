@@ -80,7 +80,13 @@ async function expectPage(url, { includes = [], excludes = [], init } = {}) {
   const res = await fetch(url, { redirect: 'manual', ...init })
   // React separates adjacent text with <!-- -->: ignore it.
   const body = (await res.text()).replaceAll('<!-- -->', '')
-  const markup = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
+  // Test-only text matching, never rendered: drop every script element
+  // (any case, repeated until nothing changes) before checking what shows.
+  let markup = body
+  for (let before = ''; before !== markup; ) {
+    before = markup
+    markup = markup.replace(/<script\b[^>]*>[\s\S]*?<\/script[^>]*>/gi, '')
+  }
   const missing = includes.filter((text) => !body.includes(text))
   const present = excludes.filter((text) => markup.includes(text))
   if (identityTokens(body).length > 0) present.push('an identity token')
