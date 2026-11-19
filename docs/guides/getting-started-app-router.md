@@ -194,6 +194,9 @@ Without `cacheComponents`, a private island makes the route dynamic.
 
 ### Private content in the first HTML (`blocking`)
 
+Runnable example: the account page of
+[examples/advanced/storefront](../../examples/advanced/storefront) (`app/[lang]/account/page.tsx`).
+
 By default a private island streams. The first HTML holds `fallback` in its place, and the island's
 HTML comes later in the same response, with a script that swaps it in. To get the island in the
 first HTML, in place, as the Pages Router renders it, add `blocking`:

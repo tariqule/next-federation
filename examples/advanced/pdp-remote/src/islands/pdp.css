@@ -1,0 +1,49 @@
+/* Island CSS ships in the envelope; every class is prefixed (pdp-). */
+.pdp-detail {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 560px) {
+  .pdp-detail {
+    grid-template-columns: 1fr;
+  }
+}
+.pdp-photo {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  color: #fff;
+}
+.pdp-thumbs {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.pdp-thumbs button {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.pdp-thumbs button[aria-pressed='true'] {
+  border-color: CanvasText;
+}
+.pdp-price {
+  font-size: 20px;
+  font-weight: 700;
+}
+.pdp-recs a {
+  display: inline-block;
+  margin: 0 12px 4px 0;
+}
+.pdp-build {
+  display: block;
+  font-size: 12px;
+  color: color-mix(in srgb, CanvasText 60%, Canvas);
+}

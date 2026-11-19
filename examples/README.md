@@ -143,3 +143,10 @@ ports above; set them with environment variables (`SHOP_ORIGIN`, `CART_ORIGIN`, 
 live demo does (on Vercel a missing one fails the build). Each remote's `base` is its own URL: on
 Vercel, the build reads it from `NF_PUBLIC_ORIGIN`, else `VERCEL_PROJECT_PRODUCTION_URL`. Each
 remote keeps every build in `dist/<buildId>/`; delete old folders when you no longer need them.
+
+## Advanced examples: a commerce platform
+
+[`advanced/`](advanced/README.md) is a larger setup: an online shop made of five remotes (CDP, PDP
+and SERP island remotes, an Account remote with Server Actions, and a Header remote built with
+Rspack) and a Next.js storefront with `cacheComponents` and Pages Router routes. Run it with
+`pnpm examples:platform` (ports 13400-13404 and 13410, next to the examples above).

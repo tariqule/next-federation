@@ -1,0 +1,35 @@
+/* Island CSS ships in the envelope. There is no CSS isolation: every class
+   is prefixed (cdp-) so it cannot clash with the host or other remotes. */
+.cdp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 8px 0;
+}
+.cdp-card {
+  border: 1px solid color-mix(in srgb, CanvasText 18%, Canvas);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.cdp-card a {
+  font-weight: 600;
+}
+.cdp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+.cdp-filters button[aria-pressed='true'] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.cdp-meta,
+.cdp-build {
+  display: block;
+  font-size: 12px;
+  color: color-mix(in srgb, CanvasText 60%, Canvas);
+}
+.cdp-nav a {
+  margin-right: 12px;
+}

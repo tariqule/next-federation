@@ -1,5 +1,9 @@
 # Caching
 
+Runnable example: [examples/advanced/storefront](../../examples/advanced/storefront), an App Router
+host with `cacheComponents`: static shells with public islands, streamed and `blocking` private
+islands, per-island `revalidate`, and a "Publish" route that calls `revalidateIsland`.
+
 How islands are cached depends on the host. Public islands are cached; private islands never are.
 
 ## App Router, legacy mode (no `cacheComponents`)

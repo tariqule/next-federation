@@ -174,7 +174,8 @@ jobs:
 
   examples-smoke:
     # Builds every example in examples/, serves them on ports 3300-3304 and
-    # checks the remote's /_nf/health and the host pages' island HTML.
+    # checks the remote's /_nf/health and the host pages' island HTML; then
+    # the same for the commerce platform in examples/advanced (13400-13410).
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -190,6 +191,8 @@ jobs:
       - name: Link nf-serve (its bin target exists only after the build)
         run: pnpm install --frozen-lockfile --offline
       - run: pnpm examples:smoke
+      # The commerce platform (examples/advanced), on ports 13400-13410.
+      - run: pnpm examples:platform:smoke
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

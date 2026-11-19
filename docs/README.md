@@ -51,7 +51,8 @@ Build the app that provides the UI.
 - Package READMEs: [sdk](../packages/sdk), [protocol](../packages/protocol),
   [core](../packages/core), [react](../packages/react), [server](../packages/server),
   [island](../packages/island), [vite](../packages/vite), [next](../packages/next).
-- [Examples](../examples/README.md): runnable remotes and hosts.
+- [Examples](../examples/README.md): runnable remotes and hosts, and the
+  [commerce platform](../examples/advanced/README.md), a larger multi-remote setup.
 
 ## Errors
 

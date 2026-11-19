@@ -1,5 +1,7 @@
-// Starts and stops the five example apps. Used by run.mjs (examples:dev,
-// examples:start, examples:smoke) and walkthrough.mjs.
+// Starts and stops the example apps: the five simple ones by default, or
+// another list (the commerce platform, platform.mjs). Used by run.mjs
+// (examples:dev, examples:start, examples:smoke), walkthrough.mjs and
+// platform.mjs.
 import { spawn } from 'node:child_process'
 import { createWriteStream, mkdirSync, rmSync } from 'node:fs'
 import { createConnection } from 'node:net'
@@ -48,9 +50,9 @@ const running = new Map()
  * Checks start clean: empty logs, and empty Next caches (island envelopes and
  * descriptors cached by an earlier run would show older remote builds).
  */
-export function freshRun() {
+export function freshRun(apps = APPS) {
   rmSync(LOGS, { recursive: true, force: true })
-  for (const app of APPS.filter((a) => a.dir.startsWith('next-'))) {
+  for (const app of apps.filter((a) => a.next ?? a.dir.startsWith('next-'))) {
     rmSync(join(EXAMPLES, app.dir, '.next', 'cache'), {
       recursive: true,
       force: true,
@@ -70,9 +72,9 @@ function portBusy(port) {
   })
 }
 
-export async function assertPortsFree() {
+export async function assertPortsFree(apps = APPS) {
   const busy = []
-  for (const app of APPS) if (await portBusy(app.port)) busy.push(app.port)
+  for (const app of apps) if (await portBusy(app.port)) busy.push(app.port)
   if (busy.length > 0) {
     throw new Error(
       `port(s) ${busy.join(', ')} already in use: stop what runs there first.`
@@ -182,23 +184,25 @@ export async function stopAll() {
   await Promise.all([...running.keys()].map(stopApp))
 }
 
-const app = (key) => APPS.find((a) => a.key === key)
-
 /**
  * mode 'dev': the island remote and the hosts run their dev servers; the
  * components remote is built and served. mode 'start': everything is
  * built, then served as in production. Remotes start first: Next builds
  * prerender pages that fetch from them.
  */
-export async function startStack(mode, { log } = {}) {
-  await assertPortsFree()
-  const remotes = APPS.filter((a) => a.remote)
-  const hosts = APPS.filter((a) => !a.remote)
+export async function startStack(mode, { log, apps = APPS } = {}) {
+  await assertPortsFree(apps)
+  const remotes = apps.filter((a) => a.remote)
+  const hosts = apps.filter((a) => !a.remote)
   if (mode === 'dev') {
-    await runScript(app('components'), 'build', { log })
-    for (const a of APPS)
+    await Promise.all(
+      apps
+        .filter((a) => a.buildInDev)
+        .map((a) => runScript(a, 'build', { log }))
+    )
+    for (const a of apps)
       startScript(a, a.buildInDev ? 'start' : 'dev', { log })
-    await Promise.all(APPS.map((a) => waitFor(a.ready)))
+    await Promise.all(apps.map((a) => waitFor(a.ready)))
     return
   }
   await Promise.all(remotes.map((a) => runScript(a, 'build', { log })))

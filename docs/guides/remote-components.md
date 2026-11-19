@@ -175,6 +175,9 @@ for a canary job only).
 
 ## Remotes built with Rspack or webpack
 
+Runnable example: [examples/advanced/header-remote-rspack](../../examples/advanced/header-remote-rspack),
+an Rspack remote consumed by a Next.js host (both routers).
+
 Any Module Federation 2.0 remote that emits `mf-manifest.json` works, built with
 `@module-federation/enhanced`. The e2e suite runs one built with Rspack 2.3.0 and
 `@module-federation/enhanced` 2.9.3 against App Router, Pages Router and SPA hosts
@@ -457,6 +460,10 @@ the component's HTML is always inline. `preloadRemoteComponent(descriptor, './Ca
 `Cart.preload(descriptor)`) loads the module ahead of rendering in `getServerSideProps`.
 
 ### Mixed-router hosts
+
+Runnable example: [examples/advanced/storefront](../../examples/advanced/storefront) (App Router
+routes in `app/`, the Pages Router admin in `pages/admin.tsx`, the same remote components bound in
+`lib/header.app.tsx` and `lib/header.pages.tsx`).
 
 A Next.js host can have App Router routes (`app/`) and Pages Router routes (`pages/`) at once. Use
 each router's own entry point on its own routes, as above: `@next-federation/next/components` and
