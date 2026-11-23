@@ -91,6 +91,75 @@ test('no shared module besides React: no field (older hosts verify it unchanged)
   expect(sharedFromManifest({}, null)).toBeUndefined()
 })
 
+const REACT_SHARES = [
+  'react',
+  'react-dom',
+  'react-dom/client',
+  'react/jsx-runtime',
+]
+
+test('React at the default ^19.0.0 stays out of the descriptor (unchanged digest)', () => {
+  expect(
+    sharedFromManifest(
+      {
+        shared: [
+          ...REACT_SHARES.map((n) => entry(n, true, '^19.0.0', '19.3.1')),
+          entry('components-context', true, false),
+        ],
+      },
+      new Map([['./Counter', new Set(['react', 'components-context'])]])
+    )
+  ).toEqual({
+    'components-context': {
+      requiredVersion: false,
+      fallback: false,
+      exposes: ['./Counter'],
+    },
+  })
+})
+
+test('a custom React range lists the four React modules, never as a fallback, for every expose', () => {
+  const range = '^18.3.0 || ^19.0.0'
+  const shared = sharedFromManifest(
+    {
+      shared: [
+        // A non-singleton React share still never falls back.
+        ...REACT_SHARES.map((n, i) => entry(n, i !== 2, range, '19.3.1')),
+        entry('components-context', true, false),
+      ],
+    },
+    // The Vite usage file never lists React: React entries carry no
+    // `exposes`, so every expose is checked.
+    new Map([['./Counter', new Set(['components-context'])]])
+  )
+  expect(shared).toEqual({
+    react: { requiredVersion: range, fallback: false },
+    'react-dom': { requiredVersion: range, fallback: false },
+    'react-dom/client': { requiredVersion: range, fallback: false },
+    'react/jsx-runtime': { requiredVersion: range, fallback: false },
+    'components-context': {
+      requiredVersion: false,
+      fallback: false,
+      exposes: ['./Counter'],
+    },
+  })
+})
+
+test('a React range hosts cannot evaluate, or none, stays out (hosts assume ^19.0.0)', () => {
+  expect(
+    sharedFromManifest(
+      {
+        shared: [
+          entry('react', true, false),
+          entry('react-dom', true, 'workspace:*'),
+          entry('react-dom/client', true, null),
+        ],
+      },
+      null
+    )
+  ).toBeUndefined()
+})
+
 describe('readSharedUsage', () => {
   let dir: string
   beforeEach(async () => {

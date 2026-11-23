@@ -1,0 +1,9 @@
+{
+  "name": "react18-unit-lane",
+  "private": true,
+  "description": "React 18 for the dom-react18 unit tests (rstest.config.ts); its own install, outside the workspace.",
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

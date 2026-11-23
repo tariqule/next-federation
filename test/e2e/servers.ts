@@ -4,7 +4,7 @@
 //   NF_MODE     dev | prod (default dev). prod builds every app first.
 //   NF_BUNDLER  turbopack | webpack (default turbopack); Next hosts only.
 //               (Next 15 hosts: `--turbopack`, or their default webpack.)
-//   NF_SUITE    default | skew | installed (default default). skew: remote `a`
+//   NF_SUITE    default | skew | installed | react18 (default default). skew: remote `a`
 //               serves two builds (v1 and v2) side by side; prod only. A second
 //               `nf-serve` of the same builds on 4103 keeps one build
 //               (`--max-builds 1 --min-age-hours 0`), so `v1` is retired there.
@@ -12,6 +12,10 @@
 //               Next 16, and 3108/3109 the same under `next dev
 //               --disable-source-maps`; installed-dev.spec.ts), which install
 //               the packed packages into a real node_modules first.
+//               react18: the React 18 hosts (3110, Next 15 Pages Router;
+//               4201, a Vite SPA; react18.spec.ts), installed the same way
+//               on React 18.3.1, and the components remote's react18 build
+//               (4116). Only the apps that spec needs start (REACT18_APPS).
 //   NF_APPS     optional comma list of app keys (see APPS below) to start a
 //               subset, e.g. NF_APPS=issuer,remote-a,remote-b.
 //   NF_SHARE    '0': remotes build with `share: false` (no React sharing).
@@ -42,7 +46,12 @@
 //                         NF_VERCEL_PROD_URL when that is set (vercel.spec.ts).
 //   VITE_NF_ORIGIN_*      host-spa: remote origins (A, B, FAKE, C, RETIRED).
 //   VITE_NF_COMPONENTS_*  host-spa: the components remote (ORIGIN), a down
-//                         one (DOWN) and the Rspack-built one (RSPACK).
+//                         one (DOWN), the Rspack-built one (RSPACK) and the
+//                         links build (LINKS, router.spec.ts).
+//   NF_COMPONENTS_ORIGIN, VITE_NF_COMPONENTS_ORIGIN
+//                         the React 18 hosts: the 19-only signed build (c1),
+//                         for their NF-036 page. installed-host.ts sets the
+//                         rest of their components env.
 //                         Components remote ports: fixtures/components-keys.ts.
 // Ports below are the lane's: BASE_PORTS plus lane.ts's offset.
 //
@@ -55,13 +64,15 @@ import { COMPONENTS_PORTS } from './fixtures/components-keys.ts'
 import { laneName, lanePort } from './lane.ts'
 
 export type Mode = 'dev' | 'prod'
-export type Suite = 'default' | 'skew' | 'installed'
+export type Suite = 'default' | 'skew' | 'installed' | 'react18'
 
 export const MODE: Mode = process.env.NF_MODE === 'prod' ? 'prod' : 'dev'
 export const BUNDLER: 'turbopack' | 'webpack' =
   process.env.NF_BUNDLER === 'webpack' ? 'webpack' : 'turbopack'
 export const SUITE: Suite =
-  process.env.NF_SUITE === 'skew' || process.env.NF_SUITE === 'installed'
+  process.env.NF_SUITE === 'skew' ||
+  process.env.NF_SUITE === 'installed' ||
+  process.env.NF_SUITE === 'react18'
     ? process.env.NF_SUITE
     : 'default'
 /** How long Playwright waits for each app to answer (builds included). */
@@ -84,7 +95,9 @@ const BASE_PORTS = {
   hostInstalled16: 3107,
   hostInstalled15NoSourceMaps: 3108,
   hostInstalled16NoSourceMaps: 3109,
+  hostPagesReact18: 3110,
   hostSpa: 4200,
+  hostSpaReact18: 4201,
 } as const
 
 /** The lane this run uses ('' for the default lane). */
@@ -139,6 +152,16 @@ export const INSTALLED_HOSTS = [
   },
 ] as const
 export const INSTALLED_NEXT = { 15: '15.5.28', 16: '16.4.6' } as const
+/**
+ * The React 18 hosts (NF_SUITE=react18, react18.spec.ts): templates under
+ * test/fixtures installed on React 18.3.1 by fixtures/installed-host.ts.
+ */
+export const HOST_PAGES_REACT18 = `http://localhost:${PORTS.hostPagesReact18}`
+export const HOST_SPA_REACT18 = `http://localhost:${PORTS.hostSpaReact18}`
+/** The components remote's 19-only signed build (c1). */
+export const COMPONENTS_19 = `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.signed)}`
+/** The components remote's react18 build (c18, NF_SUITE=react18 only). */
+export const COMPONENTS_REACT18 = `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.react18)}`
 /**
  * Remote `c` (an older React, 19.2.9, for the sharing e2e) runs in prod
  * only: dev remotes never share React. It lives outside the pnpm workspace
@@ -199,6 +222,8 @@ type App = {
   shareOnly?: boolean
   /** Started only when NF_SUITE=installed. */
   installedOnly?: boolean
+  /** Started only when NF_SUITE=react18. */
+  react18Only?: boolean
 }
 
 /**
@@ -319,6 +344,7 @@ const spaEnv: Record<string, string> = {
   VITE_NF_COMPONENTS_ORIGIN: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.signed)}`,
   VITE_NF_COMPONENTS_DOWN: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.down)}`,
   VITE_NF_COMPONENTS_RSPACK: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.rspack)}`,
+  VITE_NF_COMPONENTS_LINKS: `http://127.0.0.1:${lanePort(COMPONENTS_PORTS.links)}`,
 }
 
 const hostEnv = (port: number): Record<string, string> => ({
@@ -460,6 +486,36 @@ export const APPS: App[] = [
     })
   ),
   {
+    // React 18, Next 15 Pages Router. Its server output also goes to
+    // serverLog('host-pages-next15-react18', port).
+    key: 'host-pages-next15-react18',
+    dir: null,
+    url: HOST_PAGES_REACT18,
+    command: withServerLog(
+      `node fixtures/installed-host.ts pages-next15-react18 ${PORTS.hostPagesReact18}`,
+      'host-pages-next15-react18',
+      PORTS.hostPagesReact18
+    ),
+    env: {
+      ...hostEnv(PORTS.hostPagesReact18),
+      NF_REMOTE_A_ORIGIN: REMOTE_A,
+      NF_COMPONENTS_ORIGIN: COMPONENTS_19,
+    },
+    react18Only: true,
+  },
+  {
+    // React 18, a Vite SPA under StrictMode.
+    key: 'host-spa-react18',
+    dir: null,
+    url: HOST_SPA_REACT18,
+    command: `node fixtures/installed-host.ts spa-react18 ${PORTS.hostSpaReact18}`,
+    env: {
+      VITE_NF_ORIGIN_A: REMOTE_A,
+      VITE_NF_COMPONENTS_ORIGIN: COMPONENTS_19,
+    },
+    react18Only: true,
+  },
+  {
     key: 'host-spa',
     dir: 'host-spa',
     url: `http://localhost:${PORTS.hostSpa}`,
@@ -473,11 +529,24 @@ export const APPS: App[] = [
 
 const only = process.env.NF_APPS?.split(',').map((s) => s.trim())
 
+/**
+ * NF_SUITE=react18 starts only these: the React 18 hosts and the remotes
+ * they embed (the components remote builds c1 and, in this suite, c18).
+ */
+const REACT18_APPS = new Set([
+  'remote-a',
+  'components-remote',
+  'host-pages-next15-react18',
+  'host-spa-react18',
+])
+
 /** Playwright `webServer` entries for this run. Apps whose folder does not exist yet are skipped. */
 export function webServers() {
   return APPS.filter((app) => !app.skewOnly || SUITE === 'skew')
     .filter((app) => !app.shareOnly || WITH_REMOTE_C)
     .filter((app) => !app.installedOnly || SUITE === 'installed')
+    .filter((app) => !app.react18Only || SUITE === 'react18')
+    .filter((app) => SUITE !== 'react18' || REACT18_APPS.has(app.key))
     .filter((app) => !only || only.includes(app.key))
     .filter(
       (app) =>

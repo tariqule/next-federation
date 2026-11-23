@@ -1,14 +1,20 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { federation } from '@module-federation/vite'
 import {
   COMPONENTS_DESCRIPTOR_FILE,
   COMPONENTS_DESCRIPTOR_PATH,
+  satisfies,
 } from '@next-federation/protocol'
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
 import { NFError, logger } from '@next-federation/sdk'
-import type { Plugin, PluginOption, UserConfig } from 'vite'
+import {
+  reactRouterDirectory,
+  routerShimAliases,
+  routerShimFile,
+} from '@next-federation/router/build'
+import type { Alias, Plugin, PluginOption, Rolldown, UserConfig } from 'vite'
 import {
   SHARED_USAGE_FILE,
   readSharedUsage,
@@ -21,7 +27,11 @@ import {
   collectServerIntegrity,
   createDescriptorFile,
 } from './descriptor.ts'
-import { HOST_REACT, resolveComponentsOptions } from './options.ts'
+import {
+  HOST_REACT,
+  ROUTER_PACKAGE,
+  resolveComponentsOptions,
+} from './options.ts'
 import type {
   ComponentsRemoteOptions,
   ResolvedComponentsOptions,
@@ -40,13 +50,172 @@ const VIRTUAL_ENTRY = 'virtual:next-federation/components-entry'
 const RESOLVED_ENTRY = `\0${VIRTUAL_ENTRY}`
 // Fast Refresh registration calls: a host page has no Vite preamble for them.
 const FAST_REFRESH_MARKER = /\$RefreshReg\$|\$RefreshSig\$/
+// Module Federation's virtual module for the shared `@next-federation/router`
+// (its share proxy): a `\0virtual:mf:` id (Rollup's mark for a module that is
+// no file) naming that package (`@` `-` `/` encoded as `_mf_0_` `_mf_2_` `_mf_1_`).
+const SHARE_MODULE =
+  /^\0virtual:mf:[^/\\]*__loadShare___mf_0_next_mf_2_federation_mf_1_router__loadShare__[^/\\]*$/
+
+/**
+ * `next/link` and `next/navigation`, rewired to the shims of this plugin's
+ * own `@next-federation/router` (exact matches only), unless `links: false`.
+ * A specifier the user lists in `shared` keeps its sharing. React Router is
+ * rewired in `resolveId` (see `rewiresReactRouter`).
+ */
+export function routerAliases(
+  resolved: Pick<ResolvedComponentsOptions, 'links' | 'shared'>
+): Record<string, string> {
+  if (!resolved.links) return {}
+  const aliases = routerShimAliases()
+  // Not the router itself: Module Federation turns that import into its
+  // share proxy (`ownRouter` names the bundled file).
+  delete aliases[`${ROUTER_PACKAGE}$`]
+  for (const key of Object.keys(aliases)) {
+    if (key.slice(0, -1) in resolved.shared) delete aliases[key]
+  }
+  return aliases
+}
+
+/** The specifiers rewired to the React Router shim, as one group. */
+const REACT_ROUTER = ['react-router', 'react-router-dom']
+/** The name the shim imports the real package by. */
+const REAL_REACT_ROUTER = '@next-federation/router/real-react-router'
+/** The React Router the shim is written for. */
+const REACT_ROUTER_RANGE = '>=7.0.0 <8'
+
+/**
+ * `react-router` and `react-router-dom`, those the root's own package.json
+ * declares (dependencies, devDependencies or peerDependencies).
+ */
+function declaredReactRouter(root: string): string[] {
+  let manifest: Record<string, unknown>
+  try {
+    manifest = JSON.parse(
+      readFileSync(join(root, 'package.json'), 'utf8')
+    ) as Record<string, unknown>
+  } catch {
+    return []
+  }
+  return REACT_ROUTER.filter((name) =>
+    ['dependencies', 'devDependencies', 'peerDependencies'].some((field) => {
+      const deps = manifest[field]
+      return (
+        typeof deps === 'object' && deps !== null && Object.hasOwn(deps, name)
+      )
+    })
+  )
+}
+
+/**
+ * Whether `react-router` and `react-router-dom` may go to the React Router
+ * shim: links on, the root's own package.json declares one of them, and
+ * neither is listed in `shared` (half of the group rewired would bundle a
+ * second React Router). The build rewires them only when, in addition,
+ * `react-router` 7 resolves from the remote's source (see the shim plugin).
+ */
+export function rewiresReactRouter(
+  resolved: Pick<ResolvedComponentsOptions, 'links' | 'shared'>,
+  root: string
+): boolean {
+  if (!resolved.links) return false
+  if (REACT_ROUTER.some((name) => name in resolved.shared)) return false
+  return declaredReactRouter(root).length > 0
+}
+
+/**
+ * The version of the `react-router` package a resolved file belongs to (the
+ * nearest package.json named `react-router` above it), or null.
+ */
+function reactRouterVersionOf(id: string): string | null {
+  const file = id.split('?')[0]!
+  for (let dir = dirname(file); ; dir = dirname(dir)) {
+    try {
+      const pkg = JSON.parse(
+        readFileSync(join(dir, 'package.json'), 'utf8')
+      ) as { name?: unknown; version?: unknown }
+      if (pkg.name === 'react-router') {
+        return typeof pkg.version === 'string' ? pkg.version : null
+      }
+    } catch {
+      // no package.json here: one folder up
+    }
+    if (dirname(dir) === dir) return null
+  }
+}
+
+/** The nearest `node_modules/<name>` of `from` or a parent folder. */
+function packageDirectory(from: string, name: string): string | null {
+  for (let dir = from; ; dir = dirname(dir)) {
+    const candidate = join(dir, 'node_modules', name)
+    try {
+      return realpathSync(candidate)
+    } catch {
+      // not here: one folder up
+    }
+    if (dirname(dir) === dir) return null
+  }
+}
+
+/**
+ * The packages a server build bundles for the React Router shim, by name:
+ * `react-router`, `react-router-dom` and the packages React Router depends
+ * on (`dependencies`, transitively; peers such as React stay shared). Vite
+ * leaves node_modules packages out of a server build (a `require`), and a
+ * host's server loader refuses that require (NF-030), so the remote's
+ * React Router components could only render in the browser. Names only:
+ * which files are bundled stays Vite's own resolution.
+ */
+export function reactRouterServerPackages(root: string): string[] {
+  const start = reactRouterDirectory(root)
+  // Not React Router 7 from the root: the build leaves React Router alone.
+  const version = start && reactRouterVersionOf(join(start, 'package.json'))
+  if (!version || !satisfies(version, REACT_ROUTER_RANGE)) return []
+  const names = new Set(REACT_ROUTER)
+  const queue: string[] = [start]
+  const seen = new Set<string>()
+  while (queue.length > 0) {
+    const dir = queue.shift()!
+    if (seen.has(dir)) continue
+    seen.add(dir)
+    let manifest: { dependencies?: Record<string, string> }
+    try {
+      manifest = JSON.parse(
+        readFileSync(join(dir, 'package.json'), 'utf8')
+      ) as typeof manifest
+    } catch {
+      continue
+    }
+    for (const name of Object.keys(manifest.dependencies ?? {})) {
+      if (HOST_REACT.includes(name)) continue
+      names.add(name)
+      // Node's lookup from the package's own folder: its node_modules, then
+      // every parent's (next to it in pnpm's layout, hoisted otherwise).
+      const found = packageDirectory(dir, name)
+      if (found) queue.push(found)
+    }
+  }
+  return [...names]
+}
+
+/** `{ 'next/link$': file }` as Vite aliases (exact matches). */
+function toViteAliases(aliases: Record<string, string>): Alias[] {
+  return Object.entries(aliases).map(([key, replacement]) => ({
+    find: new RegExp(
+      `^${key.slice(0, -1).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`
+    ),
+    replacement,
+  }))
+}
 
 function viteConfig(
   resolved: ResolvedComponentsOptions,
-  user: UserConfig
+  user: UserConfig,
+  aliases: Record<string, string>,
+  serverPackages: string[]
 ): UserConfig {
   const client = `${resolved.outDir}/client`
   return {
+    resolve: { alias: toViteAliases(aliases) },
     // Vite 8 can forward browser console output to the dev server's
     // terminal: for a remote that is every host page's console. Off, unless
     // the remote's own config sets it.
@@ -66,6 +235,10 @@ function viteConfig(
       client: {},
       ...(resolved.ssr && {
         ssr: {
+          // Bundled, never required (see reactRouterServerPackages).
+          ...(serverPackages.length > 0 && {
+            resolve: { noExternal: serverPackages },
+          }),
           build: {
             // Scratch output: Module Federation copies the server entry and
             // its chunks next to the browser build, which is what is served.
@@ -130,11 +303,17 @@ export function nextFederationComponents(
   // Vite tells plugins the command: read it from the CLI (`vite build`), or
   // from NF_VITE_COMMAND for programmatic builds. `config` checks the guess.
   const command = guessCommand(process.env, process.argv)
+  // Module Federation's shared config is fixed now.
   let resolved = resolveComponentsOptions(options, {
     command,
     env: process.env,
     now: builtAt,
   })
+  // The absolute shim files in use, and the React Router shim when React
+  // Router is rewired (set in `config`).
+  let shimFiles = new Set<string>()
+  let reactRouterShim: string | null = null
+  let viteRoot = process.cwd()
   if (command === 'build' && options.buildId === undefined) {
     process.env.NF_BUILD_ID ??= resolved.buildId
   }
@@ -166,7 +345,21 @@ export function nextFederationComponents(
         env: process.env,
         now: builtAt,
       })
-      return viteConfig(resolved, user)
+      viteRoot = resolve(user.root ?? process.cwd())
+      const aliases = routerAliases(resolved)
+      reactRouterShim = rewiresReactRouter(resolved, viteRoot)
+        ? routerShimFile('react-router')
+        : null
+      shimFiles = new Set([
+        ...Object.values(aliases),
+        ...(reactRouterShim ? [reactRouterShim] : []),
+      ])
+      return viteConfig(
+        resolved,
+        user,
+        aliases,
+        reactRouterShim ? reactRouterServerPackages(viteRoot) : []
+      )
     },
     resolveId: {
       filter: { id: /^virtual:next-federation\/components-entry$/ },
@@ -298,6 +491,101 @@ export function nextFederationComponents(
     },
   }
 
+  // React Router: `react-router` and `react-router-dom` go to the shim, and
+  // the shim's real package is what Vite itself resolves from the remote's
+  // source (Vite's resolver and conditions, no Node global folders).
+  //
+  // A shim imports `@next-federation/router` from inside that package, which
+  // Module Federation keeps as a plain import when the package is a
+  // workspace link. Resolved as the remote's own import instead, so it is
+  // the shared module (the host's copy, or this build's own). Only Module
+  // Federation's share module is taken from that resolution: anything else
+  // (a file found from the remote's root) is dropped, and the shim's import
+  // resolves from the shim, in this plugin's own install.
+  // Per environment: `react-router` as Vite resolves it from the remote's
+  // source when it is React Router 7 (what the shim is written for), else
+  // null (React Router is then left alone, with one warning).
+  const reactRouterChecks = new Map<
+    string,
+    Promise<Rolldown.ResolvedId | null>
+  >()
+  const shimPlugin: Plugin = {
+    name: 'nf:components-router-shims',
+    enforce: 'pre',
+    resolveId: {
+      order: 'pre',
+      async handler(source, importer, resolveOptions) {
+        const from = importer?.split('?')[0]
+        const asRemote = () => {
+          const [expose] = Object.values(resolved.exposes)
+          return resolve(viteRoot, expose!)
+        }
+        const reactRouter7 = (): Promise<Rolldown.ResolvedId | null> => {
+          const key = this.environment?.name ?? ''
+          let check = reactRouterChecks.get(key)
+          if (!check) {
+            check = this.resolve('react-router', asRemote(), {
+              ...resolveOptions,
+              skipSelf: true,
+            }).then((real) => {
+              const version = real ? reactRouterVersionOf(real.id) : null
+              if (
+                real &&
+                version !== null &&
+                satisfies(version, REACT_ROUTER_RANGE)
+              ) {
+                return real
+              }
+              const declared = declaredReactRouter(viteRoot).join(' and ')
+              logger.warnOnce(
+                'NF-002',
+                `components-react-router:${viteRoot}`,
+                `${join(viteRoot, 'package.json')} declares ${declared}, but ${version === null ? 'react-router does not resolve' : `the react-router that resolves is ${version}, not React Router 7,`} from ${viteRoot}: this build leaves react-router and react-router-dom imports as they are (links there navigate with the remote's own React Router, not the host's; next/link and next/navigation are still rewired). To rewire them, add react-router 7 as a direct dependency of the remote; set \`links: false\` to turn the rewiring (and this warning) off.`
+              )
+              return null
+            })
+            reactRouterChecks.set(key, check)
+          }
+          return check
+        }
+        if (
+          reactRouterShim &&
+          from !== reactRouterShim &&
+          REACT_ROUTER.includes(source)
+        ) {
+          return (await reactRouter7()) ? reactRouterShim : null
+        }
+        if (
+          reactRouterShim &&
+          from === reactRouterShim &&
+          source === REAL_REACT_ROUTER
+        ) {
+          const real = await reactRouter7()
+          if (!real) {
+            throw new NFError(
+              'NF-002',
+              `The React Router shim imports react-router 7, which does not resolve from ${viteRoot}. Add react-router 7 as a direct dependency, or set \`links: false\`.`
+            )
+          }
+          return real
+        }
+        if (
+          source !== ROUTER_PACKAGE ||
+          !from ||
+          !shimFiles.has(from) ||
+          !(ROUTER_PACKAGE in resolved.shared)
+        ) {
+          return null
+        }
+        const shared = await this.resolve(source, asRemote(), {
+          ...resolveOptions,
+          skipSelf: true,
+        })
+        return shared && SHARE_MODULE.test(shared.id) ? shared : null
+      },
+    },
+  }
+
   // Module id -> the shared specifiers it imports (browser build).
   const sharedImports = new Map<string, Set<string>>()
   const usagePlugin: Plugin = {
@@ -368,7 +656,7 @@ export function nextFederationComponents(
     },
   }
 
-  return [nfPlugin, usagePlugin, ...mf, refreshGuard]
+  return [nfPlugin, usagePlugin, shimPlugin, ...mf, refreshGuard]
 }
 
 /** The `shared` key an import specifier names (itself or a subpath), or null. */

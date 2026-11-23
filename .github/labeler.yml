@@ -19,6 +19,9 @@
 'pkg:server':
   - changed-files:
       - any-glob-to-any-file: 'packages/server/**'
+'pkg:router':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/router/**'
 'pkg:vite':
   - changed-files:
       - any-glob-to-any-file: 'packages/vite/**'

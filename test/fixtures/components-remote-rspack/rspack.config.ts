@@ -6,7 +6,15 @@
 //   PORT         listen port, baked into the public path at build time
 //   NF_OUT       output folder (default dist/components)
 //   NF_BUILD_ID  the build id (default: the build time, base36)
+//   NF_ROUTER_RANGE  the range of @next-federation/router the build accepts
+//                (the range-miss build: '>=0.99.0'; default the helper's)
+// RouterLink imports next/link and next/navigation: `routerShimAliases()`
+// rewires both to the router's shims, `routerSharedEntry()` shares the router.
 import { ModuleFederationPlugin } from '@module-federation/enhanced/rspack'
+import {
+  routerSharedEntry,
+  routerShimAliases,
+} from '@next-federation/router/build'
 import { rspack } from '@rspack/core'
 import type { Configuration } from '@rspack/core'
 import { join } from 'node:path'
@@ -33,6 +41,22 @@ const shared = {
   'react/jsx-runtime': hostProvided('^19.0.0'),
   // The host owns this context: the remote reads the host's value.
   'components-context': hostProvided(false),
+  // Bundled, labelled with a version above the host's on purpose: the
+  // host's router is still used whenever it satisfies the range
+  // (router.spec.ts). `loaded-first` is kept (it keeps Module Federation
+  // from loading every remote eagerly); it is not what makes the host win.
+  '@next-federation/router': {
+    ...routerSharedEntry()['@next-federation/router'],
+    version: '0.99.0',
+    ...(process.env.NF_ROUTER_RANGE && {
+      requiredVersion: process.env.NF_ROUTER_RANGE,
+    }),
+  },
+}
+// One source with the Vite fixture: the same component, built by Rspack.
+const exposes = {
+  './Counter': './src/Counter.tsx',
+  './RouterLink': '../components-remote/src/RouterLink.tsx',
 }
 
 const common = (): Configuration => ({
@@ -40,7 +64,11 @@ const common = (): Configuration => ({
   context: import.meta.dirname,
   entry: {},
   devtool: false,
-  resolve: { extensions: ['.tsx', '.ts', '.js'] },
+  resolve: {
+    extensions: ['.tsx', '.ts', '.js'],
+    // next/link and next/navigation -> the router's shims (exact matches).
+    alias: routerShimAliases(),
+  },
   module: {
     rules: [
       {
@@ -84,8 +112,9 @@ export const browser: Configuration = {
       name: 'components_rspack',
       filename: 'remoteEntry.js',
       library: { type: 'module' },
-      exposes: { './Counter': './src/Counter.tsx' },
+      exposes,
       shared,
+      shareStrategy: 'loaded-first',
       manifest: true,
       dts: false,
     }),
@@ -118,8 +147,9 @@ export const server: Configuration = {
       name: 'components_rspack',
       filename: 'remoteEntry.js',
       library: { type: 'commonjs-module' },
-      exposes: { './Counter': './src/Counter.tsx' },
+      exposes,
       shared,
+      shareStrategy: 'loaded-first',
       manifest: true,
       dts: false,
     }),

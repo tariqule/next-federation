@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "isolatedDeclarations": false,
+    "outDir": "./node_modules/.cache/tsc-test",
+    "rootDir": ".",
+    "types": ["node", "@rstest/core/globals"],
+    "paths": {
+      "@next-federation/router/real-react-router": [
+        "./node_modules/react-router"
+      ]
+    }
+  },
+  "include": ["__tests__"],
+  "references": [{ "path": "./tsconfig.lib.json" }]
+}

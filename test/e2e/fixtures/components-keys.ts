@@ -34,6 +34,27 @@ export const COMPONENTS_PORTS = {
   rspack: 4114,
   /** The Rspack-built remote, unsigned ru1. */
   rspackUnsigned: 4115,
+  /**
+   * Signed c18: the default exposes, accepting React '^18.3.0 || ^19.0.0'
+   * (the React 18 hosts, NF_SUITE=react18 only).
+   */
+  react18: 4116,
+  /**
+   * Signed rm1, the links build: accepts @next-federation/router >=9.0.0
+   * only (router.spec.ts).
+   */
+  routerMiss: 4117,
   /** Nothing listens here. */
   down: 4119,
+  /**
+   * The Rspack-built remote, signed rsm1: accepts @next-federation/router
+   * >=0.99.0 only, so it loads its bundled copy (router.spec.ts).
+   */
+  rspackRouterMiss: 4120,
+  /**
+   * Signed l1, the links build: the Router* exposes, whose next/link,
+   * next/navigation and react-router imports the build rewires
+   * (router.spec.ts).
+   */
+  links: 4121,
 } as const

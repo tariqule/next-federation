@@ -4,13 +4,19 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { act, useState } from 'react'
+import { act } from 'react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { BROWSER_ONLY_ATTR, createBindings } from '../src/components/render.tsx'
 import type { BindingsRuntime } from '../src/components/render.tsx'
-import type { RemoteModule, Thenable } from '../src/components/runtime.ts'
+import type { RemoteModule } from '../src/components/runtime.ts'
+import {
+  descriptor,
+  fakeRuntime,
+  fulfilled,
+  mod,
+} from './helpers/components-fakes.tsx'
 ;(
   globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
@@ -21,37 +27,6 @@ import type { RemoteModule, Thenable } from '../src/components/runtime.ts'
     happyDOM: { settings: { enableCSSFileLoading: boolean } }
   }
 ).happyDOM.settings.enableCSSFileLoading = true
-
-function Counter({ start = 0 }: { start?: number }) {
-  const [n] = useState(start)
-  return <span data-testid="counter">count {n}</span>
-}
-const mod: RemoteModule = { default: Counter }
-
-const fulfilled = <T,>(value: T): Thenable<T> =>
-  Object.assign(Promise.resolve(value), {
-    status: 'fulfilled' as const,
-    value,
-  })
-
-const descriptor = (ssr: boolean): RemoteComponentDescriptor => ({
-  remote: 'components',
-  name: 'components',
-  buildId: 'c1',
-  base: 'http://127.0.0.1:4110/b/c1/',
-  manifest: 'http://127.0.0.1:4110/b/c1/mf-manifest.json',
-  ssr: ssr ? { integrity: { 'mf-manifest.json': 'sha384-AAAA' } } : null,
-  maxBuilds: 5,
-})
-
-function fakeRuntime(server: RemoteModule | null): BindingsRuntime {
-  return {
-    load: () => fulfilled(mod),
-    serverLoad: () => fulfilled(server),
-    serverBlock: () => null,
-    registerShared: () => {},
-  }
-}
 
 async function serverThenHydrate(
   serverModule: RemoteModule | null,

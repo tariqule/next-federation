@@ -25,6 +25,14 @@ export const componentsFederation = defineFederation({
       origin: at(COMPONENTS_PORTS.rspackUnsigned),
       components: trusted,
     },
+    // The links build l1 (router.spec.ts): remote components written with
+    // next/link, next/navigation and react-router, rewired by the build.
+    links: { origin: at(COMPONENTS_PORTS.links), components: trusted },
+    // Accepts @next-federation/router >=0.99.0 only (router.spec.ts).
+    'rspack-router-miss': {
+      origin: at(COMPONENTS_PORTS.rspackRouterMiss),
+      components: trusted,
+    },
   },
 })
 

@@ -54,6 +54,7 @@
     "@module-federation/vite": "1.24.0",
     "@next-federation/island": "workspace:*",
     "@next-federation/protocol": "workspace:*",
+    "@next-federation/router": "workspace:*",
     "@next-federation/sdk": "workspace:*",
     "@next-federation/server": "workspace:*",
     "@vitejs/plugin-rsc": "0.5.39",

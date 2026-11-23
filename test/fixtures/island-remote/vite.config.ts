@@ -11,11 +11,21 @@ const NAME = process.env.NF_REMOTE ?? 'a'
 const LANE = laneName()
 const hostOrigin = (p: number) => `http://localhost:${lanePort(p)}`
 // 3104, 3105: the Next 15 hosts (next15.spec.ts); 3106-3109: the
-// installed-library hosts (installed-dev.spec.ts).
+// installed-library hosts (installed-dev.spec.ts); 3110, 4201: the React 18
+// hosts (react18.spec.ts; the SPA fetches envelopes from the browser).
 const INSTALLED = [3106, 3107, 3108, 3109]
-const HOSTS = [3100, 3101, 3102, 3103, 3104, 3105, ...INSTALLED, 4200].map(
-  hostOrigin
-)
+const REACT18 = [3110, 4201]
+const HOSTS = [
+  3100,
+  3101,
+  3102,
+  3103,
+  3104,
+  3105,
+  ...INSTALLED,
+  4200,
+  ...REACT18,
+].map(hostOrigin)
 const ROOT = import.meta.dirname
 // Vercel (vercel.json's buildCommand sets NF_VERCEL=1): the remote is served
 // from the project's production domain, never from a generated deployment

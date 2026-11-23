@@ -204,6 +204,19 @@ const HOST_RUNTIME_REQUIRE =
 const runtimeStores = new WeakMap<ServerScope, Record<PropertyKey, unknown>>()
 
 /**
+ * A new runtime store: its registry starts with the scope's plugins as the
+ * runtime's global plugins (`__GLOBAL_PLUGIN__`, which every instance the
+ * bundled runtime creates registers), so a remote's own instance resolves
+ * shared modules the host's way (hostSharesPlugin). The runtime fills in
+ * the rest of the registry itself.
+ */
+function seededRuntimeStore(scope: ServerScope): Record<PropertyKey, unknown> {
+  if (!scope.plugins?.length) return {}
+  const registry = { __GLOBAL_PLUGIN__: [...scope.plugins] }
+  return { __FEDERATION__: registry, __VMOK__: registry }
+}
+
+/**
  * The `globalThis` remote code is evaluated with: the real one, except for
  * the keys `isScoped` names, which live in `store` (the Proxy's target, so
  * the Proxy invariants hold for them). Nothing is written to the
@@ -462,7 +475,7 @@ export async function evaluateServerEntry(
   if (scope && bundlesRuntime) {
     // Its own runtime's registry, per layer (and the Vite keys, unused).
     let store = runtimeStores.get(scope)
-    if (!store) runtimeStores.set(scope, (store = {}))
+    if (!store) runtimeStores.set(scope, (store = seededRuntimeStore(scope)))
     global = scopedGlobalThis(
       store,
       (key) => RUNTIME_KEYS.has(key) || isViteKey(key)

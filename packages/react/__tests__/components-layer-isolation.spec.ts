@@ -311,6 +311,39 @@ describe('builds the loader can keep apart per layer (A, D)', () => {
     expect(fed?.__INSTANCES__ ?? []).not.toContainEqual({ name: 'gated' })
   })
 
+  test("a build that bundles its own runtime starts with the scope's plugins as its runtime's global plugins", async () => {
+    files['mf-manifest.json'] = manifest('2.9.2')
+    // As @module-federation/runtime-core's setGlobalDefaultVal and
+    // getPluginsToRegister: an existing registry is completed, and every
+    // instance registers its __GLOBAL_PLUGIN__.
+    files['remoteEntry.js'] = `
+      const g = globalThis;
+      if (!Object.prototype.hasOwnProperty.call(g, "__FEDERATION__")) {
+        Object.defineProperty(g, "__FEDERATION__", { value: {}, configurable: false, writable: true });
+      }
+      g.__FEDERATION__.__GLOBAL_PLUGIN__ ??= [];
+      g.__FEDERATION__.__INSTANCES__ ??= [];
+      exports.plugins = g.__FEDERATION__.__GLOBAL_PLUGIN__;
+      exports.init = async () => {};
+      exports.get = async () => () => ({});`
+    const plugin = { name: 'nf-components-host-shares' }
+    const name = `plugins_${Math.random().toString(36).slice(2)}`
+    const a = (await load({ ...scope(), plugins: [plugin] }, name)) as {
+      plugins?: unknown[]
+    }
+    const b = (await load({ ...scope(), plugins: [plugin] }, name)) as {
+      plugins?: unknown[]
+    }
+    expect(a.plugins).toEqual([plugin])
+    expect(b.plugins).toEqual([plugin])
+    // Each scope's registry has its own list; the process-wide one has none.
+    expect(a.plugins).not.toBe(b.plugins)
+    const fed = (
+      globalThis as { __FEDERATION__?: { __GLOBAL_PLUGIN__?: unknown[] } }
+    ).__FEDERATION__
+    expect(fed?.__GLOBAL_PLUGIN__ ?? []).not.toContain(plugin)
+  })
+
   test("a Vite build keeps the host runtime's process-wide registry", async () => {
     files['mf-manifest.json'] = manifest('1.24.0')
     files['remoteEntry.js'] = viteLike

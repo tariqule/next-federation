@@ -5,6 +5,8 @@ import { lstat, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   COMPONENTS_JWS_TYPE,
+  DEFAULT_REACT_RANGE,
+  HOST_REACT_MODULES,
   MAX_TYPE_FILES,
   canonicalJson,
   componentDescriptorBytes,
@@ -329,13 +331,8 @@ export async function writeTypesIndex(
   }
 }
 
-/** Always the host's (never in the descriptor's `shared`). */
-const HOST_REACT = new Set([
-  'react',
-  'react-dom',
-  'react-dom/client',
-  'react/jsx-runtime',
-])
+/** Always the host's: listed only for a range other than the default. */
+const HOST_REACT = new Set(HOST_REACT_MODULES)
 const BARE_SPECIFIER =
   /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
 
@@ -388,16 +385,38 @@ type ManifestShared = {
 }
 
 /**
+ * The React modules a built `mf-manifest.json` shares without a range hosts
+ * can read (none, `false` or not semver): they stay out of the descriptor,
+ * so hosts check those against DEFAULT_REACT_RANGE.
+ */
+export function reactSharesWithoutRange(manifest: unknown): string[] {
+  const list = (manifest as { shared?: unknown } | null)?.shared
+  const names: string[] = []
+  for (const item of Array.isArray(list) ? (list as ManifestShared[]) : []) {
+    const name = item?.name
+    if (typeof name !== 'string' || !HOST_REACT.has(name)) continue
+    const range = item.requiredVersion
+    if (typeof range === 'string' && isSemverRange(range)) continue
+    if (!names.includes(name)) names.push(name)
+  }
+  return names
+}
+
+/**
  * The descriptor's signed `shared` field from a built `mf-manifest.json`:
- * every shared module but React, with the range the host's copy must
+ * every shared module, with the range the host's copy must
  * satisfy (false: any; a range hosts cannot evaluate counts as any), and
  * `fallback` for a bundled copy (a non-singleton share: Module Federation
  * picks a satisfying copy or the build's own), with that copy's version.
  * React, React DOM and Next.js (every subpath: `react-dom/server`,
  * `next/head`) never fall back (`isNeverFallback`: hosts refuse such a
  * descriptor). `usage` (per expose) adds `exposes`; without it every expose
- * is checked. undefined when there is nothing to list, so
- * the digest of such a build is what older hosts compute.
+ * is checked. React's modules (HOST_REACT) are listed only with a valid
+ * range other than DEFAULT_REACT_RANGE, which hosts assume for an unlisted
+ * one: a default build's descriptor and digest stay what they were. They
+ * never carry `exposes` (every expose renders on the host's React, and the
+ * Vite usage file does not track React). undefined when there is nothing
+ * to list, so the digest of such a build is what older hosts compute.
  */
 export function sharedFromManifest(
   manifest: unknown,
@@ -408,8 +427,17 @@ export function sharedFromManifest(
   for (const item of Array.isArray(list) ? (list as ManifestShared[]) : []) {
     const name = item?.name
     if (typeof name !== 'string' || !BARE_SPECIFIER.test(name)) continue
-    if (HOST_REACT.has(name)) continue
     const range = item.requiredVersion
+    if (HOST_REACT.has(name)) {
+      if (
+        typeof range === 'string' &&
+        isSemverRange(range) &&
+        range !== DEFAULT_REACT_RANGE
+      ) {
+        out[name] = { requiredVersion: range, fallback: false }
+      }
+      continue
+    }
     // Hosts refuse a fallback copy of React, React DOM or Next.js (any subpath).
     const fallback = item.singleton === false && !isNeverFallback(name)
     const entry: ComponentSharedModule = {

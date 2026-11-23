@@ -1,14 +1,6 @@
 'use client'
 
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
-import { preinit } from 'react-dom'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { applyIdPrefix } from '@next-federation/protocol'
 import type {
@@ -31,6 +23,11 @@ import {
   sweep,
 } from './island-registry.ts'
 import type { IslandEntry } from './island-registry.ts'
+import {
+  ensureStylesheet,
+  supportsResources,
+  useIsomorphicLayoutEffect,
+} from './react-compat.ts'
 
 export type IslandMountProps = {
   /** From `fetchIsland` (or the Next helpers built on it); its HTML is rendered as-is. */
@@ -76,6 +73,12 @@ const defaultLoadBootstrap = (url: string): Promise<IslandBootstrapModule> =>
  * instead of rendering `<link precedence>`: a rendered one would hold the
  * whole commit (the host's navigation) until it loads, up to 60 s for a
  * stalled stylesheet.
+ *
+ * React 18 has no stylesheet resources. There a client mount appends a
+ * `<link data-precedence>` to the end of `<head>` (once per href, never
+ * removed); server HTML carries an inline `<link data-precedence>` ahead of
+ * the island markup, and hydration adds the same head copy, so the styles
+ * stay when the inline link leaves with its island.
  */
 const ISLAND_CSS_PRECEDENCE = 'next-federation'
 
@@ -121,7 +124,7 @@ export function IslandMount(props: IslandMountProps): ReactElement {
     setFrozen({ envelope, html: applyIdPrefix(envelope, mountId).html })
   }
   const latest = useRef(props)
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     latest.current = props
   })
   // False when this node is rendered on the server or hydrated, true when it
@@ -134,10 +137,14 @@ export function IslandMount(props: IslandMountProps): ReactElement {
   const [clientMount] = useState(clientNow)
   const css = [...new Set(envelope.css)]
   if (clientMount) {
-    for (const href of css) {
-      preinit(href, { as: 'style', precedence: ISLAND_CSS_PRECEDENCE })
-    }
+    for (const href of css) ensureStylesheet(href)
   }
+  const cssKey = css.join('\n')
+  // React 18, server-rendered or hydrated node: the head copy of its inline links.
+  useIsomorphicLayoutEffect(() => {
+    if (clientMount || supportsResources()) return
+    for (const href of css) ensureStylesheet(href)
+  }, [clientMount, cssKey])
 
   useEffect(() => {
     const el = ref.current
@@ -372,14 +379,23 @@ export function IslandMount(props: IslandMountProps): ReactElement {
     <>
       {clientMount
         ? null
-        : css.map((href) => (
-            <link
-              key={href}
-              rel="stylesheet"
-              href={href}
-              precedence={ISLAND_CSS_PRECEDENCE}
-            />
-          ))}
+        : css.map((href) =>
+            supportsResources() ? (
+              <link
+                key={href}
+                rel="stylesheet"
+                href={href}
+                precedence={ISLAND_CSS_PRECEDENCE}
+              />
+            ) : (
+              <link
+                key={href}
+                rel="stylesheet"
+                href={href}
+                data-precedence={ISLAND_CSS_PRECEDENCE}
+              />
+            )
+          )}
       <div
         ref={ref}
         data-nf-root=""

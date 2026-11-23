@@ -5,10 +5,17 @@ Runnable example: [examples/next-pages-router](../../examples/next-pages-router)
 This guide embeds an island from a remote app in a Next.js 16 or 15 Pages Router page. It covers the
 host only. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
 
-Supported: Next.js 16 or 15 (`>=15.5.28 <17`), React 19, Turbopack or webpack, Node 20.9 or newer.
+Supported: Next.js 16 or 15 (`>=15.5.28 <17`), React 19 or (Next 15) React 18.3,
+Turbopack or webpack, Node 20.9 or newer.
 On Next 15 the adapter uses the legacy caching model (fetch `revalidate` and tags):
 `cacheComponents` needs Next 16 ([Limits](limits.md#nextjs-15)). Next 14 is not supported. Next 15
 uses webpack unless you pass `--turbopack`; both work.
+
+A Pages Router host can stay on React 18 (tested on 18.3.1): install `react@18.3.1` and
+`react-dom@18.3.1` instead of the 19.3.1 pins in step 1. Islands need nothing else. A remote
+components build must list React 18 in its `react` range, or that component renders its fallback
+with `NF-036` ([React versions](remote-components.md#react-versions)). The App Router keeps Next's
+own React, so this applies to Pages Router hosts only.
 
 ## Remote components or islands
 

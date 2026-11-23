@@ -42,10 +42,50 @@ function workspaceSourceAliases(): Record<string, string> {
   return alias
 }
 
+/**
+ * The `dom-react18` project runs specs and library source on React 18.3.1
+ * from `test/react18` (its own install, outside the workspace). The aliases
+ * are exact, so every importer, React DOM included, gets the same copy.
+ */
+function react18Aliases(): Record<string, string> {
+  const modules = join(root, 'test/react18/node_modules')
+  return {
+    react$: join(modules, 'react/index.js'),
+    'react/jsx-runtime$': join(modules, 'react/jsx-runtime.js'),
+    'react/jsx-dev-runtime$': join(modules, 'react/jsx-dev-runtime.js'),
+    'react-dom$': join(modules, 'react-dom/index.js'),
+    'react-dom/client$': join(modules, 'react-dom/client.js'),
+    // React DOM 18's `browser` field maps `./server.js` to the browser
+    // build, which has no `renderToPipeableStream`.
+    'react-dom/server$': join(modules, 'react-dom/server.node.js'),
+  }
+}
+
+const routerVersion = (
+  JSON.parse(
+    readFileSync(join(root, 'packages/router/package.json'), 'utf8')
+  ) as { version: string }
+).version
+
+/**
+ * The React Router shim (`packages/router/src/shims/react-router.tsx`)
+ * imports the real package by this name; a remote build aliases it to its
+ * own react-router, the specs to the router package's.
+ */
+const realReactRouter = {
+  '@next-federation/router/real-react-router$': join(
+    root,
+    'packages/router/node_modules/react-router'
+  ),
+}
+
 const common = {
   globals: true,
+  source: {
+    define: { __NF_ROUTER_VERSION__: JSON.stringify(routerVersion) },
+  },
   testTimeout: 10000,
-  resolve: { alias: workspaceSourceAliases() },
+  resolve: { alias: { ...workspaceSourceAliases(), ...realReactRouter } },
 }
 
 export default defineConfig({
@@ -68,7 +108,22 @@ export default defineConfig({
       name: 'dom',
       testEnvironment: 'happy-dom',
       include: ['packages/*/__tests__/**/*.spec.tsx'],
+      // React 18 specs run in `dom-react18` only.
+      exclude: ['packages/*/__tests__/react18/**'],
       // The libraries use the automatic JSX runtime (tsconfig `react-jsx`).
+      tools: {
+        swc: { jsc: { transform: { react: { runtime: 'automatic' } } } },
+      },
+    },
+    {
+      ...common,
+      name: 'dom-react18',
+      testEnvironment: 'happy-dom',
+      // Every React 18 spec, in any package, goes in `__tests__/react18/`.
+      include: ['packages/*/__tests__/react18/**/*.spec.tsx'],
+      resolve: {
+        alias: { ...common.resolve.alias, ...react18Aliases() },
+      },
       tools: {
         swc: { jsc: { transform: { react: { runtime: 'automatic' } } } },
       },

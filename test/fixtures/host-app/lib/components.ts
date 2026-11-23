@@ -35,6 +35,24 @@ export const componentsFederation = defineFederation({
       origin: at(COMPONENTS_PORTS.rspackUnsigned),
       components: trusted,
     },
+    // The links build l1 (router.spec.ts): remote components written with
+    // next/link, next/navigation and react-router, rewired by the build.
+    links: { origin: at(COMPONENTS_PORTS.links), components: trusted },
+    // The same with the default 60 s descriptor cache (static pages).
+    'links-cached': {
+      origin: at(COMPONENTS_PORTS.links),
+      components: { ssr: trusted.ssr },
+    },
+    // Accept @next-federation/router >=9.0.0 (Vite) and >=0.99.0 (Rspack)
+    // only: no host has it (router.spec.ts).
+    'router-miss': {
+      origin: at(COMPONENTS_PORTS.routerMiss),
+      components: trusted,
+    },
+    'rspack-router-miss': {
+      origin: at(COMPONENTS_PORTS.rspackRouterMiss),
+      components: trusted,
+    },
   },
 })
 

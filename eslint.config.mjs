@@ -24,7 +24,15 @@ const restrict = (...patterns) => ({
   'no-restricted-imports': ['error', { patterns }],
 })
 
-const FRAMEWORK_FREE = ['sdk', 'protocol', 'core', 'react', 'server', 'island']
+const FRAMEWORK_FREE = [
+  'sdk',
+  'protocol',
+  'core',
+  'react',
+  'server',
+  'island',
+  'router',
+]
 
 export default tseslint.config(
   {
@@ -67,6 +75,24 @@ export default tseslint.config(
       (name) => `packages/${name}/**/*.{ts,tsx,mts,cts}`
     ),
     rules: restrict(internals, pluginRsc, frameworks),
+  },
+  {
+    // The router package imports react-router in two files only (the shim
+    // through the name a remote build aliases to the real package).
+    files: ['packages/router/**/*.{ts,tsx,mts,cts}'],
+    ignores: [
+      'packages/router/src/react-router.tsx',
+      'packages/router/src/shims/react-router.tsx',
+    ],
+    rules: restrict(internals, pluginRsc, frameworks, {
+      group: [
+        'react-router',
+        'react-router/*',
+        '@next-federation/router/real-react-router',
+      ],
+      message:
+        'Only packages/router/src/react-router.tsx and src/shims/react-router.tsx import react-router.',
+    }),
   },
   {
     files: ['packages/vite/src/plugin-rsc/**/*.{ts,tsx,mts,cts}'],

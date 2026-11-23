@@ -30,6 +30,11 @@ jobs:
         # so it has its own install (pnpm-workspace.yaml excludes it).
         run: pnpm install --frozen-lockfile --ignore-workspace
         working-directory: test/fixtures/island-remote-old-react
+      - name: React 18 unit lane (outside the workspace)
+        # The dom-react18 rstest project (rstest.config.ts) runs on React
+        # 18.3.1 from here, so it has its own install too.
+        run: pnpm install --frozen-lockfile --ignore-workspace
+        working-directory: test/react18
       - name: Commit messages
         if: github.event_name == 'pull_request'
         run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
@@ -93,6 +98,11 @@ jobs:
         # without source maps (installed-dev.spec.ts). They set NF_MIN_PASSED=4
         # (test/e2e/run.ts), one per installed host: a run where any test
         # skipped fails.
+        # react18: the React 18 hosts (Next 15 Pages Router, a Vite SPA),
+        # installed on React 18.3.1 from the packed packages (react18.spec.ts);
+        # NF_MIN_PASSED=6, so a run where every test skipped fails. Then the
+        # one dev-only test (no useLayoutEffect warning from the Pages host's
+        # server rendering under `next dev`) with NF_MIN_PASSED=1.
         cell:
           [
             dev,
@@ -102,6 +112,7 @@ jobs:
             skew,
             installed,
             'installed:webpack',
+            react18,
           ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

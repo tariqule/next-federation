@@ -8,6 +8,8 @@ import * as MFRuntime from '@module-federation/runtime'
 import { createInstance } from '@module-federation/runtime'
 import { parseComponentDescriptorFile } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import { navigationModule } from '@next-federation/router/host-navigation'
+import type { NavigationHooks } from '@next-federation/router/host-navigation'
 import { serverLoader } from '@next-federation/react/components/server-loader'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
@@ -25,6 +27,7 @@ import type {
 
 export type { RemoteComponentDescriptor }
 export type { ComponentEvent, RemoteModule, SharedModules }
+export type { NavigationHooks }
 export type {
   RemoteComponentOptions,
   RemoteComponentProps,
@@ -51,6 +54,10 @@ const runtime = createComponentRuntime({
     'react-dom': { version: ReactDOM.version, module: ReactDOM },
     'react-dom/client': { version: ReactDOM.version, module: ReactDOMClient },
   },
+  registerGlobalPlugins: (plugins) =>
+    MFRuntime.registerGlobalPlugins(
+      plugins as Parameters<typeof MFRuntime.registerGlobalPlugins>[0]
+    ),
   createInstance: (options) =>
     createInstance(
       options as unknown as Parameters<typeof createInstance>[0]
@@ -112,6 +119,24 @@ export const createRemoteComponent: Bindings['createRemoteComponent'] =
  */
 export function registerSharedModules(shared: SharedModules): void {
   runtime.registerShared(shared)
+}
+
+/**
+ * Gives remote components this host's navigation: their links (`next/link`,
+ * React Router's `Link` outside their own router, as their build rewired
+ * them) and navigation hooks go through these hooks. A plain `<a href>` is
+ * never intercepted. Call it once, at module scope of the module that
+ * renders the router.
+ * React Router's own hooks fit as they are:
+ * `provideNavigation({ useNavigate, useHref, useLocation })`. Without it,
+ * remote links do full page loads. Next.js hosts need not call it
+ * (`@next-federation/next/components` registers the Next.js router).
+ */
+export function provideNavigation(hooks: NavigationHooks): void {
+  const module = navigationModule(hooks)
+  registerSharedModules({
+    [module.ROUTER_SHARE_NAME]: { version: module.ROUTER_VERSION, module },
+  })
 }
 
 /**

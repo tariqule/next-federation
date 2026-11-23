@@ -105,6 +105,19 @@ async function expectPage(url, { includes = [], excludes = [], init } = {}) {
   return body
 }
 
+/**
+ * Requires a header link (`class="header-link"`) whose href starts with
+ * the storefront's basePath, `/store/`, in either attribute order.
+ */
+function expectHeaderLink(body, url) {
+  const anchors = body.match(/<a\b[^>]*>/g) ?? []
+  const ok = anchors.some(
+    (a) => a.includes('class="header-link"') && a.includes('href="/store/')
+  )
+  if (!ok) throw new Error(`${url}: no header link with href="/store/…"`)
+  console.log(`  ok  ${url}: header link href="/store/…"`)
+}
+
 /** Signs in through the storefront's demo session route; returns the Cookie header. */
 async function signIn(user, role) {
   const res = await fetch(`${STORE}/api/session`, {
@@ -133,7 +146,7 @@ async function smoke() {
 
   // Static shell: the CDP islands and the header components, server-rendered
   // (the header from the verified Rspack build, with the host's design system).
-  await expectPage(`${STORE}/en`, {
+  const shell = await expectPage(`${STORE}/en`, {
     includes: [
       'Trail shoe',
       'rendered by the CDP remote',
@@ -142,6 +155,9 @@ async function smoke() {
     ],
     excludes: [BROWSER_ONLY],
   })
+  // The header's next/link, rewired to the storefront's router: its hrefs
+  // get the /store basePath.
+  expectHeaderLink(shell, `${STORE}/en`)
   await expectPage(`${STORE}/fr/c/outdoor`, {
     includes: ['Veste de pluie', 'href="/store/fr/p/B1"'],
   })

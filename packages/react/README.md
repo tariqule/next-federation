@@ -2,7 +2,7 @@
 
 React components for `next-federation` hosts: `IslandMount` hydrates a remote island,
 `FederationErrorBoundary` contains its failures, and `createRemoteComponent` renders a remote's
-client component. Peer dependencies: `react ^19` and `react-dom ^19`.
+client component. Peer dependencies: `react ^18.3.0 || ^19.0.0` and `react-dom ^18.3.0 || ^19.0.0` (a Pages Router or SPA host can run React 18; an App Router host runs Next's own React).
 
 ## Install
 
@@ -81,6 +81,8 @@ export const Cart = createRemoteComponent<{ items: number }>({
 | `preloadRemoteComponent(descriptor, expose)` | Starts loading ahead of rendering (never rejects).                            |
 | `fetchDescriptorInBrowser(url, options?)`    | SPA: the current build, browser-only (`ssr: null`).                           |
 | `registerSharedModules(shared)`              | Provides modules to every remote component (`{ name: { version, module } }`). |
+| `provideNavigation(hooks)`                   | Gives remote links and navigation this host's router (once, at module scope). |
+| `NavigationHooks`                            | Its argument: `{ useNavigate, useHref?, useLocation? }` (React Router's fit). |
 | `COMPONENT_EVENT`                            | `'nf:component'`, the `document` event of every load and failure.             |
 
 The module is `'use client'` and imports `react`, `react-dom`, `react-dom/client` and

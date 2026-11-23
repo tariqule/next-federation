@@ -1,7 +1,11 @@
 import { resolveComponentsOptions } from '../src/components/options.ts'
 import { collectSharedUsage, mfSharedConfig } from '../src/components/shared.ts'
 
-const ctx = { command: 'build' as const, env: {}, now: 1_700_000_000_000 }
+const ctx = {
+  command: 'build' as const,
+  env: {},
+  now: 1_700_000_000_000,
+}
 const resolved = resolveComponentsOptions(
   {
     name: 'components',

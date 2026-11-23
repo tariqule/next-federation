@@ -317,6 +317,25 @@ const BARE_SPECIFIER =
   /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
 
 /**
+ * The React modules a remote component always takes from its host (Module
+ * Federation `import: false` singletons in the build).
+ */
+export const HOST_REACT_MODULES: readonly string[] = [
+  'react',
+  'react-dom',
+  'react-dom/client',
+  'react/jsx-runtime',
+]
+
+/**
+ * The React range of a build: the components plugin's default, and what a
+ * host assumes for each of HOST_REACT_MODULES a descriptor does not list.
+ * Builds made before remotes could declare a range were React 19-only, and a
+ * build at this default lists none, so its descriptor is unchanged.
+ */
+export const DEFAULT_REACT_RANGE = '^19.0.0'
+
+/**
  * Always the host's, never a fallback copy in a build: React, React DOM and
  * Next.js, each with every subpath (`react/jsx-dev-runtime`,
  * `react-dom/server`, `next/head`, ...). A second copy of any of them breaks
@@ -348,6 +367,10 @@ function parseShared(
     }
     if (typeof fallback !== 'boolean') return null
     if (fallback && isNeverFallback(name)) return null
+    // A React module is checked for every expose: hosts assume
+    // DEFAULT_REACT_RANGE for an unlisted one, so a per-expose list would let
+    // every other expose skip the check.
+    if (exposes !== undefined && HOST_REACT_MODULES.includes(name)) return null
     if (
       exposes !== undefined &&
       (!Array.isArray(exposes) || !exposes.every(isExposeKey))

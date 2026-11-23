@@ -10,6 +10,11 @@ import { Islands } from './routes/Islands.tsx'
 import { ModeA } from './routes/ModeA.tsx'
 import { ModeANext } from './routes/ModeANext.tsx'
 import { Retired } from './routes/Retired.tsx'
+import {
+  NoRouterHost,
+  ReactRouterHost,
+  provideReactRouterNavigation,
+} from './routes/Router.tsx'
 import { Shared } from './routes/Shared.tsx'
 import { Skew } from './routes/Skew.tsx'
 
@@ -23,6 +28,12 @@ if (
     provideHostReact()
 }
 
+// `/rr/*`: remote components navigate with this host's React Router
+// (provideNavigation). Module scope, before the first remote component loads.
+const reactRouter =
+  location.pathname === '/rr' || location.pathname.startsWith('/rr/')
+if (reactRouter) provideReactRouterNavigation()
+
 const routes: Record<string, () => ReactNode> = {
   '/islands': Islands,
   '/actions': Actions,
@@ -33,9 +44,18 @@ const routes: Record<string, () => ReactNode> = {
   '/shared': Shared,
   '/mode-a': ModeA,
   '/mode-a-next': ModeANext,
+  '/router-none': () => <NoRouterHost title="router none" />,
+  '/router/next': () => <NoRouterHost title="router next" />,
+  '/router-none/react-router': () => (
+    <NoRouterHost title="router none react-router" show="react-router" />
+  ),
+  '/router-none/internal': () => (
+    <NoRouterHost title="router none internal" show="internal" />
+  ),
 }
-const Page =
-  routes[location.pathname] ?? (() => <p>next-federation SPA host</p>)
+const Page = reactRouter
+  ? ReactRouterHost
+  : (routes[location.pathname] ?? (() => <p>next-federation SPA host</p>))
 
 function App() {
   const live = useLiveIslandCount()

@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./node_modules/.cache/tsc-lib",
+    "rootDir": "./src",
+    "types": ["node"],
+    // The React Router shim imports the real package by this name (the
+    // remote build aliases it to its own react-router).
+    "paths": {
+      "@next-federation/router/real-react-router": [
+        "./node_modules/react-router"
+      ]
+    }
+  },
+  "include": ["src"]
+}

@@ -53,6 +53,8 @@ export {
   parseComponentTypesIndex,
   MAX_TYPE_FILES,
   sha384Integrity,
+  DEFAULT_REACT_RANGE,
+  HOST_REACT_MODULES,
 } from './components.ts'
 export type {
   ComponentBuildAssets,
