@@ -43,6 +43,14 @@ const NEXT_RUNTIME_ONLY = new Set([
   '@next-federation/next:./dist/pages/components.js',
 ])
 
+// Shims a remote build aliases its router imports to. They import the real
+// package as `@next-federation/router/real-react-router`, a specifier only the
+// remote's bundler resolves (the components plugin, or `routerShimAliases()`).
+// Checked structurally below instead of imported.
+const REMOTE_BUILD_ONLY = new Set([
+  '@next-federation/router:./dist/shims/react-router.js',
+])
+
 const failures = []
 const imported = new Map()
 
@@ -59,6 +67,7 @@ if (existsSync(packagesDir)) {
       const file = join(packagesDir, dir, target)
       if (NEXT_BUNDLER_ONLY.has(`${manifest.name}:${target}`)) continue
       if (NEXT_RUNTIME_ONLY.has(`${manifest.name}:${target}`)) continue
+      if (REMOTE_BUILD_ONLY.has(`${manifest.name}:${target}`)) continue
       try {
         const mod = await import(pathToFileURL(file).href)
         imported.set(`${manifest.name}:${target}`, mod)
@@ -94,6 +103,25 @@ for (const key of NEXT_RUNTIME_ONLY) {
   }
   if (failures.length === before) {
     console.log('smoke-dist: next island-cache (structural) ok')
+  }
+}
+
+{
+  const before = failures.length
+  for (const key of REMOTE_BUILD_ONLY) {
+    const [name, target] = key.split(':')
+    const file = join(packagesDir, name.split('/')[1], target)
+    if (!existsSync(file)) {
+      failures.push(`${name} ${target}: missing`)
+      continue
+    }
+    const text = readFileSync(file, 'utf8')
+    if (!text.includes('"@next-federation/router/real-react-router"')) {
+      failures.push(`${name} ${target}: real-react-router import lost`)
+    }
+  }
+  if (failures.length === before) {
+    console.log('smoke-dist: router shims (structural) ok')
   }
 }
 
