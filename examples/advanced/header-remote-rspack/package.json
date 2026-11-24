@@ -10,7 +10,7 @@
     "@module-federation/enhanced": "2.9.3",
     "@next-federation/router": "workspace:*",
     "@next-federation/server": "workspace:*",
-    "@rspack/core": "2.3.0",
+    "@rspack/core": "2.3.3",
     "@types/node": "24.10.1",
     "@types/react": "19.3.0",
     "example-cart-context": "workspace:*",
