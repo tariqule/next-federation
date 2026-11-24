@@ -10,6 +10,6 @@ copy: it receives the host's module, and with it the host's context object. It w
 
 The storefront's pages are static shells that cannot know the visitor, so the provider asks the
 host's same-origin session route once in the browser. Islands do not use this: private islands
-get the user from a signed, audience-scoped token instead ([Identity](../../../docs/guides/identity.md)).
+get the user from a signed, audience-scoped token instead ([Identity](../../../docs/guides/identity.mdx)).
 
 Part of the [commerce platform](../README.md).

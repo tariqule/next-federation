@@ -3,11 +3,11 @@ title: 'Getting Started: Pages Router'
 description: Embed a remote app's UI in a Next.js Pages Router page with getIslandProps and RemoteIsland.
 ---
 
-Embed an island from a remote app in a Next.js Pages Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
+Embed an island from a remote app in a Next.js Pages Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.mdx).
 
 <Callout>
   **Good to know:** Requires Next.js 16 or 15 (`>=15.5.28 <17`), React 19 or 18.3, and Node 20.9 or
-  newer. To share client components instead, see [remote components](remote-components.md#islands-or-remote-components).
+  newer. To share client components instead, see [remote components](remote-components/overview.mdx#islands-or-remote-components).
 </Callout>
 
 ## Add an island to a page
@@ -101,7 +101,7 @@ A remote failure does not throw. `getIslandProps` returns `envelope: null`, `Rem
 
 ### Open the CSP
 
-Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.md) for a complete policy.
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.mdx) for a complete policy.
 
 </Step>
 </Steps>
@@ -114,11 +114,11 @@ Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP]
 
 ## Show per-user content
 
-Private islands work in `getServerSideProps` only. `private: true` in `getStaticProps` throws `NF-002`. See [Identity](identity.md).
+Private islands work in `getServerSideProps` only. `private: true` in `getStaticProps` throws `NF-002`. See [Identity](identity.mdx).
 
 ## Use islands in static pages
 
-In `getStaticProps`, the page's `revalidate` is the island cache. When the remote fails, you get the last good envelope (`stale: true`) or `envelope: null` ([Caching](caching.md#stale-if-error)). Regenerate soon either way:
+In `getStaticProps`, the page's `revalidate` is the island cache. When the remote fails, you get the last good envelope (`stale: true`) or `envelope: null` ([Caching](caching-reference.mdx#stale-if-error)). Regenerate soon either way:
 
 ```ts title="pages/index.tsx"
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
@@ -149,26 +149,26 @@ Matching islands then use the host's React (about 12 KB per remote instead). It 
 
 <Callout>
   **Good to know:** In a host with both routers, call it in `pages/_app.tsx`
-  too. It covers Pages Router pages only. See [Limits](limits.md#cost).
+  too. It covers Pages Router pages only. See [Limits](limits.mdx#cost).
 </Callout>
 
 ## Stay on React 18
 
-Install `react@18.3.1` and `react-dom@18.3.1` instead of the 19.3.1 pins. Islands need nothing else. A remote components build must list React 18 in its `react` range, or it renders its fallback with `NF-036` ([React versions](remote-components.md#react-versions)).
+Install `react@18.3.1` and `react-dom@18.3.1` instead of the 19.3.1 pins. Islands need nothing else. A remote components build must list React 18 in its `react` range, or it renders its fallback with `NF-036` ([React versions](remote-components/reference.mdx#react-versions)).
 
 ## Next steps
 
 <Cards>
-  <Card title="Writing an island remote" href="writing-an-island-remote.md">
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
     Build the Vite remote that serves the island.
   </Card>
-  <Card title="Caching" href="caching.md">
+  <Card title="Caching" href="caching.mdx">
     Static pages, ISR and stale islands.
   </Card>
-  <Card title="Deployment" href="deployment.md">
+  <Card title="Deployment" href="deployment.mdx">
     Ship a host and a remote, and handle build skew.
   </Card>
-  <Card title="Limits" href="limits.md">
+  <Card title="Limits" href="limits.mdx">
     What islands cannot do and what they cost.
   </Card>
 </Cards>

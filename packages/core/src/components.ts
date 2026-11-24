@@ -53,7 +53,7 @@ function notAComponentsRemote(response: Response): boolean {
   return response.status === 404 || /^\s*text\/html\b/i.test(type)
 }
 
-const NOT_A_COMPONENTS_REMOTE = ` The origin answered HTML / 404: is it a components remote (does it serve /_nf/components.json)? A Next.js app can't be a remote (see ${DOCS_BASE.replace(/\/errors\/$/, '/guides/')}sharing-components-from-a-next-app.md).`
+const NOT_A_COMPONENTS_REMOTE = ` The origin answered HTML / 404: is it a components remote (does it serve /_nf/components.json)? A Next.js app can't be a remote (see ${DOCS_BASE.replace(/\/errors\/$/, '/guides/')}remote-components/sharing-from-a-next-app.mdx).`
 
 function errorName(error: unknown): string {
   return typeof error === 'object' && error !== null

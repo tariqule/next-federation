@@ -20,4 +20,4 @@ The island build failed because a browser or SSR module imports a file that star
 
 ## Useful Links
 
-- [Server Actions in islands](../guides/server-actions.md)
+- [Server Actions in islands](../guides/server-actions.mdx)

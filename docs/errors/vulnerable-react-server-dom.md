@@ -19,5 +19,5 @@ An island remote renders islands and runs Server Actions with `react-server-dom-
 
 ## Useful Links
 
-- [Writing an island remote](../guides/writing-an-island-remote.md)
-- [Self-hosted build retention](../guides/self-hosted-skew.md)
+- [Writing an island remote](../guides/writing-an-island-remote.mdx)
+- [Self-hosted build retention](../guides/self-hosted-skew.mdx)

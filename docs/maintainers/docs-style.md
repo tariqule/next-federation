@@ -10,11 +10,14 @@ it in an `.mdx` page.
 - `docs/**/*.mdx` is a guide, reference or index page. It uses the components below and its own
   frontmatter.
 - Package READMEs stay plain Markdown, because npm renders them. They do not use components.
-- `docs/errors/<slug>.md` stays `.md` (see [Error pages](#error-pages)), as do `docs/architecture.md`
-  and `docs/protocol/v1.md` until their phase converts them.
+- `docs/errors/<slug>.md` stays `.md` (see [Error pages](#error-pages)), as does
+  `docs/protocol/v1.md`. Every other page is `.mdx`.
+- `docs/guides/remote-components.md`, `sharing-components-from-a-next-app.md` and `limits.md` are
+  stubs that point at the new pages. Released versions of the library link to those paths, so keep
+  them. They are not synced to the site. Neither are `docs/maintainers/*`.
 - `docs-site/scripts/sync-content.mjs` lists every page and its URL. Add a page there, and in the
   sidebar order it writes (`meta.json`), when you create one.
-- Link to the file, with its extension: `[Caching](caching.md)`, `[App Router](getting-started-app-router.mdx)`.
+- Link to the file, with its extension: `[Caching](caching.mdx)`, `[App Router](getting-started-app-router.mdx)`.
   The same link works on GitHub and on the site. Do the same in `href` on a `<Card>`.
 
 ## Rules
@@ -101,7 +104,7 @@ Use `nf-describe`.
 ## Next steps
 
 <Cards>
-  <Card title="Caching" href="caching.md">
+  <Card title="Caching" href="caching.mdx">
     Static pages, ISR and cacheComponents with islands.
   </Card>
 </Cards>
@@ -112,35 +115,52 @@ Use `nf-describe`.
 The library builds the link in every error message from `DOCS_BASE` in `@next-federation/sdk`
 (`packages/sdk/src/error-codes.ts`): `https://github.com/tariqule/next-federation/blob/main/docs/errors/<slug>.md`.
 A page renamed to `.mdx` breaks every released version's links. Error pages therefore stay `.md`,
-with the existing What happened / Why / How to fix layout, until a library change makes the builder
-resolve the new extension and the old URLs keep working. `pnpm check:error-docs` fails on an
-`.mdx` error page. `docs/errors/index.mdx` is the one `.mdx` there: the section index.
+with the layout Why This Error Occurred / Possible Ways to Fix It / Useful Links, until a library
+change makes the builder resolve the new extension and the old URLs keep working.
+`pnpm check:error-docs` fails on an `.mdx` error page. `docs/errors/index.mdx` is the one `.mdx`
+there: the section index.
 
 ## Page map
 
-Target sidebar, in order. A page marked "split" is long today: a later phase turns it into the pages
-listed under it. Nothing is deleted, only moved.
+The sidebar, in order. `docs-site/scripts/sync-content.mjs` is the source of truth: it lists every
+page, its URL and the sidebar order.
 
-- **Welcome**: `index.mdx`. Live demo.
-- **Getting Started**: App Router (done), Pages Router, SPA. Each is the task flow only, and links
-  to Limits and Caching for detail.
-- **Guides**: Writing an island remote, Server Actions in islands, Caching, Identity, CSP,
-  Migrating from nextjs-mf.
-- **Remote Components**: `remote-components.md` (10.8k words) is split into:
-  - Overview: what they are, islands or remote components, requirements (from the first three
-    sections).
-  - Build a components remote with Vite: create-vite, "Remote: build it", React versions.
-  - Build a components remote with Rspack or webpack (`nf-describe`).
-  - Configure the host: "Host: configure the remote", Types, client-only Next.js apps.
-  - Sharing stylesheets and modules, links that work in every host (one guide each).
-  - Reference: Integrity (server rendering), runtime behaviour, devtools, requirements and
-    limits, CSP.
-  - Sharing components from a Next.js app (exists).
-- **Deployment**: Overview, self-hosted skew, deploying a remote on Vercel.
+- **Welcome**: `index.mdx`, `live-demo.mdx`.
+- **Getting Started**: `getting-started-app-router.mdx`, `getting-started-pages-router.mdx`,
+  `getting-started-spa.mdx`. Each is the task flow only, and links to Limits and Caching for detail.
+- **Guides**: `writing-an-island-remote`, `server-actions` (+ `server-actions-reference`),
+  `caching` (+ `caching-reference`), `identity` (+ `identity-reference`), `csp`,
+  `migrating-from-nextjs-mf`. A `-reference` page holds the detail its guide links to.
+- **Remote Components** (`guides/remote-components/`): `overview`, `vite-remote`, `rspack-remote`,
+  `host-configuration`, `stylesheets`, `sharing-modules`, `links`, `reference`, `security`, `types`,
+  `sharing-from-a-next-app`.
+- **Deployment**: `deployment` (overview), `self-hosted-skew`, `deploying-a-remote-on-vercel`.
 - **API Reference**: one page per package, from its README (`api/<package>`).
 - **Errors**: `errors/index.mdx`, then one page per code.
-- **Architecture**: Architecture, Island protocol v1. Add **Limits** (now `guides/limits.md`) here
-  as a reference page, split into Supported versions, Islands, Remote components, Cost and Trust.
+- **Architecture**: `architecture.mdx`, `protocol/v1.md` and Limits (`guides/limits.mdx`, shown
+  here but served at `/docs/guides/limits`).
+
+## Word budgets
+
+Count prose with `node scripts/docs-prose-words.mjs <file|dir>...` (also `pnpm docs:words`). It
+strips frontmatter, code blocks, component tags, link URLs and table pipes. A page over its budget
+is split, or its detail moves to a reference page.
+
+| Page type                                                 | Budget (prose words) |
+| --------------------------------------------------------- | -------------------- |
+| Getting Started                                           | 450                  |
+| Guide (task flow)                                         | 700                  |
+| Remote Components guide                                   | 600                  |
+| Deployment guide                                          | 600                  |
+| Error page                                                | 170                  |
+| `caching-reference`                                       | 1200                 |
+| `identity-reference`                                      | 1000                 |
+| `server-actions-reference`                                | 800                  |
+| `remote-components/reference`, `security` and `types`     | 1500                 |
+| `architecture`                                            | 1200                 |
+| `limits`                                                  | 1800                 |
+
+The index, live demo, protocol spec and package READMEs have no budget.
 
 ## Checklist
 
@@ -150,6 +170,7 @@ listed under it. Nothing is deleted, only moved.
 - [ ] Detail moved to a reference page and linked, not deleted.
 - [ ] Every export, option and error code in the page exists in `packages/*/src` or a fixture.
 - [ ] Ends with "Next steps" cards.
+- [ ] Within the word budget (`node scripts/docs-prose-words.mjs <file>`).
 - [ ] Links point at files with extensions; inbound links to a renamed page updated
       (`grep -rn <old-name> .` outside `node_modules`).
 - [ ] `pnpm lint:docs`, `pnpm format:check`, `pnpm --filter docs-site build` and

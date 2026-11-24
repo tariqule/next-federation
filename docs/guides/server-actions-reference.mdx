@@ -11,6 +11,7 @@ An island form is not submittable until the island hydrates.
 
 - `<Form>` from `@next-federation/island` renders a `<fieldset disabled>` on the server and enables it after hydration.
 - A plain `<form action={action}>`, or a `formAction` outside `<Form>`, warns [`NF-035`](../errors/raw-form-action.md).
+- A `formAction` button inside `<Form>` in the same component is not reported. One from another component cannot be checked, so the warning can be a false alarm.
 - Put a form that must work without JavaScript in the host.
 
 ## Who the action runs as
@@ -30,6 +31,9 @@ Requests carry `Authorization: Bearer <token>`, never cookies. Without a token, 
 | `NF-032` | The request is malformed, or the body is too large (`413`).                                                                          |
 | `NF-038` | The response is not a Server Action response, or the call timed out ([details](../errors/action-request-failed.md)).                 |
 
+- `NF-032` is a `400` for a missing or malformed `X-NF-Action` header, an invalid `island` query parameter, a content type other than `text/plain;charset=UTF-8` or `multipart/form-data`, or an undecodable body. A `413` means the arguments exceed the limit, for example a file in `<Form>` ([limits](#body-limits-and-node_env)).
+- `NF-038` is a 5xx, a content type other than `text/x-component`, an empty body, or no answer within `actions.timeoutMs` (when set). A 5xx means the remote is down, restarting or timed out, or a proxy or CDN failed.
+- `NF-031` is also a plain function export in a `'use server'` file the bundler did not register.
 - The browser waits as long as the connection stays open. A proxy that cuts it surfaces as `NF-038`.
 - `actions.timeoutMs` covers the wait for the response, not a long streamed result.
 - Each call emits an `island:action` event (`ok`, `status`, `code`, `ms`, `retried`) on `onEvent` and the `nf:island` DOM event. It never includes arguments, results or tokens.

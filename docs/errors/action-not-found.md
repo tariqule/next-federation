@@ -19,4 +19,4 @@ The remote answered a Server Action request with `404`: the id in the `X-NF-Acti
 
 ## Useful Links
 
-- [Server Actions: errors](../guides/server-actions.md#errors)
+- [Server Actions: errors](../guides/server-actions-reference.mdx#errors)

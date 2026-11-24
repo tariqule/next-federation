@@ -17,4 +17,4 @@ The remote rejected a request to `/_nf/action` with `400` before running any act
 
 ## Useful Links
 
-- [Server Actions: errors](../guides/server-actions.md#errors)
+- [Server Actions: errors](../guides/server-actions-reference.mdx#errors)

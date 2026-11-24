@@ -12,4 +12,4 @@ A private island was requested but identity is not configured. Without an issuer
 
 ## Useful Links
 
-- [Identity](../guides/identity.md)
+- [Identity](../guides/identity.mdx)

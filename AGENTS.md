@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Guidance for contributors, human or AI, working in this repository. `next-federation` is an
-open-source runtime UI federation library for Next.js. Read [docs/architecture.md](docs/architecture.md)
+open-source runtime UI federation library for Next.js. Read [docs/architecture.mdx](docs/architecture.mdx)
 for how it fits together, [docs/conventions.md](docs/conventions.md) for code conventions and
 [CONTRIBUTING.md](CONTRIBUTING.md) for the pull request process. Read the package README before
 editing a package.
@@ -16,14 +16,23 @@ scripts/
   check-guardrails.mjs          grep guardrail (see Hard rules), with __tests__/check-guardrails.spec.ts
   check-error-docs.mjs          every NF code has docs/errors/<slug>.md (error pages stay .md)
   check-pack.mjs                every package packs its README, LICENSE and CHANGELOG
+  docs-prose-words.mjs          prose word count of docs pages, against the budgets in docs-style.md
   publish-wait.mjs              publish workflow step: `pnpm release`, waiting out npm staged versions
 docs/
-  index.mdx                     docs home (guides are .mdx, see maintainers/docs-style.md)
-  architecture.md               how islands and remote components work
+  index.mdx, live-demo.mdx      docs home and the live demo
+  architecture.mdx              how islands and remote components work
   protocol/v1.md                published island protocol spec
-  errors/<slug>.md              one page per NF code
-  guides/                       task guides (getting started, remotes, operations)
-  maintainers/                  notes for maintainers (docs style, dependency bump checks, live demo on Vercel)
+  errors/<slug>.md              one page per NF code (stay .md), errors/index.mdx the section index
+  guides/                       getting-started-*, writing-an-island-remote, caching, identity,
+                                server-actions, csp, deployment, limits, migrating-from-nextjs-mf;
+                                -reference pages hold the detail; remote-components.md,
+                                sharing-components-from-a-next-app.md and limits.md are stubs
+                                (released versions link to them)
+  guides/remote-components/     overview, vite-remote, rspack-remote, host-configuration,
+                                stylesheets, sharing-modules, links, reference, security, types,
+                                sharing-from-a-next-app
+  maintainers/                  notes for maintainers (docs style and word budgets, dependency bump
+                                checks, live demo on Vercel)
 docs-site/                      the documentation site (syncs Markdown and MDX from docs/ and packages/)
 packages/
   sdk/        logger.ts, error-codes.ts, nf-error.ts, index.ts
@@ -100,6 +109,7 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 - `pnpm typecheck`: `tsc -b`
 - `pnpm lint`: ESLint (flat config)
 - `pnpm lint:docs`: inclusive-language check on docs
+- `pnpm docs:words`: prose word count per docs page (budgets in `docs/maintainers/docs-style.md`)
 - `pnpm guardrail`: grep guardrail (run before building)
 - `pnpm check:error-docs`: every error code has a docs page (run after building)
 - `pnpm format` / `pnpm format:check`: Prettier

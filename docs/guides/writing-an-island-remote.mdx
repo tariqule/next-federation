@@ -6,7 +6,7 @@ description: Build a Vite remote that renders React Server Components and serves
 Build a Vite 8 remote that runs React Server Components and answers island requests from hosts. To embed an island in a host, see [Getting Started](getting-started-app-router.mdx).
 
 <Callout>
-  **Good to know:** Requires Node `^20.19.0 || >=22.12.0`. One remote can also ship [remote components](remote-components.md).
+  **Good to know:** Requires Node `^20.19.0 || >=22.12.0`. One remote can also ship [remote components](remote-components/overview.mdx).
 </Callout>
 
 ## Start from create-vite
@@ -43,7 +43,7 @@ Remove any caret that `create-vite` wrote in `package.json`.
   `vite build` refuses older versions with
   [`NF-041`](../errors/vulnerable-react-server-dom.md). After an upgrade,
   [remove affected
-  builds](../errors/vulnerable-react-server-dom.md#then-remove-every-build-made-with-an-affected-version).
+  builds](self-hosted-skew.mdx#remove-builds-with-a-security-advisory).
 </Callout>
 
 </Step>
@@ -145,7 +145,7 @@ vite build                                  # writes dist/<buildId>/{client,ssr,
 nf-serve --dir dist --port 4100             # from @next-federation/server
 ```
 
-`vite` serves the remote in development. See [Deployment](deployment.md) for production.
+`vite` serves the remote in development. See [Deployment](deployment.mdx) for production.
 
 </Step>
 </Steps>
@@ -187,7 +187,7 @@ export default async function MyOrders() {
 }
 ```
 
-`getIdentity()` works in Server Components and [Server Actions](server-actions.md). In client code it throws `NF-002`: pass what the client needs as props. See [Identity](identity.md).
+`getIdentity()` works in Server Components and [Server Actions](server-actions.mdx). In client code it throws `NF-002`: pass what the client needs as props. See [Identity](identity.mdx).
 
 ## Link to host pages
 
@@ -202,7 +202,7 @@ import { Link } from '@next-federation/island'
 
 Run `vite` and point the host at it (`origin: 'http://localhost:4100'`). There is no Fast Refresh: edit, then reload the host page.
 
-The host caches public envelopes for 60 seconds, also in `next dev`. Add `dynamic` while you work ([Caching](caching.md)):
+The host caches public envelopes for 60 seconds, also in `next dev`. Add `dynamic` while you work ([Caching](caching.mdx)):
 
 ```tsx title="app/page.tsx"
 <RemoteIsland
@@ -221,7 +221,7 @@ The host caches public envelopes for 60 seconds, also in `next dev`. Add `dynami
 ## Know the rules
 
 - Props are plain JSON. React context does not cross into an island.
-- Do not nest islands. Embed both from the host ([Limits](limits.md#what-an-island-cannot-do)).
+- Do not nest islands. Embed both from the host ([Limits](limits.mdx#what-an-island-cannot-do)).
 - `<title>`, `<meta>` and `<link>` never reach the host `<head>` ([`NF-018`](../errors/island-html-stripped.md) in development).
 - Pass Server Actions to client components as props ([`NF-034`](../errors/server-action-imported-by-client.md)). Use `<Form>` from `@next-federation/island` ([`NF-035`](../errors/raw-form-action.md)).
 - Keep islands small. The host warns above 100 KB per envelope ([`NF-024`](../errors/envelope-too-large.md)).
@@ -230,16 +230,16 @@ The host caches public envelopes for 60 seconds, also in `next dev`. Add `dynami
 ## Next steps
 
 <Cards>
-  <Card title="Identity" href="identity.md">
+  <Card title="Identity" href="identity.mdx">
     Private islands, signing keys and key rotation.
   </Card>
-  <Card title="Deployment" href="deployment.md">
+  <Card title="Deployment" href="deployment.mdx">
     Serve a remote in production and keep old builds.
   </Card>
-  <Card title="Server Actions" href="server-actions.md">
+  <Card title="Server Actions" href="server-actions.mdx">
     Run actions from an island.
   </Card>
-  <Card title="Limits" href="limits.md">
+  <Card title="Limits" href="limits.mdx">
     What islands cannot do and what they cost, including JS cost.
   </Card>
 </Cards>

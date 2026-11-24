@@ -36,9 +36,9 @@ What the components show:
 Why not share `next/link` itself (`import: false`, host-provided)? It would exist only in a Next.js
 host, and an Rspack build's descriptor has no per-component list of shared modules, so every
 exposed component would then need it: an SPA host could load none of them (`NF-036`; see "Rspack
-and webpack remotes get coarser checks" in [Limits](../../../docs/guides/limits.md)). The rewired
+and webpack remotes get coarser checks" in [Limits](../../../docs/guides/limits.mdx)). The rewired
 `next/link` works on every host. See
-[Links that work in every host](../../../docs/guides/remote-components.md#links-that-work-in-every-host).
+[Links that work in every host](../../../docs/guides/remote-components/links.mdx).
 
 ## Run it
 
@@ -54,4 +54,4 @@ Check it: <http://127.0.0.1:13404/_nf/components.json>. In the storefront, turn 
 page built?**: the header pieces say "SSR on host (signed)". Without the matching public key the
 storefront would render them in the browser only (`NF-028`).
 
-Guide: [Remotes built with Rspack or webpack](../../../docs/guides/remote-components.md#remotes-built-with-rspack-or-webpack).
+Guide: [Remotes built with Rspack or webpack](../../../docs/guides/remote-components/rspack-remote.mdx).

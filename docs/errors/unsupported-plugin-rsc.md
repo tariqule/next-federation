@@ -14,4 +14,4 @@ The `@vitejs/plugin-rsc` that `@next-federation/vite` resolved is not the versio
 
 ## Useful Links
 
-- [Writing an island remote](../guides/writing-an-island-remote.md)
+- [Writing an island remote](../guides/writing-an-island-remote.mdx)

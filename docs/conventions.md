@@ -36,8 +36,8 @@ conventions follow the Next.js and Module Federation repositories.
   `console.*`.
 - Errors have numbered codes (`NF-001` and up) in the `error-codes` module of
   `@next-federation/sdk`.
-- Every user-facing error message links to a docs page, `docs/errors/<slug>.md`. Each page says what
-  happened, why, and how to fix it. `pnpm check:error-docs` fails when a code has no page, or when a
+- Every user-facing error message links to a docs page, `docs/errors/<slug>.md`. Each page says why
+  the error occurred and how to fix it. `pnpm check:error-docs` fails when a code has no page, or when a
   page is `.mdx` (the library links to the `.md` URL, see [Documentation style](maintainers/docs-style.md)).
 
 ## Docs
@@ -45,7 +45,11 @@ conventions follow the Next.js and Module Federation repositories.
 - Every package folder has a `README.md` (plain Markdown, for npm). Read the READMEs on the path
   before you edit a file.
 - Pages in `docs/` are `.mdx` and follow [Documentation style](maintainers/docs-style.md): the
-  Next.js docs style, with Fumadocs components. Error pages stay `.md`.
+  Next.js docs style, with Fumadocs components and a word budget per page
+  (`node scripts/docs-prose-words.mjs docs`). Error pages stay `.md`.
+- A new page is listed in `docs-site/scripts/sync-content.mjs` (URL and sidebar order). The guides
+  under `docs/guides/` are task flows. Detail goes to a `-reference` page, Limits or Architecture.
+- Renaming a page that a released version links to leaves a stub at the old path.
 - Write in plain, direct prose. Use the same terms throughout: islands, remote components, host,
   remote, build, descriptor, envelope.
 - Change docs in the same pull request as the behavior they describe.

@@ -11,5 +11,5 @@ An island's own code threw during render or in an effect and nothing caught it. 
 
 ## Useful Links
 
-- [Limits](../guides/limits.md)
-- [Deployment: self-hosted nf-serve](../guides/deployment.md#self-hosted-nf-serve)
+- [Limits](../guides/limits.mdx)
+- [Deployment: self-hosted nf-serve](../guides/deployment.mdx#self-hosted-with-nf-serve)

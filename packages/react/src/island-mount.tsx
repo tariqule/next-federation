@@ -403,7 +403,7 @@ export function IslandMount(props: IslandMountProps): ReactElement {
         data-nf-build={envelope.buildId}
         data-nf-state="booting"
         suppressHydrationWarning
-        // Trust boundary (docs/guides/limits.md "Trust"): the host trusts its
+        // Trust boundary (docs/guides/limits.mdx "Trust"): the host trusts its
         // configured remotes' HTML and scripts by design, as it runs their
         // bootstrap module anyway. This HTML is the island SSR output of an
         // allowlisted remote: the envelope came through `fetchIsland`

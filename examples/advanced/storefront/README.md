@@ -53,5 +53,5 @@ Alone: `pnpm examples:keys` once, start the remotes (their READMEs), then
 the remotes, so start them first.
 
 Guides: [App Router host](../../../docs/guides/getting-started-app-router.mdx),
-[Caching](../../../docs/guides/caching.md), [Identity](../../../docs/guides/identity.md),
-[Mixed-router hosts](../../../docs/guides/remote-components.md#mixed-router-hosts).
+[Caching](../../../docs/guides/caching.mdx), [Identity](../../../docs/guides/identity.mdx),
+[Mixed-router hosts](../../../docs/guides/remote-components/security.mdx#mixed-router-hosts).

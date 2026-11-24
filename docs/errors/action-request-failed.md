@@ -17,4 +17,4 @@ A Server Action request got a response that is not a Server Action response and 
 
 ## Useful Links
 
-- [Server Actions: errors](../guides/server-actions.md#errors)
+- [Server Actions: errors](../guides/server-actions-reference.mdx#errors)

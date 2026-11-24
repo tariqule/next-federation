@@ -43,7 +43,7 @@ For each remote, `nf-types`:
 3. Downloads the index and checks its bytes against the signed sha384 (`NF-027`). An invalid index is `NF-029`: more than 2000 files, or a path that is not a plain relative `.d.ts` path.
 4. Downloads each file (at most 1 MiB per file and 20 MiB per build), checks its sha384 (`NF-027`) and writes the bytes unchanged. Only then does it replace `next-federation-types/<remote>/`.
 
-A failed remote keeps the types it had, and the command exits 1. A verified build that publishes no types removes the remote's previous folder. `nf-types` needs the remote reachable (`NF-029` otherwise). Nothing downloaded ever runs.
+A remote also fails on an HTTP error, a network error, a redirect, a timeout or a descriptor over 1 MiB. A failed remote keeps the types it had, and the command exits 1. A verified build that publishes no types removes the remote's previous folder. `nf-types` needs the remote reachable (`NF-029` otherwise). Nothing downloaded ever runs.
 
 ## Next steps
 

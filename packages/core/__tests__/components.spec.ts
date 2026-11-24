@@ -832,7 +832,7 @@ test('B5: a components.json 404 or HTML page hints that the origin is no compone
     expect(detail).toMatch(
       /the origin answered HTML \/ 404: is it a components remote \(does it serve \/_nf\/components\.json\)\?/i
     )
-    expect(detail).toContain('sharing-components-from-a-next-app.md')
+    expect(detail).toContain('remote-components/sharing-from-a-next-app.mdx')
   }
   // A real outage gets no such hint.
   const down = await run(() => new Response('x', { status: 503 }))

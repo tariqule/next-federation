@@ -17,4 +17,4 @@ A request came from a host that is not on the remote's allowed list. Remotes onl
 
 ## Useful Links
 
-- [Writing an island remote: host origins and issuers must match exactly](../guides/writing-an-island-remote.md#host-origins-and-issuers-must-match-exactly)
+- [Writing an island remote: host origins and issuers must match exactly](../guides/writing-an-island-remote.mdx#match-host-origins-and-issuers-exactly)

@@ -15,7 +15,9 @@ The host evaluates remote server code only for a build it can verify. It renders
 
 Two optional checks: `components.name` (the expected container name) and `components.ssr.maxAge` (seconds a signed build stays acceptable after its build time; signed builds only).
 
-A descriptor whose `digest` does not match its payload, or whose `iat` is more than 60 seconds in the future, is refused (`NF-027`). Each server file the host fetches must match its sha384 in the verified descriptor before anything runs. A mismatch renders the build in the browser only (`NF-027`).
+A descriptor whose `digest` does not match its payload, or whose `iat` is more than 60 seconds in the future, is refused (`NF-027`). Each server file the host fetches must match its sha384 in the verified descriptor before anything runs. A mismatch renders the build in the browser only (`NF-027`). The same happens for a key not in `publicKeys`, fields that differ from the signed payload, a pinned digest that differs, or a server file the descriptor does not list. Nothing is evaluated.
+
+A descriptor that was not verified in this process, or no longer fits the origin, `components.name` or `ssr.maxAge`, renders in the browser only (`NF-028`).
 
 Pass only the value of `getComponentDescriptor` (or `fetchDescriptorInBrowser`) as the `descriptor` prop. The server does not trust the prop: it evaluates a build only if the descriptor was verified in this process, or re-verifies it against the keys `defineFederation` registered.
 

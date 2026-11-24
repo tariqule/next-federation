@@ -15,4 +15,4 @@ Props passed to an island cross a network boundary, so values that are not plain
 
 ## Useful Links
 
-- [Limits](../guides/limits.md)
+- [Limits](../guides/limits.mdx)

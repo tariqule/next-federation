@@ -21,6 +21,6 @@ NF-007: Island fetch failed. Island "Hello" from remote "shop" failed at https:/
 
 ## Useful Links
 
-- [Caching: stale-if-error](../guides/caching.md#stale-if-error)
-- [Sharing components from a Next.js app](../guides/sharing-components-from-a-next-app.md)
+- [Caching: stale-if-error](../guides/caching-reference.mdx#stale-if-error)
+- [Sharing components from a Next.js app](../guides/remote-components/sharing-from-a-next-app.mdx)
 - [NF-008: Island fetch timed out](island-fetch-timeout.md)

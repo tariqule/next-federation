@@ -21,4 +21,4 @@ A remote component threw while it rendered. Only that component is affected: the
 
 ## Useful Links
 
-- [Remote components: runtime behaviour](../guides/remote-components.md#runtime-behaviour)
+- [Remote components: runtime behaviour](../guides/remote-components/reference.mdx#runtime-behaviour)

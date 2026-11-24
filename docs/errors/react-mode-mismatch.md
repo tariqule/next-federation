@@ -11,4 +11,4 @@ The island was rendered with one React mode (development or production) and hydr
 
 ## Useful Links
 
-- [Writing an island remote](../guides/writing-an-island-remote.md)
+- [Writing an island remote](../guides/writing-an-island-remote.mdx)

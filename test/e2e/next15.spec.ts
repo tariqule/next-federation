@@ -61,7 +61,7 @@ const DEV_WEBPACK = MODE === 'dev' && BUNDLER === 'webpack'
 // so under `next dev` Next's tooling treats it as app code and React's debug
 // info, which Next 15 inlines in the App Router's HTML and RSC payload,
 // carries what it awaits (cookies, headers, the minted token; NF-037,
-// docs/guides/limits.md). The leak check is skipped only there:
+// docs/guides/limits.mdx). The leak check is skipped only there:
 // installed-dev.spec.ts runs it against a real install under `next dev`.
 const LINKED_DEV = (host: Host) => MODE === 'dev' && host.router === 'app'
 

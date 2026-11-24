@@ -13,6 +13,6 @@ A remote component could not be loaded: its build descriptor could not be fetche
 
 ## Useful Links
 
-- [Remote components: runtime behaviour](../guides/remote-components.md#runtime-behaviour)
-- [Content Security Policy](../guides/csp.md)
-- [Sharing components from a Next.js app](../guides/sharing-components-from-a-next-app.md)
+- [Remote components: runtime behaviour](../guides/remote-components/reference.mdx#runtime-behaviour)
+- [Content Security Policy](../guides/csp.mdx)
+- [Sharing components from a Next.js app](../guides/remote-components/sharing-from-a-next-app.mdx)

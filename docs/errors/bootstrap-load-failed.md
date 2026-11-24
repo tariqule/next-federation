@@ -17,5 +17,5 @@ The browser could not load the island's client code: its bootstrap script or a c
 
 ## Useful Links
 
-- [Content Security Policy](../guides/csp.md)
-- [Self-hosted build retention](../guides/self-hosted-skew.md)
+- [Content Security Policy](../guides/csp.mdx)
+- [Self-hosted build retention](../guides/self-hosted-skew.mdx)

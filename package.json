@@ -11,6 +11,7 @@
     "test": "rstest",
     "typecheck": "tsc -b",
     "lint": "eslint .",
+    "docs:words": "node scripts/docs-prose-words.mjs docs",
     "lint:docs": "alex README.md AGENTS.md docs \"docs/**/*.mdx\"",
     "guardrail": "node scripts/check-guardrails.mjs",
     "check:error-docs": "node scripts/check-error-docs.mjs",

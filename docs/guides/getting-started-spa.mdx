@@ -3,13 +3,13 @@ title: 'Getting Started: SPA'
 description: Embed a remote app's UI in a client-side React app (Vite) with fetchIsland and IslandMount.
 ---
 
-Embed an island from a remote app in a client-side React app. The browser fetches envelopes (CORS) and mounts them with `IslandMount`. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
+Embed an island from a remote app in a client-side React app. The browser fetches envelopes (CORS) and mounts them with `IslandMount`. To build the remote, see [Writing an island remote](writing-an-island-remote.mdx).
 
 <Callout>
   **Good to know:** Requires React 19 or 18.3, and Node 20.9 or newer. An island
   boots as its own React root, so a React 18 host needs no other change. To
   share client components instead, see [remote
-  components](remote-components.md#islands-or-remote-components).
+  components](remote-components/overview.mdx#islands-or-remote-components).
 </Callout>
 
 ## Add an island to a page
@@ -76,7 +76,7 @@ export function Shop() {
 
 ### Open the CSP
 
-Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.md) for a complete policy. `IslandMount` loads stylesheets itself.
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.mdx) for a complete policy. `IslandMount` loads stylesheets itself.
 
 </Step>
 </Steps>
@@ -84,7 +84,7 @@ Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP]
 <Callout>
   **Good to know:** The island's HTML shows once the envelope arrives. Props are
   plain JSON, and React context does not cross into an island
-  ([Limits](limits.md)). Per-user islands need a server to mint tokens.
+  ([Limits](limits.mdx)). Per-user islands need a server to mint tokens.
 </Callout>
 
 ## Tune timeouts and retries
@@ -119,22 +119,22 @@ Render remote components inside your router. A remote `<Link href="/orders">` th
 <Callout>
   **Good to know:** For another router, `useNavigate()` returns `(href, { replace?, scroll? }) => void`.
   `useHref(href)` and `useLocation()` (`{ pathname, search }`) are optional. See
-  [Links that work in every host](remote-components.md#links-that-work-in-every-host).
+  [Links that work in every host](remote-components/links.mdx).
 </Callout>
 
 ## Next steps
 
 <Cards>
-  <Card title="Writing an island remote" href="writing-an-island-remote.md">
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
     Build the Vite remote that serves the island.
   </Card>
-  <Card title="Remote components" href="remote-components.md">
+  <Card title="Remote components" href="remote-components/overview.mdx">
     Share client components that run in your React tree.
   </Card>
-  <Card title="CSP" href="csp.md">
+  <Card title="CSP" href="csp.mdx">
     A complete policy for the host.
   </Card>
-  <Card title="Limits" href="limits.md">
+  <Card title="Limits" href="limits.mdx">
     What islands cannot do and what they cost.
   </Card>
 </Cards>

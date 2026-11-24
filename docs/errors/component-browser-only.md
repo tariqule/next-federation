@@ -21,5 +21,5 @@ The host did not render a remote component on the server. The server HTML has it
 
 ## Useful Links
 
-- [Remote components: integrity](../guides/remote-components.md#integrity-server-rendering)
-- [Remote components: mixed-router hosts](../guides/remote-components.md#mixed-router-hosts)
+- [Remote components: integrity](../guides/remote-components/security.mdx#integrity-server-rendering)
+- [Remote components: mixed-router hosts](../guides/remote-components/security.mdx#mixed-router-hosts)

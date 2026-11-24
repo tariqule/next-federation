@@ -13,4 +13,4 @@ The remote rejected the identity token: it is expired, malformed, signed with an
 
 ## Useful Links
 
-- [Identity: key rotation](../guides/identity.md#key-rotation)
+- [Identity: key rotation](../guides/identity.mdx#rotate-a-signing-key)

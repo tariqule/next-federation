@@ -14,4 +14,4 @@ An island called a Server Action, and the remote build that rendered it rejected
 
 ## Useful Links
 
-- [Server Actions in islands](../guides/server-actions.md)
+- [Server Actions in islands](../guides/server-actions.mdx)

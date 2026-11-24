@@ -546,7 +546,7 @@ describe('B5: a failure names its URL, and hints when the origin is no island re
     expect(detail).toContain('HTTP 404')
     expect(detail).toMatch(/answered HTML \/ 404: is it an island remote/)
     expect(detail).toContain('/_nf/island')
-    expect(detail).toContain('sharing-components-from-a-next-app.md')
+    expect(detail).toContain('remote-components/sharing-from-a-next-app.mdx')
     for (const leak of ['SECRET', 'p-value', '?p=']) {
       expect(JSON.stringify(r)).not.toContain(leak)
       expect(detail).not.toContain(leak)

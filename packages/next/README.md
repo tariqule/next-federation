@@ -243,7 +243,7 @@ nf-types --config lib/federation.config.ts [--remote shop]... [--out next-federa
 createRemoteComponent<RemoteProps<'shop', './Cart'>>({ expose: './Cart' })
 ```
 
-A `.ts` config needs Node 22.18 or 23.6 or newer; otherwise use `.mjs`. It does not read `.env.local`, runs nothing it downloads, checks every file's sha384 and exits 1 when a remote fails. See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/reference.mdx#types).
+A `.ts` config needs Node 22.18 or 23.6 or newer; otherwise use `.mjs`. It does not read `.env.local`, runs nothing it downloads, checks every file's sha384 and exits 1 when a remote fails. See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/types.mdx).
 
 ### Types
 

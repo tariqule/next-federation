@@ -40,61 +40,54 @@ const entries = []
 const add = (src, slug) => entries.push({ src, slug })
 
 add('docs/index.mdx', 'index')
-add('docs/live-demo.md', 'live-demo')
-add('docs/architecture.md', 'architecture')
+add('docs/live-demo.mdx', 'live-demo')
+add('docs/architecture.mdx', 'architecture')
+// Limits sits under the Architecture group in the sidebar but keeps its
+// guides/limits URL (see the meta.json written below).
+add('docs/guides/limits.mdx', 'guides/limits')
 add('docs/guides/getting-started-app-router.mdx', 'getting-started/app-router')
 add(
-  'docs/guides/getting-started-pages-router.md',
+  'docs/guides/getting-started-pages-router.mdx',
   'getting-started/pages-router'
 )
-add('docs/guides/getting-started-spa.md', 'getting-started/spa')
+add('docs/guides/getting-started-spa.mdx', 'getting-started/spa')
 add(
-  'docs/guides/writing-an-island-remote.md',
+  'docs/guides/writing-an-island-remote.mdx',
   'guides/writing-an-island-remote'
 )
-add('docs/guides/caching.md', 'guides/caching')
-add('docs/guides/identity.md', 'guides/identity')
-add('docs/guides/server-actions.md', 'guides/server-actions')
-add('docs/guides/csp.md', 'guides/csp')
-add('docs/guides/limits.md', 'guides/limits')
+add('docs/guides/server-actions.mdx', 'guides/server-actions')
 add(
-  'docs/guides/migrating-from-nextjs-mf.md',
+  'docs/guides/server-actions-reference.mdx',
+  'guides/server-actions-reference'
+)
+add('docs/guides/caching.mdx', 'guides/caching')
+add('docs/guides/caching-reference.mdx', 'guides/caching-reference')
+add('docs/guides/identity.mdx', 'guides/identity')
+add('docs/guides/identity-reference.mdx', 'guides/identity-reference')
+add('docs/guides/csp.mdx', 'guides/csp')
+add(
+  'docs/guides/migrating-from-nextjs-mf.mdx',
   'guides/migrating-from-nextjs-mf'
 )
-add('docs/guides/remote-components/overview.mdx', 'remote-components/overview')
+for (const page of [
+  'overview',
+  'vite-remote',
+  'rspack-remote',
+  'host-configuration',
+  'stylesheets',
+  'sharing-modules',
+  'links',
+  'reference',
+  'security',
+  'types',
+  'sharing-from-a-next-app',
+]) {
+  add(`docs/guides/remote-components/${page}.mdx`, `remote-components/${page}`)
+}
+add('docs/guides/deployment.mdx', 'deployment/overview')
+add('docs/guides/self-hosted-skew.mdx', 'deployment/self-hosted-skew')
 add(
-  'docs/guides/remote-components/vite-remote.mdx',
-  'remote-components/vite-remote'
-)
-add(
-  'docs/guides/remote-components/rspack-remote.mdx',
-  'remote-components/rspack-remote'
-)
-add(
-  'docs/guides/remote-components/host-configuration.mdx',
-  'remote-components/host-configuration'
-)
-add(
-  'docs/guides/remote-components/stylesheets.mdx',
-  'remote-components/stylesheets'
-)
-add(
-  'docs/guides/remote-components/sharing-modules.mdx',
-  'remote-components/sharing-modules'
-)
-add('docs/guides/remote-components/links.mdx', 'remote-components/links')
-add(
-  'docs/guides/remote-components/reference.mdx',
-  'remote-components/reference'
-)
-add(
-  'docs/guides/remote-components/sharing-from-a-next-app.mdx',
-  'remote-components/sharing-from-a-next-app'
-)
-add('docs/guides/deployment.md', 'deployment/overview')
-add('docs/guides/self-hosted-skew.md', 'deployment/self-hosted-skew')
-add(
-  'docs/guides/deploying-a-remote-on-vercel.md',
+  'docs/guides/deploying-a-remote-on-vercel.mdx',
   'deployment/deploying-a-remote-on-vercel'
 )
 add('docs/protocol/v1.md', 'protocol/v1')
@@ -305,6 +298,7 @@ writeFileSync(
         '---Architecture---',
         'architecture',
         'protocol',
+        'guides/limits',
       ],
     },
     null,
@@ -319,14 +313,25 @@ meta('getting-started', 'Getting Started', [
 meta('guides', 'Guides', [
   'writing-an-island-remote',
   'server-actions',
+  'server-actions-reference',
   'caching',
+  'caching-reference',
   'identity',
+  'identity-reference',
   'csp',
-  'limits',
   'migrating-from-nextjs-mf',
 ])
 meta('remote-components', 'Remote Components', [
   'overview',
+  'vite-remote',
+  'rspack-remote',
+  'host-configuration',
+  'stylesheets',
+  'sharing-modules',
+  'links',
+  'reference',
+  'security',
+  'types',
   'sharing-from-a-next-app',
 ])
 meta('deployment', 'Deployment', [

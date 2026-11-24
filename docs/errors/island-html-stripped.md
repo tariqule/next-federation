@@ -11,4 +11,4 @@ Island markup contained a `<script>` or a hoistable element (`<title>`, `<meta>`
 
 ## Useful Links
 
-- [Writing an island remote](../guides/writing-an-island-remote.md)
+- [Writing an island remote](../guides/writing-an-island-remote.mdx)

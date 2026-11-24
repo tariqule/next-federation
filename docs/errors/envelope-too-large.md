@@ -16,4 +16,4 @@ An island envelope is larger than the recommended size, usually because of big p
 
 ## Useful Links
 
-- [Limits](../guides/limits.md)
+- [Limits](../guides/limits.mdx)

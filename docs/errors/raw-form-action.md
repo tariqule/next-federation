@@ -22,4 +22,4 @@ A component passes a Server Action to a plain `<form action={...}>`, or to a `fo
 
 ## Useful Links
 
-- [Server Actions: forms](../guides/server-actions.md#forms-no-progressive-enhancement)
+- [Server Actions: forms](../guides/server-actions-reference.mdx#forms-no-progressive-enhancement)

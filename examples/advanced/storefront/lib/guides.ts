@@ -1,10 +1,10 @@
 const DOCS = 'https://github.com/tariqule/next-federation/blob/main/docs/guides'
 
 export const GUIDES = {
-  caching: { href: `${DOCS}/caching.md`, label: 'Caching' },
-  identity: { href: `${DOCS}/identity.md`, label: 'Identity' },
+  caching: { href: `${DOCS}/caching.mdx`, label: 'Caching' },
+  identity: { href: `${DOCS}/identity.mdx`, label: 'Identity' },
   actions: {
-    href: `${DOCS}/server-actions.md`,
+    href: `${DOCS}/server-actions.mdx`,
     label: 'Server Actions in islands',
   },
   blocking: {
@@ -12,7 +12,7 @@ export const GUIDES = {
     label: 'Private content in the first HTML (blocking)',
   },
   components: {
-    href: `${DOCS}/remote-components.md#mixed-router-hosts`,
+    href: `${DOCS}/remote-components/security.mdx#mixed-router-hosts`,
     label: 'Remote components: mixed-router hosts',
   },
 }

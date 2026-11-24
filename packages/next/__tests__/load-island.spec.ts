@@ -792,7 +792,7 @@ describe('NF-037: `next dev` where React debug info may carry private island val
       'cookies',
       'headers',
       'getIdentity',
-      'docs/guides/limits.md',
+      'docs/guides/limits.mdx',
     ]) {
       expect(detail).toContain(word)
     }
@@ -813,7 +813,7 @@ describe('NF-037: `next dev` where React debug info may carry private island val
     const call = warnOnce.mock.calls.find(([code]) => code === 'NF-037')!
     expect(call[1]).toBe('source-maps-off')
     expect(call[2]).toContain('--disable-source-maps')
-    expect(call[2]).toContain('docs/guides/limits.md')
+    expect(call[2]).toContain('docs/guides/limits.mdx')
     rs.doUnmock('../src/server/dev-debug-info.ts')
     rs.resetModules()
   })

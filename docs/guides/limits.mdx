@@ -16,15 +16,15 @@ What islands and remote components do not do, and what they cost.
 | Node, remote               | Vite 8: `^20.19.0 \|\| >=22.12.0`                                                                                                                                         |
 | `@vitejs/plugin-rsc`       | 0.5.39 for an island remote. Another version fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1`.                                                                          |
 | `react-server-dom-webpack` | 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch. Older versions fail the build with `NF-041` ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3)). |
-| `@module-federation/vite`  | 1.24.0 for a components remote (`NF-026`)                                                                                                                                 |
+| `@module-federation/vite`  | 1.24.0 for a components remote. Another version fails with `NF-026` unless `NF_ALLOW_MF_VITE=1`.                                                                          |
 
-React Router hosts are planned after 1.0. `create-next-app --use-pnpm` writes a `pnpm-workspace.yaml` that pnpm 9 rejects: use pnpm 10 or newer, or npm.
+The two `NF_ALLOW_*` flags are for a CI canary job, never for a release. React Router hosts are planned after 1.0. `create-next-app --use-pnpm` writes a `pnpm-workspace.yaml` that pnpm 9 rejects: use pnpm 10 or newer, or npm.
 
 ### Next.js 15
 
 Islands and remote components work on Next 15 (React 19) with Turbopack or webpack. Three things differ:
 
-- **`cacheComponents` needs Next 16.** On Next 15 the adapter uses the legacy model ([Caching](caching.md#app-router-legacy-mode-no-cachecomponents)). `withNextFederation` fails with `NF-002` if `cacheComponents`, `experimental.cacheComponents` or `experimental.dynamicIO` is on.
+- **`cacheComponents` needs Next 16.** On Next 15 the adapter uses the legacy model ([Caching](caching-reference.mdx#app-router-legacy-mode-no-cachecomponents)). `withNextFederation` fails with `NF-002` if `cacheComponents`, `experimental.cacheComponents` or `experimental.dynamicIO` is on.
 - **`revalidateIsland`** expires at once through Next 15's one-argument `revalidateTag`.
 - **`experimental.useCache`** is not checked. An island inside your own `'use cache'` scope is cached with that scope, failures included.
 
@@ -32,13 +32,13 @@ Islands and remote components work on Next 15 (React 19) with Turbopack or webpa
 
 - **Hosts:** a Next 15 Pages Router host and a React 18 SPA embed islands and remote components. An App Router host always runs React 19.
 - **Islands** run their own React 19, so a React 18 host needs no change to island remotes.
-- **Remote components** run on the host's React. A remote accepts React 19 only unless it sets the `react` range ([React versions](remote-components.md#react-versions)). On a host outside that range, `NF-036` renders the fallback for every component of that build ([NF-036](../errors/component-shared-unavailable.md)).
+- **Remote components** run on the host's React. A remote accepts React 19 only unless it sets the `react` range ([React versions](remote-components/reference.mdx#react-versions)). On a host outside that range, `NF-036` renders the fallback for every component of that build ([NF-036](../errors/component-shared-unavailable.md)).
 - **`@next-federation/next/server`** is App Router only. A Pages Router host imports `@next-federation/next/pages/server`.
 - **React 19-only APIs** (`use`, `useActionState`, `useOptimistic`, `ref` as a prop) must not run in a remote on a React 18 host.
 
 ## What an island cannot do
 
-- **Props are plain JSON.** No functions, `Date`, `Map`, class instances or cycles (`NF-009`).
+- **Props are plain JSON.** No functions, `Date`, `Map`, class instances or cycles. `NF-009` names the path: `at .props.when` (App Router) or `at .when` (Pages Router).
 - **React context does not cross in.** Pass what the island needs as props.
 - **No CSS isolation.** Remotes scope their own class names.
 - **Metadata never reaches the host `<head>`.** `<title>`, `<meta>`, `<link>` and scripts are stripped.
@@ -66,9 +66,9 @@ Embed each island from the host instead, and pass data as props.
 
 - **Only three `next/*` modules.** `next/link`, `next/navigation` (App Router) and `next/router` (Pages Router) come from the host's router through `@next-federation/next/components` or `@next-federation/next/pages/components`. An SPA provides none. `next/image`, `next/head` and the rest fail at build time (`NF-002`): pass props.
 - **No checks against a remote dev server.** A missing module fails only when the code asks for it (`NF-029`).
-- **No server rendering for unverified builds.** They render in the browser ([Remote components](remote-components.md#integrity-server-rendering)).
+- **No server rendering for unverified builds.** They render in the browser ([Remote components](remote-components/security.mdx#integrity-server-rendering)).
 - **No CSS isolation.** Stylesheet order follows the island rules.
-- **Rspack and webpack remotes get coarser checks.** Every exposed module is checked against every host-provided module the build shares. Rspack is tested, webpack is untested ([Remote components](remote-components.md#remotes-built-with-rspack-or-webpack)).
+- **Rspack and webpack remotes get coarser checks.** Every exposed module is checked against every host-provided module the build shares. Rspack is tested, webpack is untested ([Remote components](remote-components/rspack-remote.mdx)).
 - **No top-level `let` or `const` named `document`, `window` or `self` in server chunks.** Such a chunk is a `SyntaxError`, and the build renders in the browser only (`NF-029`). `var` and functions are fine.
 
 ### Shared modules
@@ -87,7 +87,7 @@ A host with App Router and Pages Router routes runs two Reacts in one server pro
 - **Only some builds server-render in both layers:** `@module-federation/vite` 1.24.0 and `@module-federation/enhanced` 2.9.2 and 2.9.3. Others render on the server in one layer per process.
 - **A layer waits at most 10 s** for the other to initialise, then retries after the cooldown.
 - **A build never server-renders** when its manifest lists its own `remotes` or has no checkable manifest (`NF-028` once).
-- **Layers are kept apart, not sandboxed.** A verified remote runs with the host process's rights ([Remote components](remote-components.md#mixed-router-hosts)).
+- **Layers are kept apart, not sandboxed.** A verified remote runs with the host process's rights ([Remote components](remote-components/security.mdx#mixed-router-hosts)).
 
 ## `next dev` and linked installs
 
@@ -110,7 +110,7 @@ The host trusts the remote's HTML and scripts. Configure only remotes you trust.
 - Envelopes come only from the remote's origin and `assetOrigins`. Other bootstrap and CSS URLs are refused (`NF-005`).
 - Redirects count as a failed fetch.
 - Stripping scripts from island HTML is cleanup, not a security boundary.
-- `aud` in an identity token scopes it to one remote's server, not to one island in the browser ([Identity](identity.md)).
+- `aud` in an identity token scopes it to one remote's server, not to one island in the browser ([Identity](identity.mdx)).
 
 ## Cost
 
@@ -151,7 +151,7 @@ Set `islands.timeoutMs` and `islands.retries` for all remotes, or the same keys 
 
 - A remote must run its server in the same React mode as its client bundle.
 - Remote assets need CORS headers. `nf-serve` and the island handler add them for the listed `hosts`.
-- A host cache that outlives a remote's build retention leads to `410 NF-023` and inert islands ([Caching](caching.md), [Deployment](deployment.mdx)).
+- A host cache that outlives a remote's build retention leads to `410 NF-023` and inert islands ([Caching](caching.mdx), [Deployment](deployment.mdx)).
 
 ## Next steps
 
@@ -159,7 +159,7 @@ Set `islands.timeoutMs` and `islands.retries` for all remotes, or the same keys 
   <Card title="Architecture" href="../architecture.mdx">
     How islands and remote components work.
   </Card>
-  <Card title="Caching" href="caching.md">
+  <Card title="Caching" href="caching.mdx">
     Static pages, ISR and cacheComponents with islands.
   </Card>
   <Card title="Deployment" href="deployment.mdx">

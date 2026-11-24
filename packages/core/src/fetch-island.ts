@@ -110,7 +110,7 @@ export function islandFailureDetail(result: IslandResult): string {
   const at = result.url === undefined ? '' : `at ${result.url}`
   const hint =
     result.hint === 'not-an-island-remote'
-      ? `; the origin answered HTML / 404: is it an island remote (does it serve /_nf/island)? A Next.js app can't be a remote (see ${GUIDES}sharing-components-from-a-next-app.md)`
+      ? `; the origin answered HTML / 404: is it an island remote (does it serve /_nf/island)? A Next.js app can't be a remote (see ${GUIDES}remote-components/sharing-from-a-next-app.mdx)`
       : ''
   return `${at}${status}${hint}`.trim()
 }

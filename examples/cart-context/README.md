@@ -19,4 +19,4 @@ JavaScript, so hosts use it without a build step.
 It is a library, so nothing runs on its own. `pnpm examples:dev` from the repository root starts the
 hosts and the remote that use it.
 
-Guide: [Remote components](../../docs/guides/remote-components.md#sharing-modules).
+Guide: [Remote components](../../docs/guides/remote-components/sharing-modules.mdx).

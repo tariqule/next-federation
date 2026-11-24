@@ -16,4 +16,4 @@ NF_COMPONENTS_SIGNING_KEY="$(cat signing-key.pem)" vite build
 
 ## Useful Links
 
-- [Remote components: integrity](../guides/remote-components.md#integrity-server-rendering)
+- [Remote components: integrity](../guides/remote-components/security.mdx#integrity-server-rendering)

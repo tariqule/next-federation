@@ -15,4 +15,4 @@ A remote's `base` is not an absolute `http:` or `https:` URL, or it has a query 
 
 ## Useful Links
 
-- [Writing an island remote: configure Vite](../guides/writing-an-island-remote.md#2-configure-vite)
+- [Writing an island remote: configure Vite](../guides/writing-an-island-remote.mdx#configure-vite)

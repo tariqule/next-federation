@@ -3,12 +3,12 @@ title: 'Getting Started: App Router'
 description: Embed a remote app's UI in a Next.js App Router page with RemoteIsland.
 ---
 
-Embed an island from a remote app in a Next.js App Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
+Embed an island from a remote app in a Next.js App Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.mdx).
 
 <Callout>
   **Good to know:** Requires Next.js 16 or 15 (`>=15.5.28 <17`), React 19 and Node 20.9 or newer.
-  `cacheComponents` needs Next 16 ([Limits](limits.md#nextjs-15)). To share client components
-  instead, see [remote components](remote-components.md#islands-or-remote-components).
+  `cacheComponents` needs Next 16 ([Limits](limits.mdx#nextjs-15)). To share client components
+  instead, see [remote components](remote-components/overview.mdx#islands-or-remote-components).
 </Callout>
 
 ## Add an island to a page
@@ -101,7 +101,7 @@ export default function Home() {
 
 ### Open the CSP
 
-Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.md) for a complete policy.
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.mdx) for a complete policy.
 
 </Step>
 </Steps>
@@ -109,12 +109,12 @@ Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP]
 <Callout>
   **Good to know:** Public islands are cached for `islands.revalidate` seconds.
   Set `revalidate` on `RemoteIsland` to override it, or `dynamic` to fetch on
-  every request ([Caching](caching.md)).
+  every request ([Caching](caching.mdx)).
 </Callout>
 
 ## Show per-user content
 
-A private island renders for the signed-in user. After the [Identity](identity.md) setup, mark the island `private`.
+A private island renders for the signed-in user. After the [Identity](identity.mdx) setup, mark the island `private`.
 
 ```tsx title="app/orders/page.tsx"
 <RemoteIsland
@@ -161,21 +161,21 @@ export const federation = defineFederation({
 })
 ```
 
-See [Timeouts and retries](limits.md#timeouts-and-retries).
+See [Timeouts and retries](limits.mdx#timeouts-and-retries).
 
 ## Next steps
 
 <Cards>
-  <Card title="Writing an island remote" href="writing-an-island-remote.md">
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
     Build the Vite remote that serves the island.
   </Card>
-  <Card title="Identity" href="identity.md">
+  <Card title="Identity" href="identity.mdx">
     Private islands, signing keys and key rotation.
   </Card>
-  <Card title="Caching" href="caching.md">
+  <Card title="Caching" href="caching.mdx">
     Static pages, ISR and cacheComponents with islands.
   </Card>
-  <Card title="Limits" href="limits.md">
+  <Card title="Limits" href="limits.mdx">
     What islands cannot do and what they cost.
   </Card>
 </Cards>

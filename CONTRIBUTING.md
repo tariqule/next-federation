@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for helping. Read [AGENTS.md](AGENTS.md) (repo map, commands, hard rules),
-[docs/conventions.md](docs/conventions.md) and [docs/architecture.md](docs/architecture.md) first,
+[docs/conventions.md](docs/conventions.md) and [docs/architecture.mdx](docs/architecture.mdx) first,
 and the README of any package you edit.
 
 ## Setup

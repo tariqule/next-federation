@@ -14,4 +14,4 @@ The `@module-federation/vite` that `@next-federation/vite` resolved is not the v
 
 ## Useful Links
 
-- [Remote components: build the remote](../guides/remote-components.md#remote-build-it)
+- [Remote components: build the remote](../guides/remote-components/vite-remote.mdx#expose-a-component-and-build-it)

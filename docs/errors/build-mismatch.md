@@ -11,4 +11,4 @@ The envelope's build id differs from the build id of the client bootstrap that t
 
 ## Useful Links
 
-- [Self-hosted build retention](../guides/self-hosted-skew.md)
+- [Self-hosted build retention](../guides/self-hosted-skew.mdx)

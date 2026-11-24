@@ -95,7 +95,7 @@ On sign-out, call `clearIslandTokens()` from `@next-federation/react` ([sign-out
 | No `basePath`      | `issuer: 'https://www.example.com'`     | `'https://www.example.com'`     | `https://www.example.com/api/next-federation/jwks`     |
 | `basePath: '/app'` | `issuer: 'https://www.example.com/app'` | `'https://www.example.com/app'` | `https://www.example.com/app/api/next-federation/jwks` |
 
-The remote's `hosts` holds the host's origin, with no `basePath`. A new host origin needs a rebuild ([Writing an island remote](writing-an-island-remote.md#host-origins-and-issuers-must-match-exactly)). A mismatch answers `401` [`NF-016`](../errors/issuer-not-allowed.md).
+The remote's `hosts` holds the host's origin, with no `basePath`. A new host origin needs a rebuild ([Writing an island remote](writing-an-island-remote.mdx#match-host-origins-and-issuers-exactly)). A mismatch answers `401` [`NF-016`](../errors/issuer-not-allowed.md).
 
 ## Plain `http`
 
@@ -106,7 +106,7 @@ Use `https`. Plain `http` is refused (`NF-002`) except for `localhost`, `127.0.0
 - An anonymous visitor on a private island makes no request and sees `errorFallback`.
 - The remote rejects tokens older than 900 seconds (`maxAgeSeconds`). Clock tolerance is 30 seconds.
 - `aud` scopes a token to one remote's server. Any island on the page can request a token for any configured remote, so configure only remotes you trust.
-- The token never appears in HTML, RSC payloads or page props. The exception is a library linked from outside `node_modules` under `next dev` (`NF-037`, [Limits](limits.md#next-dev-and-linked-installs)).
+- The token never appears in HTML, RSC payloads or page props. The exception is a library linked from outside `node_modules` under `next dev` (`NF-037`, [Limits](limits.mdx#next-dev-and-linked-installs)).
 
 ## Key rotation, and why it changes the marker
 

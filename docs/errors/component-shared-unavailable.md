@@ -18,6 +18,6 @@ A remote component imports a module its remote lists in `shared` as host-provide
 
 ## Useful Links
 
-- [Remote components: sharing modules](../guides/remote-components.md#sharing-modules)
-- [Remote components: React versions](../guides/remote-components.md#react-versions)
-- [Remote components: links that work in every host](../guides/remote-components.md#links-that-work-in-every-host)
+- [Remote components: sharing modules](../guides/remote-components/sharing-modules.mdx)
+- [Remote components: React versions](../guides/remote-components/reference.mdx#react-versions)
+- [Remote components: links that work in every host](../guides/remote-components/links.mdx)

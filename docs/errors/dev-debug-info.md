@@ -17,4 +17,4 @@ Under `next dev`, React sends awaited Server Component values to the browser as 
 
 ## Useful Links
 
-- [Limits: next dev and linked installs](../guides/limits.md#next-dev-and-linked-installs)
+- [Limits: next dev and linked installs](../guides/limits.mdx#next-dev-and-linked-installs)

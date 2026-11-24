@@ -18,5 +18,5 @@ An App Router page with `cacheComponents` was regenerated before this server pro
 
 ## Useful Links
 
-- [Remote components: runtime behaviour](../guides/remote-components.md#runtime-behaviour)
+- [Remote components: runtime behaviour](../guides/remote-components/reference.mdx#runtime-behaviour)
 - [NF-028: Remote component rendered in the browser only](component-browser-only.md)

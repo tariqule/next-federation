@@ -21,4 +21,4 @@ A Server Action on the remote threw, and the caller's promise rejected. The erro
 
 ## Useful Links
 
-- [Server Actions: errors](../guides/server-actions.md#errors)
+- [Server Actions: errors](../guides/server-actions-reference.mdx#errors)

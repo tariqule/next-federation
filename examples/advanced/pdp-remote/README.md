@@ -21,5 +21,5 @@ Part of the [commerce platform](../README.md) (`pnpm examples:platform`). Alone:
 Check it: <http://127.0.0.1:13401/_nf/health>. In the storefront, turn on **How is this page
 built?** on a product page: `ProductDetail` arrived in the first HTML, `ForYou` streamed in later.
 
-Guides: [Writing an island remote](../../../docs/guides/writing-an-island-remote.md),
-[Identity](../../../docs/guides/identity.md).
+Guides: [Writing an island remote](../../../docs/guides/writing-an-island-remote.mdx),
+[Identity](../../../docs/guides/identity.mdx).

@@ -11,5 +11,5 @@ A host asked a remote for an island it does not expose. The name is misspelled, 
 
 ## Useful Links
 
-- [Writing an island remote: write an island](../guides/writing-an-island-remote.md#3-write-an-island)
-- [Caching: stale-if-error](../guides/caching.md#stale-if-error)
+- [Writing an island remote: write an island](../guides/writing-an-island-remote.mdx#write-an-island)
+- [Caching: stale-if-error](../guides/caching-reference.mdx#stale-if-error)

@@ -16,7 +16,7 @@ Look up how remote components are built and rendered.
 | `nf-build.json`        | What `nf-serve` reads.                                                                             |
 | `nf-shared-usage.json` | Which exposed modules import which shared module. Signed into the descriptor's `shared` field.     |
 
-`nf-serve` serves `client/` to anyone at `/b/<buildId>/…`, with `Access-Control-Allow-Origin: *`. It answers `404` for build bookkeeping (`.vite/`, `mf-stats.json`). On another static host, leave those out of the upload. Never put anything in `client/` that you would not publish.
+`nf-serve` serves `client/` to anyone at `/b/<buildId>/…`, with `Access-Control-Allow-Origin: *`. It answers `404` for build bookkeeping (`.vite/`, `mf-stats.json`). On another static host, leave those out. Publish nothing in `client/` you would not show anyone.
 
 ## nf-describe
 
@@ -60,23 +60,23 @@ The range is the `requiredVersion` of the four React modules. It must be valid s
 
 - **One React:** the host registers its own React modules, your `shared` modules and, with a Next.js entry, its `next/*` modules.
 - **Loading:** `ErrorBoundary(errorFallback) > Suspense(fallback) > component`. A loaded module is cached per build. The server retries a failure after one second. The browser retries after 500 ms, 1 s and 2 s, then shows `errorFallback`.
-- **Render errors (`NF-040`):** the host catches an error in the exposed component's own render on the server, renders `fallback` and logs it once per build. The browser then renders the component, and shows `errorFallback` if it throws too. Errors in child components, or in a class, `memo` or `forwardRef` export, still reach Next. Keep browser-only code in effects.
+- **Render errors (`NF-040`):** the host catches an error in the exposed component's own render on the server, renders `fallback` and logs it once per build. The browser then renders the component, and shows `errorFallback` if it throws too. Errors in child components, or in a class, `memo` or `forwardRef` export, still reach Next, and fail the prerender in `next build` unless the component uses `{ dynamic: true }`. Keep browser-only code in effects.
+- **Static prerender (`NF-039`):** Next ends a static prerender before the build loads, so components are left out of the shell and render per request. The page regenerates on `components.revalidate` (60 s by default). `next build` and `next dev` never defer.
 - **Remote down:** the page answers 200. A host that never fetched a descriptor renders `errorFallback`. One that did keeps rendering the last known build.
-- **Redeploys** are picked up within `revalidate`, without a host restart. In-flight pages keep their build.
+- **Redeploys** are picked up within `revalidate`, with no host restart.
 - **Events:** in the browser, every load and failure is an `nf:component` `CustomEvent` on `document` (`COMPONENT_EVENT`). On the server, `defineFederation({ onEvent })` receives `component:descriptor` and `component:error`. Server load and render failures are logged (`NF-029`, `NF-040`), not sent to `onEvent`.
-- **An inert boundary can be replaced early:** if a parent re-renders with changed props while the browser retries, React 19 replaces the server HTML with the fallback.
 
 ## Requirements and limits
 
 - **Node.js 20.16 or newer** for server rendering. The loader needs `process.getBuiltinModule`. On older Node, remote components render in the browser only (`NF-028`).
 - **Memory:** each layer keeps at most `maxBuilds` (default 5) builds per remote and evicts the oldest. `@module-federation/vite` keeps one `__mf_init__…` entry per build, never removed ([maintainer note](../../maintainers/mf-vite-init-keys.md)).
-- **Load timeout:** one attempt fails after 10 s, so a stalled remote never holds a render.
+- **Fetch limits:** a load attempt fails after 10 s, a file request after 3 s, a file over 10 MB and a descriptor over 1 MiB (`NF-029`).
 - **Edge runtime:** no server rendering. Components render in the browser.
 - **Remote dev server:** `vite` answers with `ssr: null`, so hosts render it in the browser only. Test server rendering with `vite build` and `nf-serve`. Edits do not hot-reload in the host.
 
 ## Devtools
 
-The [Module Federation Chrome devtools](https://module-federation.io/guide/debug/chrome-devtool) work with remote components. The host appears as the consumer `nf_host`, and each remote as a producer keyed `<container name>:<manifest URL>`. Only the browser has these globals, so server rendering does not show. The panel's proxy changes browser loads only, so a proxied component's server HTML and browser module can differ until hydration.
+The [Module Federation Chrome devtools](https://module-federation.io/guide/debug/chrome-devtool) work with remote components. The host is the consumer `nf_host`, each remote a producer keyed `<container name>:<manifest URL>`. Only the browser has these globals. The panel's proxy changes browser loads only, so a proxied component's server HTML and browser module can differ until hydration.
 
 ## Links reference
 

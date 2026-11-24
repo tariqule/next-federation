@@ -14,6 +14,6 @@ demo.
 
 Keep fallback copies for stateless code. A module whose identity matters, such as a React context
 (`example-cart-context`, `example-session-context`), must always come from the host: two copies
-would mean two contexts. See [Sharing modules](../../../docs/guides/remote-components.md#sharing-modules).
+would mean two contexts. See [Sharing modules](../../../docs/guides/remote-components/sharing-modules.mdx).
 
 Part of the [commerce platform](../README.md).

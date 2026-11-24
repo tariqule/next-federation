@@ -2,7 +2,7 @@ name: Vercel
 
 # Manual only: deploys the island-remote fixture to a Vercel project twice
 # (two production deployments) and runs test/e2e/vercel.spec.ts against it.
-# Guide: docs/guides/deploying-a-remote-on-vercel.md.
+# Guide: docs/guides/deploying-a-remote-on-vercel.mdx.
 on:
   workflow_dispatch:
     inputs:

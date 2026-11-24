@@ -12,4 +12,4 @@ A token named an issuer the remote does not trust. The remote only accepts issue
 
 ## Useful Links
 
-- [Identity](../guides/identity.md)
+- [Identity](../guides/identity.mdx)

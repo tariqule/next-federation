@@ -25,4 +25,4 @@ The object passed to `defineFederation()` or `withNextFederation()`, or an islan
 ## Useful Links
 
 - [Getting started: App Router](../guides/getting-started-app-router.mdx#define-the-federation)
-- [Keeping a standalone app](../guides/remote-components.md#keeping-a-standalone-app)
+- [Keeping a standalone app](../guides/remote-components/vite-remote.mdx#keep-a-standalone-app)

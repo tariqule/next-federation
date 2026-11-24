@@ -16,5 +16,5 @@ The remote did not answer within the timeout (3000 ms by default). It is slow or
 
 ## Useful Links
 
-- [Timeouts and retries](../guides/limits.md#timeouts-and-retries)
-- [Caching: stale-if-error](../guides/caching.md#stale-if-error)
+- [Timeouts and retries](../guides/limits.mdx#timeouts-and-retries)
+- [Caching: stale-if-error](../guides/caching-reference.mdx#stale-if-error)

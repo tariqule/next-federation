@@ -11,4 +11,4 @@ The remote could not download the issuer's JSON Web Key Set, so it cannot verify
 
 ## Useful Links
 
-- [Identity](../guides/identity.md)
+- [Identity](../guides/identity.mdx)

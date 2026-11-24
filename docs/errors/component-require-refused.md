@@ -17,4 +17,4 @@ A remote build's server code called `require()` for a module the host does not h
 
 ## Useful Links
 
-- [Remote components: sharing modules](../guides/remote-components.md#sharing-modules)
+- [Remote components: sharing modules](../guides/remote-components/sharing-modules.mdx)

@@ -23,7 +23,7 @@ Keep recent builds of a self-hosted remote online, so pages cached before a depl
 nf-serve --dir ./builds --port 4100 [--current <buildId>] [--max-builds 3] [--min-age-hours 24]
 ```
 
-Each live island build runs in its own process behind a router. Routes are in [Deployment](deployment.mdx#self-hosted-nf-serve).
+Each live island build runs in its own process behind a router. Routes are in [Deployment](deployment.mdx#self-hosted-with-nf-serve).
 
 </Step>
 <Step>
@@ -76,7 +76,7 @@ See [NF-023](../errors/build-retired.md) and [NF-041](../errors/vulnerable-react
   >
     The skew options when you cannot run nf-serve.
   </Card>
-  <Card title="Caching" href="caching.md">
+  <Card title="Caching" href="caching.mdx">
     Keep the host's cache shorter than a build's retention.
   </Card>
 </Cards>

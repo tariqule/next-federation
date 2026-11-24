@@ -59,7 +59,7 @@ Props are canonical JSON, so equal props give equal URLs and a CDN can cache the
 
 A **private island** renders for the signed-in user. The host signs a short-lived ES256 token for the remote's audience and sends it as `Authorization: Bearer`. The remote fetches the host's JWKS from its own `issuers` configuration and verifies the token before it renders.
 
-Tokens never appear in HTML or browser storage. See [Identity](guides/identity.md).
+Tokens never appear in HTML or browser storage. See [Identity](guides/identity.mdx).
 
 ### Skew pinning
 
@@ -69,7 +69,7 @@ A build past retention answers `410` (`NF-023`), and the island stays visible bu
 
 ### Caching in the host
 
-A public island stays inside the page's static or ISR output. A private island is a dynamic hole under `<Suspense>` with `cacheComponents`, and makes the route dynamic without it. The library never silently turns a static page dynamic. See [Caching](guides/caching.md).
+A public island stays inside the page's static or ISR output. A private island is a dynamic hole under `<Suspense>` with `cacheComponents`, and makes the route dynamic without it. The library never silently turns a static page dynamic. See [Caching](guides/caching.mdx).
 
 ### Sharing React between islands
 
@@ -98,7 +98,7 @@ Server rendering runs fetched code in the host's server process, so the host doe
 1. **The descriptor is verified.** It carries an ES256 signature that matches a public key you configured, or your configuration pins the build id to its digest. `unsafe-dev` skips verification and works only in `development` or `test`.
 2. **Every file matches its sha384** from the descriptor, checked before evaluation.
 
-The host never writes the code to disk. A build whose manifest lists further remotes, or has no checkable manifest, renders in the browser only. Details are in [Remote components](guides/remote-components.md).
+The host never writes the code to disk. A build whose manifest lists further remotes, or has no checkable manifest, renders in the browser only. Details are in [Remote components](guides/remote-components/overview.mdx).
 
 ## What the host trusts
 
@@ -115,7 +115,21 @@ Report a suspected vulnerability as described in [SECURITY.md](../SECURITY.md).
 - **Islands use their own React.** The RSC wire format is only guaranteed between identical React versions.
 - **Failures degrade.** A remote that is down, slow, invalid or unverified shows a fallback.
 
-For the packages and the repo map, see [AGENTS.md](../AGENTS.md).
+## Packages
+
+| Package                                                       | Role                                                                           |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`@next-federation/next`](../packages/next/README.md)         | Next.js adapter: `withNextFederation`, islands, remote components, `nf-types`. |
+| [`@next-federation/react`](../packages/react/README.md)       | Island mount, error boundary and remote components for SPA hosts.              |
+| [`@next-federation/core`](../packages/core/README.md)         | Host config, island fetching and identity tokens, with no framework.           |
+| [`@next-federation/vite`](../packages/vite/README.md)         | Vite plugins for island remotes and components remotes.                        |
+| [`@next-federation/server`](../packages/server/README.md)     | Island handler, identity verification, `nf-serve` and `nf-describe`.           |
+| [`@next-federation/island`](../packages/island/README.md)     | Remote-side `Link`, `Form`, `getIdentity` and browser bootstrap.               |
+| [`@next-federation/protocol`](../packages/protocol/README.md) | The wire contract: envelope, request codec, descriptor.                        |
+| [`@next-federation/sdk`](../packages/sdk/README.md)           | `NF-xxx` error codes and the logger.                                           |
+| [`@next-federation/router`](../packages/router/README.md)     | Internal. Never imported by application code.                                  |
+
+The repo map is in [AGENTS.md](../AGENTS.md).
 
 ## Next steps
 
@@ -126,7 +140,7 @@ For the packages and the repo map, see [AGENTS.md](../AGENTS.md).
   <Card title="Limits" href="guides/limits.mdx">
     What islands cannot do and what they cost.
   </Card>
-  <Card title="Remote components" href="guides/remote-components.md">
+  <Card title="Remote components" href="guides/remote-components/overview.mdx">
     Integrity, shared modules and host setup.
   </Card>
 </Cards>

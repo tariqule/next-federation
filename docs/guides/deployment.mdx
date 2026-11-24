@@ -7,18 +7,18 @@ Deploy a host and a remote independently, and keep a remote's old builds online 
 
 ## Deploy the host
 
-Deploy a Next.js host as you do today. It needs `withNextFederation` and, for private islands, the JWKS and token routes ([Identity](identity.md)).
+Deploy a Next.js host as you do today. It needs `withNextFederation` and, for private islands, the JWKS and token routes ([Identity](identity.mdx)).
 
-- List each remote origin in the host's CSP ([CSP](csp.md)).
+- List each remote origin in the host's CSP ([CSP](csp.mdx)).
 - Use the same remote origins in every environment. A host that cannot reach a remote shows the island's fallback.
 
 ## Deploy a remote
 
 An island remote is a server. `vite build` writes `dist/<buildId>/{client,ssr,rsc}` and `nf-build.json`. Set `NF_BUILD_ID` to name the build, or the build uses a timestamp.
 
-A components remote is static files. `nf-serve` serves them without a process per build ([Remote components](remote-components.md#remote-build-it)).
+A components remote is static files. `nf-serve` serves them without a process per build ([Remote components](remote-components/vite-remote.mdx#expose-a-component-and-build-it)).
 
-Set `base` to the absolute URL hosts reach the remote at. Keep the host's cache shorter than an old build stays reachable ([Caching](caching.md)).
+Set `base` to the absolute URL hosts reach the remote at. Keep the host's cache shorter than an old build stays reachable ([Caching](caching.mdx)).
 
 ### On Vercel
 

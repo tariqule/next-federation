@@ -95,7 +95,7 @@ describe('dev: a page of the project served by the remote (B3)', () => {
       expect(nf002).toHaveLength(1)
       expect(nf002[0]).toContain('host-provided')
       expect(nf002[0]).toContain(
-        'remote-components.md#keeping-a-standalone-app'
+        'remote-components/vite-remote.mdx#keep-a-standalone-app'
       )
     } finally {
       warn.mockRestore()
