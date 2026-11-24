@@ -1,0 +1,146 @@
+---
+title: Content Security Policy
+description: Allow remote origins in a Content Security Policy that Next.js can still run under.
+---
+
+Allow each remote's scripts, styles and requests in your Content Security Policy (CSP). Add every remote origin to three directives.
+
+| Directive     | Why                                                        |
+| ------------- | ---------------------------------------------------------- |
+| `script-src`  | The island bootstrap and its chunks load from the remote.  |
+| `connect-src` | The browser calls the remote (SPA envelopes, island data). |
+| `style-src`   | Island stylesheets are linked from the remote.             |
+
+## Set a complete policy
+
+Next.js needs more than `'self'` to run. This policy works in `next dev` and `next start`.
+
+<Steps>
+<Step>
+
+### Build the policy in your Next config
+
+List every remote origin, islands and components alike. `headers()` sources get `basePath` for you.
+
+```ts title="next.config.ts"
+import type { NextConfig } from 'next'
+import { withNextFederation } from '@next-federation/next/config'
+
+// Every remote origin: islands remotes and components remotes alike.
+const remotes = [
+  'https://shop.example.com',
+  'https://widgets.example.com',
+].join(' ')
+const dev = process.env.NODE_ENV !== 'production'
+
+const csp = [
+  "default-src 'self'",
+  // Next.js inline scripts need 'unsafe-inline'. `next dev` also needs 'unsafe-eval'.
+  `script-src 'self' 'unsafe-inline' ${dev ? "'unsafe-eval' " : ''}${remotes}`,
+  // `next dev` uses a WebSocket for HMR.
+  `connect-src 'self' ${remotes}${dev ? ' ws:' : ''}`,
+  `style-src 'self' 'unsafe-inline' ${remotes}`,
+  "img-src 'self' data:",
+].join('; ')
+
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [{ key: 'Content-Security-Policy', value: csp }],
+      },
+    ]
+  },
+}
+
+export default withNextFederation(nextConfig)
+```
+
+</Step>
+<Step>
+
+### Add a CDN origin to `assetOrigins`
+
+If a remote serves assets from a CDN, add the CDN to the policy and to that remote's `assetOrigins`. Otherwise the host refuses the envelope (`NF-005`).
+
+```ts title="lib/federation.config.ts"
+remotes: {
+  shop: {
+    origin: 'https://shop.example.com',
+    assetOrigins: ['https://cdn.example.com'],
+  },
+},
+```
+
+</Step>
+<Step>
+
+### Allow your origin on the remote
+
+The remote must list your origin in `hosts`, or it answers `403` ([`NF-022`](../errors/origin-not-allowed.md)).
+
+</Step>
+</Steps>
+
+<Callout>
+  **Good to know:** Add the remote origin to `img-src` and `font-src` if its
+  islands load images or fonts.
+</Callout>
+
+## Allow remote components
+
+Remote components need the same three directives. `connect-src` covers `mf-manifest.json`, and `/_nf/components.json` in an SPA. See [Remote components](remote-components.md).
+
+## Use `'strict-dynamic'`
+
+`'strict-dynamic'` trusts the island bootstrap that host script loads. `connect-src` and `style-src` still need the remote origin. Keep it in `script-src` for older browsers.
+
+## Use nonces instead of `'unsafe-inline'`
+
+A per-request nonce is stricter, but it makes every page render per request.
+
+<Callout type="warn">
+  **Good to know:** No test covers a nonce-based policy. Try one in a preview
+  deployment first.
+</Callout>
+
+## Reference
+
+### What each part of the policy is for
+
+- `'unsafe-inline'` in `script-src`: Next's inline bootstrap. Without it, the page does not hydrate.
+- `'unsafe-eval'` and `ws:`: development only.
+- `'unsafe-inline'` in `style-src`: Next and React emit inline styles.
+
+A remote at `https://shop.example.com` contributes this to the three directives:
+
+```
+script-src 'self' https://shop.example.com;
+connect-src 'self' https://shop.example.com;
+style-src 'self' https://shop.example.com;
+```
+
+### Nonce policies
+
+Next's CSP guide generates the nonce in `proxy.ts`. Under a nonce policy:
+
+- Island HTML contains no scripts.
+- With `'strict-dynamic'`, the `modulepreload` links for remote component chunks carry no nonce and are blocked. The nonce'd script still loads the chunks.
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Getting Started: App Router"
+    href="getting-started-app-router.mdx"
+  >
+    Add an island to a page and open the CSP.
+  </Card>
+  <Card title="Remote components" href="remote-components.md">
+    Origins that remote components need.
+  </Card>
+  <Card title="Limits" href="limits.md">
+    What islands cannot do and what they cost.
+  </Card>
+</Cards>

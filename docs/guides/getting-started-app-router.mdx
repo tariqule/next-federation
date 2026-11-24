@@ -3,13 +3,12 @@ title: 'Getting Started: App Router'
 description: Embed a remote app's UI in a Next.js App Router page with RemoteIsland.
 ---
 
-Embed an island from a remote app in a Next.js App Router page. This guide covers the host only. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
+Embed an island from a remote app in a Next.js App Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
 
 <Callout>
-  **Good to know:** Supported: Next.js 16 or 15 (`>=15.5.28 <17`), React 19, Turbopack or webpack,
-  Node 20.9 or newer. `cacheComponents` needs Next 16 ([Limits](limits.md#nextjs-15)). A remote can
-  also ship [remote components](remote-components.md) instead of islands, and a host can use both.
-  [Islands or remote components?](remote-components.md#islands-or-remote-components) compares them.
+  **Good to know:** Requires Next.js 16 or 15 (`>=15.5.28 <17`), React 19 and Node 20.9 or newer.
+  `cacheComponents` needs Next 16 ([Limits](limits.md#nextjs-15)). To share client components
+  instead, see [remote components](remote-components.md#islands-or-remote-components).
 </Callout>
 
 ## Add an island to a page
@@ -24,16 +23,14 @@ npm install @next-federation/core @next-federation/next @next-federation/react s
 npm install --save-exact react@19.3.1 react-dom@19.3.1
 ```
 
-Pin React to one exact version, the one the repo's tests run (19.3.1), whatever version
-`create-next-app` scaffolds. Check `package.json`: `--save-exact` does not remove a caret that is
-already there.
+Pin React to this exact version. Remove any caret that `create-next-app` left in `package.json`.
 
 </Step>
 <Step>
 
 ### Wrap your Next config
 
-The wrapper is required. Adapter entry points fail with [`NF-017`](../errors/next-config-wrapper-missing.md) without it.
+Without the wrapper, the adapter fails with [`NF-017`](../errors/next-config-wrapper-missing.md).
 
 ```ts title="next.config.ts"
 import { withNextFederation } from '@next-federation/next/config'
@@ -43,16 +40,12 @@ export default withNextFederation({
 })
 ```
 
-The wrapper records whether `cacheComponents` is on, so the adapter picks the matching cache
-implementation ([Caching](caching.md)).
-
 </Step>
 <Step>
 
 ### Define the federation
 
-Use two files. The first is the config and imports nothing from Next.js, so `nf-types` can load it
-with plain Node.
+The config file imports nothing from Next.js, so `nf-types` can load it with plain Node.
 
 ```ts title="lib/federation.config.ts"
 import { defineFederation } from '@next-federation/core'
@@ -64,7 +57,7 @@ export const federation = defineFederation({
 })
 ```
 
-The second creates the island components.
+The second file creates the island components.
 
 ```ts title="lib/federation.ts"
 import 'server-only'
@@ -76,8 +69,7 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } =
   createIslands(federation)
 ```
 
-A remote is an origin, not a path. The host fetches envelopes only from this origin (and from
-`assetOrigins`, if you list any), and it refuses redirects.
+A remote is an origin, not a path. The host refuses redirects and fetches only from this origin.
 
 </Step>
 <Step>
@@ -102,32 +94,27 @@ export default function Home() {
 }
 ```
 
-`props` must be plain JSON: functions, `Date`, `Map` and class instances throw [`NF-009`](../errors/props-not-json.md).
-`errorFallback` shows when the remote is down, slow or returns an invalid envelope, and the page
-still answers `200`.
+`props` must be plain JSON, or the island throws [`NF-009`](../errors/props-not-json.md). `errorFallback` shows when the remote fails, and the page still answers `200`.
 
 </Step>
 <Step>
 
 ### Open the CSP
 
-Add each remote origin to `script-src`, `connect-src` and `style-src`. Next.js needs more than that
-to run under a CSP at all: [CSP](csp.md) has a complete policy for dev and production.
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.md) for a complete policy.
 
 </Step>
 </Steps>
 
 <Callout>
-  **Good to know:** Public islands are cached. `revalidate` (seconds) on
-  `RemoteIsland` overrides `islands.revalidate`, and `dynamic` fetches on every
-  request ([Caching](caching.md)).
+  **Good to know:** Public islands are cached for `islands.revalidate` seconds.
+  Set `revalidate` on `RemoteIsland` to override it, or `dynamic` to fetch on
+  every request ([Caching](caching.md)).
 </Callout>
 
 ## Show per-user content
 
-A private island renders for the signed-in user. Add `identity` to `defineFederation`, a
-`getIdentity` function and the token routes ([Identity](identity.md) has the full setup), then mark
-the island `private`.
+A private island renders for the signed-in user. After the [Identity](identity.md) setup, mark the island `private`.
 
 ```tsx title="app/orders/page.tsx"
 <RemoteIsland
@@ -139,14 +126,11 @@ the island `private`.
 />
 ```
 
-Always give a private island an `errorFallback`. A visitor who is not signed in makes no request and
-sees it: without one, they see the loading text for good.
+Always set `errorFallback`. A visitor who is not signed in sees it. Without one, they see the loading text for good.
 
 ## Put private content in the first HTML
 
-By default a private island streams: the first HTML holds `fallback`, and the island's HTML follows
-in the same response. Add `blocking` to render it in the first HTML instead, for clients without
-JavaScript, crawlers or layouts that must not shift.
+A private island streams: the first HTML holds `fallback`. Add `blocking` to render the island in the first HTML instead, for crawlers or layouts that must not shift.
 
 ```tsx title="app/orders/page.tsx"
 // With cacheComponents only: Next refuses `instant` without it.
@@ -154,16 +138,14 @@ export const instant = false
 ```
 
 <Callout type="warn">
-  **Good to know:** `blocking` makes the whole route per-request and adds the
-  remote's response time to the page's first byte.
-  [Caching](caching.md#blocking-the-island-in-the-first-html) lists the costs,
-  the Next config each host needs and what happens when `getIdentity` throws.
+  **Good to know:** `blocking` makes the whole route per-request and delays the
+  first byte until the remote answers. See [the
+  costs](caching-reference.mdx#blocking-the-island-in-the-first-html).
 </Callout>
 
 ## Tune timeouts and retries
 
-Each island fetch has a total budget of `timeoutMs` (default `3000`) and retries a network error or a
-`502`, `503` or `504` once. Set both for all remotes or per remote:
+Each fetch has a `timeoutMs` budget (default `3000`) and retries once. Set both for all remotes or per remote:
 
 ```ts title="lib/federation.config.ts"
 export const federation = defineFederation({
@@ -179,7 +161,7 @@ export const federation = defineFederation({
 })
 ```
 
-[Timeouts and retries](limits.md#timeouts-and-retries) lists what is and is not retried.
+See [Timeouts and retries](limits.md#timeouts-and-retries).
 
 ## Next steps
 

@@ -1,0 +1,176 @@
+---
+title: 'Getting Started: Pages Router'
+description: Embed a remote app's UI in a Next.js Pages Router page with getIslandProps and RemoteIsland.
+---
+
+Embed an island from a remote app in a Next.js Pages Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.md).
+
+<Callout>
+  **Good to know:** Requires Next.js 16 or 15 (`>=15.5.28 <17`), React 19 or 18.3, and Node 20.9 or
+  newer. To share client components instead, see [remote components](remote-components.md#islands-or-remote-components).
+</Callout>
+
+## Add an island to a page
+
+<Steps>
+<Step>
+
+### Install the packages
+
+```npm
+npm install @next-federation/core @next-federation/next @next-federation/react
+npm install --save-exact react@19.3.1 react-dom@19.3.1
+```
+
+Pin React to this exact version. Remove any caret that `create-next-app` left in `package.json`.
+
+</Step>
+<Step>
+
+### Wrap your Next config
+
+Without the wrapper, the adapter fails with [`NF-017`](../errors/next-config-wrapper-missing.md).
+
+```ts title="next.config.ts"
+import { withNextFederation } from '@next-federation/next/config'
+
+export default withNextFederation({
+  // your Next config, including basePath and i18n
+})
+```
+
+</Step>
+<Step>
+
+### Define the federation
+
+The config file imports nothing from Next.js, so `nf-types` can load it with plain Node.
+
+```ts title="lib/federation.config.ts"
+import { defineFederation } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: {
+    shop: { origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com' },
+  },
+})
+```
+
+The second file creates `getIslandProps`. Import it only from `getServerSideProps`, `getStaticProps` and API routes.
+
+```ts title="lib/federation.ts"
+import { createPagesIslands } from '@next-federation/next/pages/server'
+import { federation } from './federation.config'
+
+export { federation }
+export const { getIslandProps } = createPagesIslands(federation)
+```
+
+</Step>
+<Step>
+
+### Render the island
+
+```tsx title="pages/product.tsx"
+import type { GetServerSideProps } from 'next'
+import { RemoteIsland } from '@next-federation/next/pages'
+import type { IslandProps } from '@next-federation/next/pages'
+import { getIslandProps } from '../lib/federation'
+
+type Props = { cart: IslandProps }
+
+export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => ({
+  props: {
+    cart: await getIslandProps(ctx, {
+      remote: 'shop',
+      island: 'Cart',
+      props: { sku: 'A1' },
+    }),
+  },
+})
+
+export default function Product({ cart }: Props) {
+  return <RemoteIsland {...cart} fallback={<p>Cart unavailable</p>} />
+}
+```
+
+A remote failure does not throw. `getIslandProps` returns `envelope: null`, `RemoteIsland` renders the fallback, and the page answers `200`. Caller mistakes throw `NF-001` (unknown remote), `NF-009` (props not JSON) or `NF-017` (missing wrapper).
+
+</Step>
+<Step>
+
+### Open the CSP
+
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.md) for a complete policy.
+
+</Step>
+</Steps>
+
+<Callout>
+  **Good to know:** React context does not cross into an island. Island HTML is
+  stored about three times in the page. `timeoutMs` and `retries` work as in the
+  [App Router](getting-started-app-router.mdx#tune-timeouts-and-retries).
+</Callout>
+
+## Show per-user content
+
+Private islands work in `getServerSideProps` only. `private: true` in `getStaticProps` throws `NF-002`. See [Identity](identity.md).
+
+## Use islands in static pages
+
+In `getStaticProps`, the page's `revalidate` is the island cache. When the remote fails, you get the last good envelope (`stale: true`) or `envelope: null` ([Caching](caching.md#stale-if-error)). Regenerate soon either way:
+
+```ts title="pages/index.tsx"
+export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
+  const banner = await getIslandProps(ctx, { remote: 'shop', island: 'Banner' })
+  return {
+    props: { banner },
+    revalidate: banner.envelope && !banner.stale ? 60 : 5,
+  }
+}
+```
+
+## Share the host's React
+
+If the host and its remotes run the identical React version, call `provideHostReact()` in `pages/_app.tsx` at module scope. Without it, the page downloads a second copy of React (about 80 KB gzip).
+
+```tsx title="pages/_app.tsx"
+import type { AppProps } from 'next/app'
+import { provideHostReact } from '@next-federation/react/share'
+
+provideHostReact()
+
+export default function App({ Component, pageProps }: AppProps) {
+  return <Component {...pageProps} />
+}
+```
+
+Matching islands then use the host's React (about 12 KB per remote instead). It does nothing in development, on a React pre-release, or for an island on another React version.
+
+<Callout>
+  **Good to know:** In a host with both routers, call it in `pages/_app.tsx`
+  too. It covers Pages Router pages only. See [Limits](limits.md#cost).
+</Callout>
+
+## Stay on React 18
+
+Install `react@18.3.1` and `react-dom@18.3.1` instead of the 19.3.1 pins. Islands need nothing else. A remote components build must list React 18 in its `react` range, or it renders its fallback with `NF-036` ([React versions](remote-components.md#react-versions)).
+
+## Next steps
+
+<Cards>
+  <Card title="Writing an island remote" href="writing-an-island-remote.md">
+    Build the Vite remote that serves the island.
+  </Card>
+  <Card title="Caching" href="caching.md">
+    Static pages, ISR and stale islands.
+  </Card>
+  <Card title="Deployment" href="deployment.md">
+    Ship a host and a remote, and handle build skew.
+  </Card>
+  <Card title="Limits" href="limits.md">
+    What islands cannot do and what they cost.
+  </Card>
+</Cards>
+
+Runnable example: [examples/next-pages-router](../../examples/next-pages-router).

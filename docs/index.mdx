@@ -3,13 +3,13 @@ title: Welcome to next-federation
 description: Runtime UI federation for Next.js. A remote app provides UI that your host app renders at runtime.
 ---
 
-Welcome to the `next-federation` docs. Use them to embed UI that another team builds and deploys on its own into your Next.js app, without rebuilding the host.
+Embed UI that another team builds and deploys on its own into your Next.js app, without rebuilding the host.
 
-A remote app, deployed separately, provides UI that your host renders at runtime. Embed server-rendered islands, or load client components through Module Federation 2.0 into your host's own React tree. `next-federation` calls only public Next.js APIs, never Next.js internals.
+A remote app provides UI that your host renders at runtime. Embed server-rendered islands, or load client components through Module Federation 2.0 into your host's React tree. The library calls only public Next.js APIs.
 
 ## Get started
 
-Pick the host you are building. Each guide ends with a working page that embeds a remote.
+Pick the host you are building.
 
 <Cards>
   <Card title="Next.js App Router" href="guides/getting-started-app-router.mdx">
@@ -65,7 +65,7 @@ Pick the host you are building. Each guide ends with a working page that embeds 
     title="Migrating from nextjs-mf"
     href="guides/migrating-from-nextjs-mf.md"
   >
-    A concept map for apps that use `@module-federation/nextjs-mf`.
+    A concept map from `@module-federation/nextjs-mf`.
   </Card>
   <Card title="Deployment" href="guides/deployment.md">
     Serving remotes, compression and CORS.
@@ -76,7 +76,7 @@ Pick the host you are building. Each guide ends with a working page that embeds 
 
 <Cards>
   <Card title="Architecture" href="architecture.md">
-    How islands and remote components work and what a host trusts.
+    How islands and remote components work.
   </Card>
   <Card title="Limits" href="guides/limits.md">
     What islands and remote components cannot do, and what they cost.
@@ -88,7 +88,7 @@ Pick the host you are building. Each guide ends with a working page that embeds 
     Every `NF-001` and up code, with how to fix it.
   </Card>
   <Card title="Live demo" href="live-demo.md">
-    Three hosts and two remotes, and what to try in each.
+    Three hosts and two remotes to try.
   </Card>
   <Card title="Examples" href="../examples/README.md">
     Runnable remotes and hosts, and a larger multi-remote setup.

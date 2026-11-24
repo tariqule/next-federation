@@ -1,15 +1,14 @@
 # NF-010: Envelope was rendered by a different build than this bootstrap
 
-## What happened
+## Why This Error Occurred
 
-The envelope's build id differs from the build id of the client bootstrap that tried to hydrate it.
+The envelope's build id differs from the build id of the client bootstrap that tried to hydrate it. The remote deployed a new build between the server render and the client load, so markup and code no longer match.
 
-## Why
+## Possible Ways to Fix It
 
-The remote deployed a new build between the server render and the client load, so markup and code no longer match.
+- This is usually transient: reload to pick up the new build.
+- Keep old builds available during rollout ([NF-023](build-retired.md)) so in-flight pages keep working.
 
-## How to fix
+## Useful Links
 
-This is usually transient: reload to pick up the new build. Keep old builds available during rollout (see NF-023) so in-flight pages keep working.
-
-See [Self-hosted build retention](../guides/self-hosted-skew.md).
+- [Self-hosted build retention](../guides/self-hosted-skew.md)

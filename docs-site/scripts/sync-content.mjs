@@ -61,9 +61,34 @@ add(
   'docs/guides/migrating-from-nextjs-mf.md',
   'guides/migrating-from-nextjs-mf'
 )
-add('docs/guides/remote-components.md', 'remote-components/overview')
+add('docs/guides/remote-components/overview.mdx', 'remote-components/overview')
 add(
-  'docs/guides/sharing-components-from-a-next-app.md',
+  'docs/guides/remote-components/vite-remote.mdx',
+  'remote-components/vite-remote'
+)
+add(
+  'docs/guides/remote-components/rspack-remote.mdx',
+  'remote-components/rspack-remote'
+)
+add(
+  'docs/guides/remote-components/host-configuration.mdx',
+  'remote-components/host-configuration'
+)
+add(
+  'docs/guides/remote-components/stylesheets.mdx',
+  'remote-components/stylesheets'
+)
+add(
+  'docs/guides/remote-components/sharing-modules.mdx',
+  'remote-components/sharing-modules'
+)
+add('docs/guides/remote-components/links.mdx', 'remote-components/links')
+add(
+  'docs/guides/remote-components/reference.mdx',
+  'remote-components/reference'
+)
+add(
+  'docs/guides/remote-components/sharing-from-a-next-app.mdx',
   'remote-components/sharing-from-a-next-app'
 )
 add('docs/guides/deployment.md', 'deployment/overview')

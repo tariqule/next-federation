@@ -1,19 +1,21 @@
 # NF-011: Island bootstrap failed to load
 
-## What happened
+## Why This Error Occurred
 
-The browser could not load the island's client code: its bootstrap script, or a module the island
-needs while it hydrates (a client component's chunk). The island renders its `errorFallback`; without
-one, a bootstrap that failed to load leaves the server HTML in place, not interactive (`inert`).
+The browser could not load the island's client code: its bootstrap script or a chunk it needs to hydrate. The URL returned an error, a Content Security Policy blocked it, or the network dropped. The island renders its `errorFallback`, or without one stays as non-interactive server HTML.
 
-## Why
+## Possible Ways to Fix It
 
-The script URL returned an error, was blocked by a Content Security Policy, or the network dropped.
-Often the remote is down, or the build the page was rendered with was retired (a page kept open, or
-served from a cache, across deploys).
+- Open the bootstrap URL from the envelope in the browser.
+- Allow the remote's origin in `script-src`:
 
-## How to fix
+  ```text
+  Content-Security-Policy: script-src 'self' https://shop.example.com
+  ```
 
-Open the bootstrap URL from the envelope in the browser. Allow the remote's origin in `script-src` and make sure the build is still deployed.
+- Make sure the build is still deployed. A page kept open across deploys points at a retired build.
 
-See [Content Security Policy](../guides/csp.md) and [Self-hosted build retention](../guides/self-hosted-skew.md).
+## Useful Links
+
+- [Content Security Policy](../guides/csp.md)
+- [Self-hosted build retention](../guides/self-hosted-skew.md)

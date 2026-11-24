@@ -1,15 +1,15 @@
 # NF-004: Invalid island envelope
 
-## What happened
+## Why This Error Occurred
 
-The response from a remote was not a well-formed island envelope.
+A remote's response failed envelope schema validation. It may be truncated, come from something other than a next-federation remote, or be an error page served with a success status.
 
-## Why
+## Possible Ways to Fix It
 
-The body failed schema validation: it may be truncated, produced by something other than a next-federation remote, or an error page served with a success status.
+- Request the island URL directly and inspect the body.
+- Confirm the remote route is mounted.
+- Confirm the proxy in front of it does not rewrite responses.
 
-## How to fix
+## Useful Links
 
-Request the island URL directly and inspect the body. Confirm the remote route is mounted and the proxy in front of it is not rewriting responses.
-
-See the [island protocol](../protocol/v1.md).
+- [Island protocol](../protocol/v1.md)

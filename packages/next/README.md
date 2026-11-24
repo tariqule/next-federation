@@ -1,178 +1,164 @@
 # @next-federation/next
 
-Next.js adapter for `next-federation` (Next `>=15.5.28 <17`, React 19 or, for a Pages Router host, React 18.3;
-`cacheComponents` needs Next 16).
-It embeds remote islands and remote components in an App Router or Pages Router host, caches
-them with Next's own caching, and serves the host's identity routes.
+Next.js adapter: embeds remote islands and remote components in an App Router or Pages Router host and serves the host's identity routes. Supports Next `>=15.5.28 <17`; `cacheComponents` needs Next 16.
 
 ## Install
 
-```sh
-pnpm add @next-federation/next @next-federation/core @next-federation/react
+```npm
+npm install @next-federation/next @next-federation/core @next-federation/react
 ```
 
-## `withNextFederation(config)` (required)
+## Usage
 
-```ts
-// next.config.ts
+```ts title="next.config.ts"
 import { withNextFederation } from '@next-federation/next/config'
 
+export default withNextFederation({})
+```
+
+```ts title="lib/federation.ts"
+import { defineFederation } from '@next-federation/core'
+import { createIslands } from '@next-federation/next/server'
+
+export const federation = defineFederation({
+  remotes: { shop: { origin: 'https://shop.example.com' } },
+})
+
+export const { RemoteIsland } = createIslands(federation)
+```
+
+```tsx title="app/page.tsx"
+import { RemoteIsland } from '../lib/federation'
+
+export default function Page() {
+  return <RemoteIsland remote="shop" island="Cart" props={{ sku: 'A1' }} fallback={<p>Loading…</p>} />
+}
+```
+
+## Entry points
+
+No root entry. Import from one of these.
+
+| Entry                                    | Exports                                                                                                           |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `@next-federation/next/config`           | `withNextFederation`                                                                                              |
+| `@next-federation/next/server`           | `createIslands`, `getComponentDescriptor` (App Router, server only)                                               |
+| `@next-federation/next/routes`           | `createFederationRoutes`                                                                                          |
+| `@next-federation/next/components`       | `createRemoteComponent`, `loadRemoteModule`, `preloadRemoteComponent`, `registerSharedModules`, `COMPONENT_EVENT` |
+| `@next-federation/next/pages`            | `RemoteIsland`                                                                                                    |
+| `@next-federation/next/pages/server`     | `createPagesIslands`, `createFederationApiHandler`, `getComponentDescriptor`, `preloadRemoteComponent`            |
+| `@next-federation/next/pages/components` | Same as `/components`, for the Pages Router                                                                       |
+| `nf-types` (bin)                         | Downloads remote component prop types                                                                             |
+
+## API
+
+### withNextFederation(config)
+
+Required in every Next host. Wraps a Next config object or `(phase, ctx) => config` function. Adapter entry points fail with `NF-017` without it.
+
+```ts
 export default withNextFederation({ basePath: '/shop' })
 ```
 
-Every Next host must wrap its config. Using public config keys only, the wrapper:
+It sets `env.NF_CACHE_MODEL`, `env.NF_BASE_PATH` and `env.NF_NEXT_VERSION`, aliases the internal `island-cache` entry for your cache model, and appends the package to `transpilePackages`. It throws `NF-002` when a `@next-federation/*` package is in `serverExternalPackages`.
 
-- sets `env.NF_CACHE_MODEL` (`'cache-components'` when `cacheComponents` is on, else `'legacy'`),
-  `env.NF_BASE_PATH` (`basePath ?? ''`) and `env.NF_NEXT_VERSION` (the installed Next.js version);
-- aliases `@next-federation/next/island-cache` to `/legacy` or `/cache-components` through
-  `turbopack.resolveAlias` and a `webpack` function (an existing `webpack` function runs first);
-- appends `@next-federation/next` to `transpilePackages`;
-- throws `NF-002` when a `@next-federation/*` package is listed in `serverExternalPackages`.
+### createIslands(federation, options?)
 
-It also accepts the function form `(phase, ctx) => config`. Adapter entry points fail with
-`NF-017` when the wrapper is missing.
+App Router only. Returns `{ RemoteIsland, preloadIsland, revalidateIsland }`.
 
-## Island cache
+| Option        | Type          | Default | Description                                                                            |
+| ------------- | ------------- | ------- | -------------------------------------------------------------------------------------- |
+| `getIdentity` | `AppIdentity` | none    | `({ cookies, headers }) => identity \| null`. Needed for `private` islands (`NF-013`). |
 
-`getPublicEnvelope(target, island, propsJson, hostJson, revalidate)` has two implementations,
-chosen at build time because `'use cache'` only compiles with `cacheComponents`:
-
-- **legacy**: `fetch` with `next: { revalidate, tags: ['nf:<remote>', 'nf:<remote>:<island>'] }`.
-  Next's fetch cache stores every 200 response, so a 200 whose body is not a valid envelope
-  (`NF-004`) is cached for `revalidate` seconds as well. Non-2xx responses, timeouts and network
-  errors are not cached.
-- **cache-components**: a `'use cache'` function with
-  `cacheLife({ stale: 300, revalidate, expire: max(3600, 2 × revalidate) })` and the same tags.
-  A failure is returned, never thrown (Next fails a build-time prerender on any error raised
-  inside `'use cache'`), and switches the entry to an inline failure profile
-  (`{ stale: 30, revalidate: 5, expire: 600 }`, inlined so a host's `cacheLife` config cannot change
-  it). Its `expire` keeps it in the static shell: the page stays static and is regenerated within
-  about 5 seconds. (An entry with `expire` under 5 minutes would be a dynamic hole, and a static
-  shell left with no changing content gets `revalidate: false` from Next and is never regenerated.)
-  `RemoteIsland` renders its own `<Suspense>`, except a private island with `blocking`.
-- **Stale-if-error** (both models, and `getIslandProps`): a failed public fetch renders the last good
-  envelope this server process fetched for the same remote, island, props and host context, kept
-  for at least an hour or twice `revalidate` (at most 500 envelopes, 50 MiB). The failure is still
-  logged with its code and emitted as `island:error`. Without one, the fallback renders. Private
-  islands (`blocking` or not), `dynamic` islands and an island the remote removed (its `404`
-  `NF-021`) are never served stale.
-
-## `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router)
-
-`@next-federation/next/server` is App Router only: it uses React's `cache`, so do not import it in a
-Pages Router host or any React 18 code outside the App Router (use `@next-federation/next/pages/server`).
-
-```ts
-// lib/federation.ts (server-only)
-import { createIslands } from '@next-federation/next/server'
-
+```ts title="lib/federation.ts"
 export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(federation, {
-  getIdentity, // the same AppIdentity function as the routes: ({ cookies, headers }) => identity | null
+  getIdentity,
 })
 ```
+
+#### RemoteIsland
+
+A Server Component that fetches an island and renders it inside its own `<Suspense>`.
+
+| Prop                 | Type                      | Default                                      | Description                                                                |
+| -------------------- | ------------------------- | -------------------------------------------- | -------------------------------------------------------------------------- |
+| `remote`             | `string`                  | required                                     | Remote name from `defineFederation`.                                       |
+| `island`             | `string`                  | required                                     | The island name.                                                           |
+| `props`              | `Record<string, unknown>` | none                                         | Plain JSON props (`NF-009` otherwise).                                     |
+| `private`            | `boolean`                 | `false`                                      | Per-user island. Anonymous visitors see `errorFallback`.                   |
+| `dynamic`            | `boolean`                 | `false`                                      | Fetch on every request. The route becomes dynamic.                         |
+| `revalidate`         | `number`                  | `islands.revalidate`                         | Seconds a public envelope is cached.                                       |
+| `locale`             | `string`                  | none                                         | URL prefix segment passed to the remote. `''` for none.                    |
+| `fallback`           | `ReactNode`               | none                                         | The loading state.                                                         |
+| `errorFallback`      | `ReactNode`               | `fallback`                                   | Shown when the remote fails or an anonymous visitor hits a private island. |
+| `inertOnLoadFailure` | `boolean`                 | `true` without `errorFallback`, else `false` | On `NF-011`, keep the server HTML, not interactive.                        |
+| `blocking`           | `boolean`                 | `false`                                      | Private only (`NF-002`). Drops the `<Suspense>`: in first HTML.            |
 
 ```tsx
 <RemoteIsland remote="shop" island="Cart" props={{ sku }} fallback={<Spinner />} errorFallback={<p>Cart unavailable</p>} />
 ```
 
-- `RemoteIsland` renders its own `<Suspense fallback={fallback}>` (except with `blocking`, below). `IslandMount` renders
-  the island's CSS as `<link rel="stylesheet" precedence="next-federation">` through the host's React (in `<head>`, once
-  per href).
-- Public islands go through the island cache above (`revalidate` defaults to `islands.revalidate`).
-  `dynamic: true` fetches with `cache: 'no-store'`, which makes the route dynamic (a dynamic hole with
-  `cacheComponents`).
-- `private: true` reads the identity with `cookies()`/`headers()` outside any cache scope and mints the token
-  on the server. The token goes only into the request to the remote; the HTML and the props sent to the
-  browser carry only the token endpoint. Requires `getIdentity` and `identity` in `defineFederation()`
-  (`NF-013`). An anonymous visitor makes no remote request and sees `errorFallback`.
-- `blocking` (private islands only; `NF-002` on a public one) leaves out the island's `<Suspense>`, so the island is in
-  the first HTML, in place, with no streamed `fallback` and no swap (as the Pages Router renders it). The response
-  waits for the remote, up to the island timeout (`timeoutMs`); a failure or timeout renders `errorFallback` in place
-  and the page answers `200`. The route has no static shell: `next build` shows it as `ƒ`. With `cacheComponents` the
-  page must export `instant = false`, or `next build` fails with Next's "runtime data during prerendering" error;
-  without `cacheComponents` it needs nothing (Next refuses `instant` there). A `loading.tsx` or `<Suspense>` above the
-  island streams it again. Guide: [App Router](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.mdx#put-private-content-in-the-first-html).
-- `errorFallback` (default: `fallback`) is shown when the remote fails, times out or returns an invalid
-  envelope, for an anonymous visitor on a private island, and after an uncaught island error. When the
-  island's code cannot load in the browser (`NF-011`: remote down, build retired), an `errorFallback`
-  you passed replaces the island; without one, the server HTML stays, not interactive.
-- A `RemoteIsland` inside your own `'use cache'` scope (with `cacheComponents`): a failed island (or one
-  showing its last good envelope) also applies the failure profile to that enclosing scope (`cacheLife()`
-  keeps the shortest call in a scope, even against an explicit long `cacheLife` there), so the failure is
-  retried within seconds instead of being cached for the scope's lifetime. Put such a cached component
-  inside `<Suspense>`.
-- `preloadIsland(spec)` starts the load early (e.g. in a layout); a `RemoteIsland` with an equal spec in the
-  same request reuses it. It never throws or rejects: it swallows errors, and the matching `RemoteIsland`
-  render rethrows them. A Next control-flow error (e.g. a `redirect()` inside `getIdentity`) is therefore
-  lost only when no matching `RemoteIsland` renders in that request.
-- Island events: `island:fetch` / `island:error` are emitted once per real fetch. With `cacheComponents` a
-  cache hit emits nothing; without it, a Next data-cache hit still runs the request code and is emitted with
-  its own (short) duration.
-- `revalidateIsland(remote, island?)` expires `nf:<remote>` or `nf:<remote>:<island>` immediately
-  (`revalidateTag(tag, { expire: 0 })`), e.g. from a remote-deploy webhook. `NF-001` for an unknown remote.
+With `cacheComponents`, a page that uses `blocking` must export `instant = false`. See the [caching reference](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching-reference.mdx).
 
-## `createPagesIslands`, `getIslandProps`, `RemoteIsland` (Pages Router)
+#### preloadIsland(spec)
 
-```ts
-// lib/federation.ts (imported only from getServerSideProps, getStaticProps and API routes)
-import { createPagesIslands } from '@next-federation/next/pages/server'
+Starts the load early, for example in a layout. An equal `RemoteIsland` in the same request reuses it. It never throws.
 
-export const { getIslandProps } = createPagesIslands(federation, {
-  getIdentity, // the same PagesIdentity function as the API route: (req) => identity | null
-})
+#### revalidateIsland(remote, island?)
+
+Expires `nf:<remote>` or `nf:<remote>:<island>` immediately, such as from a deploy webhook. Throws `NF-001` for an unknown remote.
+
+### createPagesIslands(federation, options?)
+
+Pages Router, server only. Returns `{ getIslandProps }`.
+
+| Option        | Type            | Default | Description                                                |
+| ------------- | --------------- | ------- | ---------------------------------------------------------- |
+| `getIdentity` | `PagesIdentity` | none    | `(req) => identity \| null`. Needed for `private` islands. |
+
+```ts title="lib/federation.ts"
+export const { getIslandProps } = createPagesIslands(federation, { getIdentity })
 ```
 
-```tsx
-// pages/product.tsx
+#### getIslandProps(ctx, spec)
+
+Returns `IslandProps` (`{ remote, envelope, host, token }`, plus `stale: true` for a stale-if-error envelope) to spread into `RemoteIsland`. `spec` takes `remote`, `island`, `props` and `private`. A failed island or an anonymous visitor on a private island gives `envelope: null`. Mistakes throw `NF-001`, `NF-009` or `NF-017`. `private: true` works in `getServerSideProps` only (`NF-002` otherwise).
+
+```ts title="pages/product.tsx"
+export const getStaticProps = async (ctx) => {
+  const banner = await getIslandProps(ctx, { remote: 'shop', island: 'Banner' })
+  return { props: { banner }, revalidate: banner.envelope && !banner.stale ? 60 : 5 }
+}
+```
+
+### RemoteIsland (Pages Router)
+
+From `@next-federation/next/pages`. Spread `getIslandProps` into it. It renders `errorFallback ?? fallback` when `envelope` is `null`.
+
+| Prop                 | Type        | Default                                      | Description                                            |
+| -------------------- | ----------- | -------------------------------------------- | ------------------------------------------------------ |
+| `fallback`           | `ReactNode` | none                                         | Shown when `envelope` is `null`.                       |
+| `errorFallback`      | `ReactNode` | `fallback`                                   | Shown when the remote failed or after an island error. |
+| `inertOnLoadFailure` | `boolean`   | `true` without `errorFallback`, else `false` | As for the App Router `RemoteIsland`.                  |
+
+```tsx title="pages/product.tsx"
 import { RemoteIsland } from '@next-federation/next/pages'
 import type { IslandProps } from '@next-federation/next/pages'
-
-export const getServerSideProps = async (ctx) => ({
-  props: { cart: await getIslandProps(ctx, { remote: 'shop', island: 'Cart', props: { sku: 'A1' } }) },
-})
 
 export default function Product({ cart }: { cart: IslandProps }) {
   return <RemoteIsland {...cart} fallback={<p>Cart unavailable</p>} />
 }
 ```
 
-- `getIslandProps(ctx, spec)` returns `{ remote, envelope, host, token }` (plus `stale: true` for a last good
-  envelope), JSON-serialisable (no `undefined`), to spread into `RemoteIsland`. `host` is `{ basePath, locale }`; `locale` is `''` for the default locale or no i18n.
-- Public islands are fetched on every call. In `getStaticProps`, the page's own `revalidate` is the cache, so the
-  page stays static (ISR). When the remote fails, `getIslandProps` returns the island's last good envelope with
-  `stale: true` (stale-if-error, above), or `envelope: null` without one; either is kept for the whole
-  `revalidate` window, so regenerate soon:
+### createFederationRoutes(federation, options)
 
-  ```ts
-  export const getStaticProps = async (ctx) => {
-    const banner = await getIslandProps(ctx, { remote: 'shop', island: 'Banner' })
-    return { props: { banner }, revalidate: banner.envelope && !banner.stale ? 60 : 5 }
-  }
-  ```
+Creates the JWKS and token route handlers for the App Router. Returns `{ GET, POST }`.
 
-- `private: true` works in `getServerSideProps` only (`NF-002` from `getStaticProps`, which has no request). It
-  calls `getIdentity(ctx.req)` and mints the token on the server. The token goes only into the request to the remote.
-  The page props carry only the token endpoint and an opaque per-user key. It needs `getIdentity` and `identity` in
-  `defineFederation()` (`NF-013`).
-- A failed, slow or invalid island, and an anonymous visitor on a private island, give `envelope: null`. The failure
-  emits `island:error` and is logged with its NF code. Caller mistakes throw (`NF-001` unknown remote, `NF-009` props
-  not JSON, `NF-017` missing `withNextFederation`).
-- `RemoteIsland` (safe to import in page components) renders `errorFallback ?? fallback` when `envelope` is null.
-  Otherwise it mounts the island. `IslandMount` renders the island's CSS as React stylesheet links
-  (`precedence="next-federation"`, once per href): the server HTML has them ahead of the island, and nothing goes
-  through `next/head`. Island links navigate through `next/router`. `push()` adds `basePath` and the locale itself, so the bridge
-  passes it the bare path and the locale from the island's href, with no doubled prefix. With i18n, an href without
-  a locale prefix goes to the default locale (as a hard load of that href would), not the current one.
+| Option        | Type          | Default  | Description                                                 |
+| ------------- | ------------- | -------- | ----------------------------------------------------------- |
+| `getIdentity` | `AppIdentity` | required | Reads your same-origin session. The library sets no cookie. |
 
-## JWKS and token routes
-
-A library cannot add routes to your `app/`, so you create them. Both routers use the same core: `GET jwks`
-(public keys only, `Cache-Control: public, max-age=300`) and `POST token?aud=<remote>` (`{ token, expiresAt,
-identityKey }`, `Cache-Control: no-store`). Everything else, and every request when `identity` is not
-configured, is `404`.
-
-```ts
-// app/api/next-federation/[...nf]/route.ts  (App Router)
+```ts title="app/api/next-federation/[...nf]/route.ts"
 import { createFederationRoutes } from '@next-federation/next/routes'
 import { federation } from '@/federation'
 
@@ -184,8 +170,23 @@ export const { GET, POST } = createFederationRoutes(federation, {
 })
 ```
 
-```ts
-// pages/api/next-federation/[...nf].ts  (Pages Router)
+| Route                     | Answer                                                                |
+| ------------------------- | --------------------------------------------------------------------- |
+| `GET jwks`                | Public keys, `public, max-age=300`.                                   |
+| `POST token?aud=<remote>` | `{ token, expiresAt, identityKey }`. Anonymous: `200 {"token":null}`. |
+| anything else             | `404`.                                                                |
+
+A request with `Sec-Fetch-Site` not `same-origin` gets `403`. Creating the routes calls `validateIdentity(federation)`, so a malformed key logs `NF-002` at load. Key rotation: [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.mdx#rotate-a-signing-key).
+
+### createFederationApiHandler(federation, options)
+
+The Pages Router version of the routes, from `@next-federation/next/pages/server`. Returns a `NextApiHandler`.
+
+| Option        | Type            | Default  | Description                  |
+| ------------- | --------------- | -------- | ---------------------------- |
+| `getIdentity` | `PagesIdentity` | required | `(req) => identity \| null`. |
+
+```ts title="pages/api/next-federation/[...nf].ts"
 import { createFederationApiHandler } from '@next-federation/next/pages/server'
 import { federation } from '@/federation'
 
@@ -194,144 +195,68 @@ export default createFederationApiHandler(federation, {
 })
 ```
 
-The token endpoint authenticates with your own same-origin session through `getIdentity`; the library never
-reads or sets a cookie. No session (an anonymous visitor): `200 {"token":null}`, so the island sends its
-requests without `Authorization` (an older host answered `401`, which the island client still
-accepts). `aud` not a configured remote or missing: `400`. A request whose
-`Sec-Fetch-Site` header is present and not `same-origin`: `403` (`getIdentity` is not called).
+Island scripts run in the host origin, so any island on the page can request a token for any configured remote.
 
-Startup validation: creating the routes calls `validateIdentity(federation)`, so a malformed signing key
-is logged with its `NF-002` code when the route module loads. To fail the server boot instead, also call
-`await validateIdentity(federation)` (from `@next-federation/core/identity`) in `instrumentation.ts`
-`register()`.
+### getComponentDescriptor(federation, remote, options?)
 
-Key rotation: pre-publish the new key as a non-first entry of `identity.signingKeys`, wait at least 10
-minutes, then move it first. See [Key rotation](../server/README.md#key-rotation).
+From `/server` (App Router) or `/pages/server`. Resolves and verifies the build of a components remote this render uses. Only a signed or pinned build keeps `ssr`; others render in the browser only (`NF-028`, or `NF-027` for a bad signature). When the remote is down it returns the last known descriptor, or `null`.
 
-### Security notes
+| Option    | Type      | Default | Description                                                       |
+| --------- | --------- | ------- | ----------------------------------------------------------------- |
+| `dynamic` | `boolean` | `false` | Fetch on every request. With `cacheComponents`, use `<Suspense>`. |
 
-`aud` scopes a token to one remote's **server**, but island scripts run in the host origin, so any island on
-the page can request a token for any configured remote. `aud` is not isolation between remotes in the
-browser. Tokens are minted only for configured remotes, are never logged, and token responses are never
-cached.
-
-## Remote components: `getComponentDescriptor` (both routers)
-
-```tsx
-// App Router (Server Component)
+```tsx title="app/cart.tsx"
 import { getComponentDescriptor } from '@next-federation/next/server'
+
 const descriptor = await getComponentDescriptor(federation, 'shop')
 return <Cart descriptor={descriptor} items={3} /> // Cart: createRemoteComponent in a 'use client' file
-
-// Pages Router (getServerSideProps / getStaticProps)
-import { getComponentDescriptor } from '@next-federation/next/pages/server'
-return { props: { descriptor: await getComponentDescriptor(federation, 'shop') } }
 ```
 
-Resolves which build of a components remote this render uses (fetches the remote's
-`/_nf/components.json`) and verifies it against `remotes.<name>.components.ssr`: only a signed or
-pinned build keeps `ssr` (server rendering); every other build renders in the browser only
-(`NF-028` once per build, `NF-027` for a bad signature or digest). The descriptor fetch is cached
-through the island-cache alias: `next: { revalidate, tags: ['nf:<remote>'] }` without
-`cacheComponents`, `'use cache'` + `cacheLife({ stale: 300, revalidate, expire: max(3600, 2 ×
-revalidate) })` with it (a failure gets the failure profile above: retried within seconds, the page stays static). `{ dynamic: true }` fetches with
-`cache: 'no-store'` (inside `<Suspense>` with `cacheComponents`: a PPR hole). There is no
-in-process cache and no wall-clock read; when the remote is down the last known descriptor is
-returned, and `null` (render the fallback) when none was ever fetched. Events:
-`component:descriptor`, `component:error`. `@next-federation/next/pages/server` also re-exports
-`preloadRemoteComponent`. Guide: [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md).
+### createRemoteComponent and the other components exports
 
-## Remote components with the host's `next/*` modules
+`/components` (App Router) and `/pages/components` (Pages Router) are `'use client'` entries. They export `createRemoteComponent`, `loadRemoteModule`, `preloadRemoteComponent`, `registerSharedModules` and `COMPONENT_EVENT`, like `@next-federation/react/components` (without `fetchDescriptorInBrowser`). They also share the host's `next/link` and `next/navigation` (`next/router` in Pages) with remotes that list them in `shared`.
 
-```tsx
+```tsx title="lib/NavMenu.tsx"
 'use client'
-// App Router: next/link and next/navigation. Pages Router: '@next-federation/next/pages/components'
-// (next/link and next/router).
 import { createRemoteComponent } from '@next-federation/next/components'
 
 export const NavMenu = createRemoteComponent({ expose: './NavMenu', fallback: null })
 ```
 
-These two `'use client'` entries are `@next-federation/react/components` (same exports, without
-`fetchDescriptorInBrowser`) plus the host's own Next.js modules, registered as shared modules for
-every remote component in the layer that imports them: `next/link` and `next/navigation` in the
-App Router, `next/link` and `next/router` in the Pages Router. A remote that lists them in its
-`shared` then renders the host's `<Link>` and reads the host's router, so links navigate on the
-client and keep the host's `basePath` and locale. They carry the guards of every remote link: a link
-off the page's origin is a plain anchor (a `javascript:`, `vbscript:` or `data:` href renders no
-`href`), and `push` or `replace` off it is dropped. A remote component that imports a module the host
-does not provide (for example `next/router` in an App Router host) renders its fallback
-(`NF-036`). The version they report is the host's Next.js version, which `withNextFederation`
-records in `env.NF_NEXT_VERSION` (`NF-017` without the wrapper).
+A remote component that imports a module the host does not provide renders its fallback (`NF-036`). See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx).
 
-Both entries also give the host's router to remote links that the remote's build rewired (its
-`next/link`, `next/navigation` and React Router imports, through the internal
-`@next-federation/router`), so they navigate on the client in either router: links render
-`next/link`; navigation calls `push` or `replace` with `{ scroll }`. In the App
-Router, `usePathname` and `useSearchParams` are `next/navigation`'s own. In the Pages Router they
-read `asPath` (no `basePath` or locale); before `router.isReady`, on a dynamic route or a fallback
-page, `asPath` can still be the route pattern (`/item/[id]`) with no query.
+### nf-types
 
-## Remote component prop types: `nf-types`
+Downloads each components remote's prop types into `next-federation-types/<remote>/` and writes `index.d.ts`, which fills `RemoteProps`.
 
-```sh
+```bash
 nf-types --config lib/federation.config.ts [--remote shop]... [--out next-federation-types]
 ```
 
-`--config` is the federation file with no Next.js imports (`lib/federation.config.ts` in the
-guides), loaded with plain Node. A `.ts` config needs a Node that strips types (by default from 22.18
-and 23.6; from 22.6 with `NODE_OPTIONS=--experimental-strip-types`); on older Node (the package
-supports 20.9+) write it as `.mjs`. `nf-types` does not read `.env.local`; load it with Node (`cli.js` is what the `nf-types`
-bin runs):
+| Flag       | Description                                                                 |
+| ---------- | --------------------------------------------------------------------------- |
+| `--config` | Federation file with no Next.js imports. Exports `federation` or a default. |
+| `--remote` | A remote to sync. Repeatable. Default: every remote with `components`.      |
+| `--out`    | Output folder. Default `next-federation-types`.                             |
 
-```sh
-node --env-file=.env.local node_modules/@next-federation/next/dist/types/cli.js \
-  --config lib/federation.config.ts
+```tsx
+createRemoteComponent<RemoteProps<'shop', './Cart'>>({ expose: './Cart' })
 ```
 
-Downloads the type declarations of each components remote's current build (only from a descriptor
-that verifies with the remote's `components.ssr` keys or pins, only from under its base, through
-the build's signed declarations index, each file's raw bytes checked against its sha384 and every
-body read with a size limit; nothing downloaded runs) into `next-federation-types/<remote>/`, and
-writes `next-federation-types/index.d.ts`, which fills `RemoteProps`:
-`createRemoteComponent<RemoteProps<'shop', './Cart'>>({ expose: './Cart' })`. Exits 1 when a remote
-fails (it keeps its previous types); a remote whose current (verified) build publishes no types
-loses its previous ones and its `index.d.ts` entry. Guide: [Types](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md#types).
+A `.ts` config needs Node 22.18 or 23.6 or newer; otherwise use `.mjs`. It does not read `.env.local`, runs nothing it downloads, checks every file's sha384 and exits 1 when a remote fails. See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/reference.mdx#types).
 
-## API
+### Types
 
-| Export                                                    | Entry                                                                        | Purpose                                                           |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `withNextFederation(config)`                              | `@next-federation/next/config`                                               | Required config wrapper.                                          |
-| `createIslands(federation, { getIdentity? })`             | `@next-federation/next/server`                                               | `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router). |
-| `createFederationRoutes(federation, { getIdentity })`     | `@next-federation/next/routes`                                               | JWKS and token route handlers (App Router).                       |
-| `createPagesIslands(federation, { getIdentity? })`        | `@next-federation/next/pages/server`                                         | `getIslandProps` (Pages Router, server only).                     |
-| `createFederationApiHandler(federation, { getIdentity })` | `@next-federation/next/pages/server`                                         | JWKS and token API route (Pages Router).                          |
-| `RemoteIsland`, `IslandProps`                             | `@next-federation/next/pages`                                                | Render an island in a page component.                             |
-| `getComponentDescriptor(federation, remote, options?)`    | `@next-federation/next/server`, `@next-federation/next/pages/server`         | Remote components: the build to render (the `descriptor` prop).   |
-| `createRemoteComponent`, `registerSharedModules`, …       | `@next-federation/next/components`, `@next-federation/next/pages/components` | Remote components with the host's `next/*` modules.               |
-
-`@next-federation/next/island-cache` and its `/legacy` and `/cache-components` variants are internal:
-`withNextFederation` aliases them.
-
-## Constraints
-
-- Next.js `>=15.5.28 <17` (16 or 15), React 19 (an App Router host runs Next's own React; a Pages Router
-  host can run React 18.3), Turbopack or webpack, Node 20.9 or newer. On Next 15
-  the island cache is the legacy one; `cacheComponents` is Next 16 only (`NF-002` on Next 15).
-  Next 14 is not supported.
-- Private islands make an App Router route dynamic without `cacheComponents`; with `blocking` they make it dynamic (`ƒ`) with `cacheComponents` too, and the page needs `export const instant = false`. Pages Router private islands are `getServerSideProps` only (`NF-002`).
-- A `'use cache'` component around `RemoteIsland` must sit inside `<Suspense>`.
-- A Next app does not expose its `app/` folder: to share UI from one, publish an island remote.
+`IslandSpec`, `RemoteIslandProps`, `AppIdentity`, `PagesIdentity`, `PagesIslandSpec`, `IslandProps`, `ComponentDescriptorOptions`, `RemoteComponentDescriptor`.
 
 ## Learn more
 
 - [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.mdx)
-- [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.md)
-- [Caching](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching.md)
-- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md)
-- [CSP](https://github.com/tariqule/next-federation/blob/main/docs/guides/csp.md)
-- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
-- [Sharing components from a Next app](https://github.com/tariqule/next-federation/blob/main/docs/guides/sharing-components-from-a-next-app.md)
+- [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.mdx)
+- [Caching](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching.mdx)
+- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.mdx)
+- [CSP](https://github.com/tariqule/next-federation/blob/main/docs/guides/csp.mdx)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx)
+- [Sharing components from a Next app](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/sharing-from-a-next-app.mdx)
 
 License: MIT

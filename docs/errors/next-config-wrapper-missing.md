@@ -1,13 +1,20 @@
 # NF-017: `withNextFederation` is missing from next.config
 
-## What happened
+## Why This Error Occurred
 
-next-federation code ran in an app whose `next.config` does not use `withNextFederation`.
+next-federation code ran in an app whose `next.config` does not use `withNextFederation`. The wrapper sets the values the runtime reads, such as the cache model and `basePath`.
 
-## Why
+## Possible Ways to Fix It
 
-The wrapper sets `env.NF_CACHE_MODEL`, `env.NF_BASE_PATH` and `env.NF_NEXT_VERSION`, aliases the island cache for your caching model, and adds `@next-federation/next` to `transpilePackages`. The runtime reads these values; without them it cannot tell which cache model or `basePath` the app uses.
+- Wrap your config and restart the build:
 
-## How to fix
+  ```ts
+  // next.config.ts
+  import { withNextFederation } from '@next-federation/next/config'
 
-Wrap your config: `export default withNextFederation(nextConfig)` (imported from `@next-federation/next/config`) and restart the build. See [Getting started: App Router](../guides/getting-started-app-router.mdx#wrap-your-next-config).
+  export default withNextFederation(nextConfig)
+  ```
+
+## Useful Links
+
+- [Getting started: App Router](../guides/getting-started-app-router.mdx#wrap-your-next-config)

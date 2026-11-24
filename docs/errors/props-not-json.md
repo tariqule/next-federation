@@ -1,18 +1,18 @@
 # NF-009: Island props are not plain JSON
 
-## What happened
+## Why This Error Occurred
 
-Props passed to an island contain values that cannot be serialized as plain JSON.
+Props passed to an island cross a network boundary, so values that are not plain JSON do not survive: functions, class instances, `Date`, `Map`, `undefined` in arrays and cyclic references. The message names the path of the bad value.
 
-## Why
+## Possible Ways to Fix It
 
-Islands receive props across a network boundary. Functions, class instances, `Date`, `Map`, `undefined` in arrays and cyclic references do not survive.
+- Convert props to plain JSON before passing them: ISO strings for dates, arrays for maps.
+- Pass callbacks through events, not props.
 
-The message names the path of the bad value, for example `at .props.when` in the App Router and
-`at .when` in the Pages Router. Only the prefix differs by router.
+  ```tsx
+  <RemoteIsland remote="shop" island="Hello" props={{ when: new Date().toISOString() }} />
+  ```
 
-## How to fix
+## Useful Links
 
-Convert props to plain JSON before passing them (ISO strings for dates, arrays for maps) and pass callbacks through events rather than props.
-
-See [Limits](../guides/limits.md).
+- [Limits](../guides/limits.md)

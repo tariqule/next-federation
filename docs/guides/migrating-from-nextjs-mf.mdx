@@ -1,0 +1,198 @@
+---
+title: Migrating from nextjs-mf
+description: Move a Pages Router app from @module-federation/nextjs-mf to Vite remotes and a next-federation host.
+---
+
+Move a Next.js app from `@module-federation/nextjs-mf` to next-federation. Remotes become Vite builds (remote components can also come from Rspack), and Next apps become hosts only.
+
+<Callout>
+  **Good to know:** nextjs-mf is in maintenance mode
+  ([module-federation/core#3153](https://github.com/module-federation/core/issues/3153)) and supports
+  only the Pages Router with webpack. next-federation needs Next `>=15.5.28`, so a Next 14 app must
+  upgrade first ([Limits](limits.md#nextjs-15)).
+</Callout>
+
+## Map the concepts
+
+| nextjs-mf                                    | next-federation                                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Exposed client component                     | [Remote component](remote-components.md): `nextFederationComponents` builds it, `createRemoteComponent` renders it in the host |
+| Exposed component that renders server data   | Island: the remote renders it ([Writing an island remote](writing-an-island-remote.md))                                        |
+| `NextFederationPlugin` in `next.config.js`   | `withNextFederation()` and `defineFederation({ remotes })`                                                                     |
+| `remotes: { shop: 'shop@…/remoteEntry.js' }` | `remotes: { shop: { origin } }`. The host reads the build descriptor at `/_nf/components.json`.                                |
+| `shared: { react: { singleton: true } }`     | React is always the host's. List other modules in `shared` ([Sharing modules](remote-components.md#sharing-modules)).          |
+| `FlushedChunks`, `revalidate()`              | Automatic                                                                                                                      |
+| A Next app as a remote                       | Not supported ([Sharing components from a Next app](sharing-components-from-a-next-app.md))                                    |
+
+## Migrate a Pages Router app
+
+The example: a host `www` imports `shop/Cart` (a client component) and `shop/Reviews` (server data) from a Next app `shop`.
+
+<Steps>
+<Step>
+
+### Take inventory
+
+List every `exposes` entry and every `import('remote/…')`. For each module:
+
+- **Client component:** a remote component.
+- **Renders server data or needs the remote's secrets:** an island.
+- **Uses `next/link` or `next/navigation`:** keep it. The build rewires both to the host's router ([Links](remote-components.md#links-that-work-in-every-host)).
+- **Uses `next/router`:** list it in `shared` and create the component with `@next-federation/next/pages/components`. It renders only in a Pages Router host.
+- **Uses `next/image` or `next/head`:** rewrite it. Pass what it needs as props.
+
+</Step>
+<Step>
+
+### Build the remote with Vite
+
+Create a Vite package for the remote and move the exposed files into it.
+
+```ts title="shop-remote/vite.config.ts"
+import { nextFederationComponents } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [
+    nextFederationComponents({
+      name: 'shop',
+      base: 'https://shop-remote.example.com/',
+      exposes: { './Cart': './src/Cart.tsx' },
+      shared: ['@acme/host-context'], // modules the host provides, besides React
+    }),
+  ],
+})
+```
+
+Set `NF_COMPONENTS_SIGNING_KEY` at build so hosts can server-render ([Key generation](remote-components.md#key-generation)). Serve `dist/` with `nf-serve` ([Deployment](deployment.md)). Move `Reviews` into an [island remote](writing-an-island-remote.md).
+
+</Step>
+<Step>
+
+### Move the host to next-federation
+
+1. Remove `@module-federation/nextjs-mf`, the `NextFederationPlugin` block and `NEXT_PRIVATE_LOCAL_WEBPACK`. Turbopack and webpack both work.
+2. Remove `FlushedChunks`, `flushChunks` and `revalidate()` calls.
+3. On Next 14, upgrade to Next 15 or 16 and React 19. A Next 15 Pages Router host can stay on React 18.3 ([React 18](limits.md#react-18)).
+4. Install next-federation and wrap the config:
+
+```npm
+npm install @next-federation/core @next-federation/next @next-federation/react
+```
+
+```ts title="next.config.ts"
+import { withNextFederation } from '@next-federation/next/config'
+
+export default withNextFederation({
+  // the rest of your Next config
+})
+```
+
+</Step>
+<Step>
+
+### Configure the remote
+
+Import this file only from `getServerSideProps`, `getStaticProps` and API routes.
+
+```ts title="lib/federation.config.ts"
+import { defineFederation } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: {
+    shop: {
+      origin: 'https://shop-remote.example.com',
+      components: {
+        ssr: {
+          publicKeys: [JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)],
+        },
+      },
+    },
+  },
+})
+```
+
+</Step>
+<Step>
+
+### Replace the dynamic imports
+
+Before:
+
+```tsx
+const Cart = dynamic(() => import('shop/Cart'), { ssr: true })
+```
+
+After:
+
+```tsx title="lib/cart.tsx"
+import * as HostContext from '@acme/host-context'
+import { createRemoteComponent } from '@next-federation/next/pages/components'
+
+export const Cart = createRemoteComponent<{ items: number }>({
+  expose: './Cart',
+  shared: { '@acme/host-context': { version: '1.0.0', module: HostContext } },
+  fallback: <p>Loading the cart…</p>,
+  errorFallback: <p>Cart unavailable</p>,
+})
+```
+
+```tsx title="pages/index.tsx"
+import { getComponentDescriptor } from '@next-federation/next/pages/server'
+import { federation } from '../lib/federation.config'
+import { Cart } from '../lib/cart'
+
+export const getServerSideProps = async () => ({
+  props: { descriptor: await getComponentDescriptor(federation, 'shop') },
+})
+
+export default function Home({ descriptor }) {
+  return <Cart descriptor={descriptor} items={3} />
+}
+```
+
+A remote that is down renders the fallback with status 200. Replace `shop/Reviews` with `RemoteIsland` ([Pages Router](getting-started-pages-router.mdx)).
+
+</Step>
+<Step>
+
+### Check sharing and styles
+
+The host must pass every `shared` module in `createRemoteComponent`, unless the remote bundles a `fallback`. A version outside `requiredVersion` renders the fallback ([`NF-036`](../errors/component-shared-unavailable.md)). With a CSP, add the remote's origin to `script-src`, `style-src` and `connect-src` ([CSP](csp.md)).
+
+</Step>
+</Steps>
+
+## Move the App Router later
+
+The same remote works in App Router pages. See [App Router](remote-components.md#app-router).
+
+## What has no equivalent
+
+- **Next apps as remotes**, including `exposePages`. Move shared code into a Vite remote.
+- **Sharing all of `next/*`.** Only `next/link`, `next/navigation` and `next/router` reach the host's router.
+- **`strictVersion`, `eager` and per-module `singleton`.** Set `requiredVersion` and `fallback`.
+- **Static `import 'shop/Cart'`** in host code.
+- **Tested webpack remotes.** Rspack is tested. Both need `nf-describe` ([Rspack or webpack](remote-components.md#remotes-built-with-rspack-or-webpack)).
+- **Module Federation `dts` generation.** Use `nf-types` ([Types](remote-components.md#types)).
+- **Server rendering of an unverified build.** It renders in the browser only.
+
+## Next steps
+
+<Cards>
+  <Card title="Remote components" href="remote-components.md">
+    Build and host client components that run in the host's React tree.
+  </Card>
+  <Card title="Writing an island remote" href="writing-an-island-remote.md">
+    Turn exposed server-data components into islands.
+  </Card>
+  <Card
+    title="Sharing components from a Next app"
+    href="sharing-components-from-a-next-app.md"
+  >
+    Move shared code out of a Next app into a Vite remote.
+  </Card>
+  <Card title="Limits" href="limits.md">
+    What is not supported and what it costs.
+  </Card>
+</Cards>

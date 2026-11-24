@@ -1,0 +1,138 @@
+---
+title: 'Remote Components Reference'
+description: Build output, nf-describe, React versions, runtime behaviour, limits, links and CSP for remote components.
+---
+
+Look up how remote components are built and rendered.
+
+## Build output
+
+`vite build` writes `dist/<buildId>/`.
+
+| File                   | Contents                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `client/`              | The browser build, the server copy (`remoteEntry.ssr.js`) and, with `types: true`, `@mf-types/`.   |
+| `nf-components.json`   | The descriptor: build id, manifest URL, sha384 of server files, browser assets, digest, signature. |
+| `nf-build.json`        | What `nf-serve` reads.                                                                             |
+| `nf-shared-usage.json` | Which exposed modules import which shared module. Signed into the descriptor's `shared` field.     |
+
+`nf-serve` serves `client/` to anyone at `/b/<buildId>/…`, with `Access-Control-Allow-Origin: *`. It answers `404` for build bookkeeping (`.vite/`, `mf-stats.json`). On another static host, leave those out of the upload. Never put anything in `client/` that you would not publish.
+
+## nf-describe
+
+`nf-describe --dir <build folder>` reads `client/mf-manifest.json`, then:
+
+- Records the server entry in the manifest (`metaData.ssrRemoteEntry`).
+- Hashes the manifest and every server file. It fails (`NF-002`) when a server file requires a module hosts never provide.
+- Writes `nf-components.json`, signed when `NF_COMPONENTS_SIGNING_KEY` is set, and `nf-build.json`.
+
+| Option               | Description                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `--ssr-entry <file>` | The server entry, relative to `client/`.                                                      |
+| `--no-ssr`           | Describes a browser-only build.                                                               |
+| `--types`            | Signs `client/@mf-types/index.json`. Fails (`NF-002`) without that folder.                    |
+| `--build-id <id>`    | The build id. Default: the folder name.                                                       |
+| `--base <url>`       | The public URL, when the manifest's `publicPath` is `auto`. It must contain the build id.     |
+| `--verify`           | Checks a described build (`NF-027` otherwise).                                                |
+| `--public-key <jwk>` | With `--verify`, verifies the signature. Repeatable. Without it the signature is not checked. |
+
+The descriptor's `shared` field lists every module but React, with its `requiredVersion` and `fallback`. Without `nf-shared-usage.json`, a host checks every exposed module against every shared module (`NF-036`). Describing a build again keeps its build time. `nf-describe` never follows symlinks and refuses server files outside the build folder (`NF-002`).
+
+`--verify` checks that the digest covers the payload, the signature signs it, the assets match the manifest, the types index matches the folder and every server file still matches its sha384.
+
+## React versions
+
+The range is the `requiredVersion` of the four React modules. It must be valid semver (`NF-002`). The descriptor lists them only for a range other than `'^19.0.0'`. A host checks any unlisted one against `'^19.0.0'`, and counts a canary React by its release numbers.
+
+- **Upgrade App Router hosts first.** Hosts on 0.1.x compare a listed range with Next's canary React, which no range such as `'^18.3.0 || ^19.0.0'` matches. Every such host renders the remote's components as the fallback (`NF-036`).
+- **Avoid React 19-only APIs** in a remote that accepts React 18: `use`, `useActionState`, `useOptimistic`, `ref` as a prop (use `forwardRef`), and `precedence` on `<link>` or `<style>`. A component that calls one fails on a React 18 host.
+- **A React 19-only remote** (the default) on a React 18 host is refused before anything is fetched. Every component of that build renders its fallback (`NF-036`).
+- **Rspack and webpack remotes** set the range as `requiredVersion` on the four React shares. They have no `react` option.
+- **Islands** are separate. An island remote keeps its own React.
+
+## Stylesheet loading
+
+- The descriptor lists only each exposed module's synchronous stylesheets. CSS of lazy chunks (a dynamic `import()`) is injected by the remote's runtime when the chunk loads, with no FOUC guarantee.
+- The host renders only listed URLs under the build's `base`, whose origin must be one of the remote's origins. A descriptor refused for tampering (`NF-027`) keeps none.
+- If a stylesheet fails to load in a streamed App Router boundary, React discards that boundary's server HTML and renders it in the browser. In the initial HTML it only leaves the component unstyled.
+
+## Runtime behaviour
+
+- **One React:** the host registers its own React modules, your `shared` modules and, with a Next.js entry, its `next/*` modules.
+- **Loading:** `ErrorBoundary(errorFallback) > Suspense(fallback) > component`. A loaded module is cached per build. The server retries a failure after one second. The browser retries after 500 ms, 1 s and 2 s, then shows `errorFallback`.
+- **Render errors (`NF-040`):** the host catches an error in the exposed component's own render on the server, renders `fallback` and logs it once per build. The browser then renders the component, and shows `errorFallback` if it throws too. Errors in child components, or in a class, `memo` or `forwardRef` export, still reach Next. Keep browser-only code in effects.
+- **Remote down:** the page answers 200. A host that never fetched a descriptor renders `errorFallback`. One that did keeps rendering the last known build.
+- **Redeploys** are picked up within `revalidate`, without a host restart. In-flight pages keep their build.
+- **Events:** in the browser, every load and failure is an `nf:component` `CustomEvent` on `document` (`COMPONENT_EVENT`). On the server, `defineFederation({ onEvent })` receives `component:descriptor` and `component:error`. Server load and render failures are logged (`NF-029`, `NF-040`), not sent to `onEvent`.
+- **An inert boundary can be replaced early:** if a parent re-renders with changed props while the browser retries, React 19 replaces the server HTML with the fallback.
+
+## Requirements and limits
+
+- **Node.js 20.16 or newer** for server rendering. The loader needs `process.getBuiltinModule`. On older Node, remote components render in the browser only (`NF-028`).
+- **Memory:** each layer keeps at most `maxBuilds` (default 5) builds per remote and evicts the oldest. `@module-federation/vite` keeps one `__mf_init__…` entry per build, never removed ([maintainer note](../../maintainers/mf-vite-init-keys.md)).
+- **Load timeout:** one attempt fails after 10 s, so a stalled remote never holds a render.
+- **Edge runtime:** no server rendering. Components render in the browser.
+- **Remote dev server:** `vite` answers with `ssr: null`, so hosts render it in the browser only. Test server rendering with `vite build` and `nf-serve`. Edits do not hot-reload in the host.
+
+## Devtools
+
+The [Module Federation Chrome devtools](https://module-federation.io/guide/debug/chrome-devtool) work with remote components. The host appears as the consumer `nf_host`, and each remote as a producer keyed `<container name>:<manifest URL>`. Only the browser has these globals, so server rendering does not show. The panel's proxy changes browser loads only, so a proxied component's server HTML and browser module can differ until hydration.
+
+## Links reference
+
+### Supported surface
+
+**`next/link`** (default export):
+
+- `href` is a string or `{ pathname, query, hash }`. `as` is the href rendered and navigated to.
+- `replace`, `scroll`, `prefetch`, children and anchor attributes pass through. The link always renders `<a href>`.
+- `legacyBehavior` with one element child renders one `<a>`. The child's `onClick` replaces the `Link`'s.
+- `locale`, `passHref`, `shallow` and `onNavigate` are ignored, with one development warning each.
+- On React 19, a `ref` reaches the `<a>`. On React 18 it stays `null`.
+
+**`next/navigation`:** `usePathname()`, `useSearchParams()` (read-only) and `useRouter()` (`push` and `replace` with `{ scroll }`, `back`, `forward`; `refresh` and `prefetch` do nothing). Anything else (`redirect`, `notFound`, `useParams`) fails the remote's build. Read route parameters from props or `usePathname()`.
+
+**React Router 7** (`react-router`, `react-router-dom`): every export is the real package's. `Link`, `NavLink`, `useNavigate`, `useLocation`, `useSearchParams` and `useHref` act only outside a router the remote renders itself. The host's own router does not count.
+
+- Inside the remote's own router they are the real ones, and the host's URL does not change.
+- Outside one, they navigate through the host. `NavLink` sets `aria-current`. `reloadDocument` renders a plain `<a>`.
+- Outside one, `useLocation()` has `pathname` and `search` only. `useSearchParams()` returns a copy whose setter navigates.
+
+### Unsafe hrefs
+
+- A path, query or fragment on the page's origin (`/orders`, `?q=1`, `#top`) navigates through the host's router.
+- An href with a scheme or `//` is a plain anchor.
+- A `javascript:`, `vbscript:` or `data:` href renders the `<a>` without an `href`.
+- `push`, `replace` and `navigate` follow only an http(s) href on the page's origin. Anything else is dropped, with a development warning.
+
+### The range rule
+
+The build bundles `@next-federation/router` and declares a range. While it is 0.x, `0.2.3` gives `>=0.2.0 <1.0.0`. From 1.0, `1.4.2` gives `^1.4.2`.
+
+The remote uses the host's copy when its version is in the range. Otherwise the remote uses its own copy, and the host logs one warning per remote (`NF-036`, a warning: the component renders). Upgrade the host's `@next-federation/next` or `@next-federation/react` to fix it.
+
+- **Range miss:** links do full page loads. With a `basePath` or locale, the `href` lacks the prefix, and `usePathname()` is `''` in the server HTML.
+- **Rspack and webpack remotes:** their own copy never reaches another remote.
+- **Vite remotes, same version:** within one page, the first build to cache a router version decides it for every build that bundles that version. This matters only with explicit `shared` ranges.
+- **Static pages:** links and `usePathname` keep a static App Router page static. `useSearchParams` renders the fallback in static HTML and fills in after hydration.
+
+## Content Security Policy
+
+Add the remote's origin to `script-src`, `style-src` and `connect-src` (the browser fetches `mf-manifest.json`, and an SPA fetches the descriptor). See [CSP](../csp.mdx).
+
+## Next steps
+
+<Cards>
+  <Card title="Limits" href="../limits.mdx">
+    What remote components cannot do and what they cost.
+  </Card>
+  <Card title="Writing an island remote" href="../writing-an-island-remote.mdx">
+    The other way to share UI.
+  </Card>
+  <Card title="Deployment" href="../deployment.mdx">
+    Serve and retire builds.
+  </Card>
+  <Card title="Migrating from nextjs-mf" href="../migrating-from-nextjs-mf.mdx">
+    Move a Module Federation setup over.
+  </Card>
+</Cards>

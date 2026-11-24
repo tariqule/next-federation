@@ -1,54 +1,25 @@
 # NF-028: Remote component rendered in the browser only
 
-## What happened
+## Why This Error Occurred
 
-The host did not render a remote component on the server. It rendered the component's fallback in
-the server HTML and the browser rendered the component itself. The component still works; the page
-just has no server HTML for it. Each case below is logged once per build (and router layer), or
-once per process.
+The host did not render a remote component on the server. The server HTML has its fallback and the browser renders the component. The message names the case.
 
-A static regeneration that runs before the server process has loaded the build is not this code:
-the components still render on the server, at request time. See
-[NF-039](component-deferred.md).
+## Possible Ways to Fix It
 
-## Why
+- Unverified or untrusted build: sign the remote's descriptor (`NF_COMPONENTS_SIGNING_KEY` at build time, `publicKeys` in the host) or pin its builds, and pass the descriptor from `getComponentDescriptor` unchanged:
 
-The message names the case:
+  ```ts
+  // federation.ts
+  components: { ssr: { publicKeys: [/* the remote's public JWK */] } }
+  ```
 
-- **Unverified build**: the build is neither signed by a key in `components.ssr.publicKeys` nor
-  pinned in `components.ssr.pinned` (and `integrity: 'unsafe-dev'` is not set in development).
-- **Untrusted descriptor**: the descriptor passed to the component was not verified in this server
-  process, or no longer fits the remote's current policy (origin, container name, or
-  `ssr.maxAge` for a signed build). Pass the value of `getComponentDescriptor`, never a hand-made
-  or request-supplied descriptor.
-- **Node.js too old**: server rendering needs `process.getBuiltinModule` (Node.js 20.16 or newer).
-- **Nested remotes, or no checkable manifest**: the build's `mf-manifest.json` lists `remotes` of
-  its own, lists no `remotes` array, or the descriptor's `manifest` is not a manifest the server
-  loader could check (for example the remote entry itself). Its nested code would load outside the
-  sha384 check, so it never server-renders, in any host. The host decides this when it fetches the
-  build's descriptor (it fetches the manifest and checks its sha384 then), before any render: one
-  `NF-028` line, the descriptor comes back browser-only, and no server code is fetched. If the
-  manifest could not be fetched then, the server loader refuses the build itself, with the same
-  single line.
-- **Build that cannot be kept apart per router layer**: in a host with App Router and Pages Router
-  routes (two Reacts in one process), builds made with a Module Federation plugin version the server
-  loader does not know how to isolate server-render in one layer per process only. The other layer
-  renders them in the browser.
-- **Another React or a stale module in the share cache**: this runtime's Module Federation share
-  cache holds another React, or another instance of a host-provided module (two copies installed,
-  one registered twice, a fallback copy cached before the host registered its own, or a dev server
-  such as `next dev --webpack` reloaded the host's modules).
+- Node.js too old: run the host on Node.js 20.16 or newer.
+- Nested remotes: expose the nested components from their own remote and use them from the host directly.
+- Mixed-router hosts: build remotes with a Module Federation plugin version the library lists.
+- Stale share cache: restart the dev server, or install one copy of each host-provided module.
+- To turn server rendering off without a warning, set `components.ssr: false`.
 
-## How to fix
+## Useful Links
 
-- Sign the remote's descriptor (`NF_COMPONENTS_SIGNING_KEY` at build time, `publicKeys` in the
-  host) or pin its builds. See [Remote components: integrity](../guides/remote-components.md#integrity-server-rendering).
-- Pass the descriptor from `getComponentDescriptor` unchanged.
-- Run the host on Node.js 20.16 or newer.
-- Nested remotes: expose the nested components from their own remote and use them from the host
-  directly.
-- Mixed App Router and Pages Router hosts: build remotes with a Module Federation plugin version the
-  library lists (see [Mixed-router hosts](../guides/remote-components.md#mixed-router-hosts)).
-- Stale share cache in development: restart the dev server. In production, install one copy of
-  each host-provided module and register it once.
-- `components.ssr: false` turns server rendering off for a remote without a warning.
+- [Remote components: integrity](../guides/remote-components.md#integrity-server-rendering)
+- [Remote components: mixed-router hosts](../guides/remote-components.md#mixed-router-hosts)

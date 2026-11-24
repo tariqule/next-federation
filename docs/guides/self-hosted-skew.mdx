@@ -1,0 +1,82 @@
+---
+title: Self-hosted build retention
+description: Keep a self-hosted remote's recent builds online with nf-serve so cached pages keep working.
+---
+
+Keep recent builds of a self-hosted remote online, so pages cached before a deploy still load. `nf-serve` does this for you.
+
+## Serve builds with nf-serve
+
+<Steps>
+<Step>
+
+### Put each build in its own folder
+
+`<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` is one build. Delete a build's folder before you rebuild into it.
+
+</Step>
+<Step>
+
+### Start nf-serve
+
+```bash
+nf-serve --dir ./builds --port 4100 [--current <buildId>] [--max-builds 3] [--min-age-hours 24]
+```
+
+Each live island build runs in its own process behind a router. Routes are in [Deployment](deployment.mdx#self-hosted-nf-serve).
+
+</Step>
+<Step>
+
+### Restart it on every deploy
+
+`nf-serve` evaluates retention at start. Run it under Docker, systemd or Kubernetes: it exits non-zero when a build process dies (`NF-012`).
+
+</Step>
+</Steps>
+
+## Choose how long builds stay live
+
+A build is **live** when it is the current build (`--current`, or the newest `builtAt`), one of the newest `--max-builds` (3), or younger than `--min-age-hours` (24). Every request for any other build answers `410 NF-023`. Deleting a retired build's folder is safe.
+
+Keep builds for at least the longest of:
+
+- the host's island `revalidate`,
+- the stale-if-error window, `max(1 h, 2 × revalidate)`,
+- the longest open tab you expect.
+
+Raise `--min-age-hours` if tabs stay open for days.
+
+<Callout>
+  **Good to know:** On Vercel the production domain serves only the newest
+  build. See [Deploying a remote on Vercel](deploying-a-remote-on-vercel.mdx).
+</Callout>
+
+## Remove builds with a security advisory
+
+Every live build answers `/b/<build>/_nf/*`, Server Actions included. After you upgrade away from a `react-server-dom-webpack` affected by [GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), delete every build made with an affected version and restart `nf-serve`. Or restart once with `--max-builds 1 --min-age-hours 0`.
+
+`nf-build.json` records the versions a build used. `nf-serve` checks them at start (`NF-041`):
+
+- The current build is affected: `nf-serve` does not start.
+- An older live build is affected, or its field is malformed: it is retired and answers `410 NF-023`.
+- A build without the field is served and logged once as an error. Remove it yourself if it used an affected version.
+
+See [NF-023](../errors/build-retired.md) and [NF-041](../errors/vulnerable-react-server-dom.md).
+
+## Next steps
+
+<Cards>
+  <Card title="Deployment" href="deployment.mdx">
+    Deploy a host and a remote, and turn on compression.
+  </Card>
+  <Card
+    title="Deploying a remote on Vercel"
+    href="deploying-a-remote-on-vercel.mdx"
+  >
+    The skew options when you cannot run nf-serve.
+  </Card>
+  <Card title="Caching" href="caching.md">
+    Keep the host's cache shorter than a build's retention.
+  </Card>
+</Cards>

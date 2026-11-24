@@ -1,40 +1,20 @@
 # NF-037: Under `next dev`, private island values may reach the browser
 
-## What happened
+## Why This Error Occurred
 
-Under `next dev`, React sends the values that Server Components await to the browser as
-development debug info. Next.js 15 inlines it in the App Router's HTML and RSC payload; Next.js 16
-sends it over the dev server's HMR websocket. Next's dev tooling leaves code it recognises as a
-dependency out of it. The host logged this warning (once per process, per cause) because that
-recognition fails or may fail for `@next-federation/next`, so the debug info may carry what it
-awaits for a private island:
+Under `next dev`, React sends awaited Server Component values to the browser as debug info, and for `@next-federation/next` Next's dev tooling may not leave them out. For a private island this can include cookies, headers, your `getIdentity` result and the island token. The message names the cause: the library runs from outside `node_modules` (linked), or `--disable-source-maps` is set. Production builds never contain this.
 
-- the request's cookies (HttpOnly ones included) and headers (`Authorization` too),
-- what your `getIdentity` returns,
-- the island token minted for the remote.
+## Possible Ways to Fix It
 
-Production builds never contain it.
+- Keep the dev server on your machine:
 
-## Why
+  ```sh
+  next dev -H 127.0.0.1
+  ```
 
-The message names the cause:
+- Drop `--disable-source-maps`.
+- Install packed packages (`pnpm pack`) instead of linking, or use `next build && next start`.
 
-- **Linked library**: `@next-federation/next` runs from outside `node_modules` (a workspace
-  package, `npm link`, a source checkout). Next treats it as your own code, and the values above do
-  reach the browser.
-- **Source maps disabled**: `next dev --disable-source-maps` turns off Node's source maps, which
-  Next uses to recognise dependencies. With Turbopack and webpack on Next.js 15.5.28 and 16.4.6 we saw no values
-  reach the browser, but nothing guarantees it, so the host warns.
+## Useful Links
 
-Installed from npm with Next's default dev source maps, the library is left out of the debug info.
-See [Limits](../guides/limits.md#next-dev-and-linked-installs).
-
-## How to fix
-
-Nothing is broken; this only affects `next dev`.
-
-- Keep the dev server on your machine: `next dev -H 127.0.0.1`. By default `next dev` listens on
-  every network interface (`0.0.0.0`).
-- Run `next dev` with source maps (the default: drop `--disable-source-maps`).
-- To check what a real install sends while you develop the library, install the packed packages
-  (`pnpm pack`) instead of linking them, or run a production build (`next build && next start`).
+- [Limits: next dev and linked installs](../guides/limits.md#next-dev-and-linked-installs)

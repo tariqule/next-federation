@@ -1,21 +1,22 @@
 # NF-031: Server Action not found
 
-## What happened
+## Why This Error Occurred
 
-The remote answered a Server Action request with `404` because it has no action with the id in the
-`X-NF-Action` header.
+The remote answered a Server Action request with `404`: the id in the `X-NF-Action` header is not a `'use server'` function in the build that served the request. Usually the page came from one build and the action went to another, or the export was renamed or removed.
 
-## Why
+## Possible Ways to Fix It
 
-The id names a file or export that is not a `'use server'` function in the build that served the
-request. Usually the page was rendered by one build and the action was sent to another, the export
-was renamed or removed, or the export is a plain function in a `'use server'` file that the bundler
-did not register as a Server Action.
+- Reload the page so the island and its action ids come from the same build.
+- Export the function from a file that starts with `'use server'`:
 
-## How to fix
+  ```ts
+  'use server'
 
-Reload the page so the island and its action ids come from the same build. Check that the function
-is exported from a file that starts with `'use server'` and that the remote build in use contains
-it.
+  export async function addToCart(id: string) {}
+  ```
 
-See [Server Actions: errors](../guides/server-actions.md#errors).
+- Check that the remote build in use contains the action.
+
+## Useful Links
+
+- [Server Actions: errors](../guides/server-actions.md#errors)

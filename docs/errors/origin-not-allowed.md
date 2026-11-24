@@ -1,15 +1,20 @@
 # NF-022: Request origin is not an allowed host
 
-## What happened
+## Why This Error Occurred
 
-A request arrived from a host that is not on the remote's allowed list.
+A request came from a host that is not on the remote's allowed list. Remotes only serve islands to hosts they know.
 
-## Why
+## Possible Ways to Fix It
 
-Remotes only serve islands to hosts they have been told about.
+- Add the host's origin to the remote's `hosts` option. Each entry must equal the `Origin` header a browser sends: lowercase, no path, no trailing slash.
 
-## How to fix
+  ```ts
+  // vite.config.ts
+  nextFederationIslands({ hosts: ['https://app.example.com'] })
+  ```
 
-Add the host's origin to the remote's `hosts` option, or check that a proxy is not changing the `Origin` header.
+- Check that a proxy is not changing the `Origin` header.
 
-Each `hosts` entry must equal the `Origin` header a browser sends: lowercase, no path, no trailing slash. See [Writing an island remote](../guides/writing-an-island-remote.md#host-origins-and-issuers-must-match-exactly).
+## Useful Links
+
+- [Writing an island remote: host origins and issuers must match exactly](../guides/writing-an-island-remote.md#host-origins-and-issuers-must-match-exactly)

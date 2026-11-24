@@ -1,0 +1,116 @@
+---
+title: Identity reference
+description: The private island token model, claims, issuer matching, sign-out behaviour and what to expect.
+---
+
+How tokens work, what `getIdentity` returns, how issuers match, and what happens on sign-out. For setup, see [Identity](identity.mdx).
+
+## How it works
+
+- The host signs ES256 tokens. The audience (`aud`) is the remote's name.
+- The lifetime is 300 seconds by default (`identity.ttlSeconds`). Above 900 is `NF-002`.
+- On a server render, the token goes only to the remote. It never appears in HTML, the RSC payload, `__NEXT_DATA__` or `/_next/data`.
+- In the browser, the island asks the host's same-origin token endpoint for a fresh token.
+- The remote fetches the host's JWKS from the URL in its `issuers` map, never from the token.
+- A JWKS outage answers `503` (`NF-015`), not `401`.
+
+## What `getIdentity` returns
+
+On the host, `getIdentity` returns `{ sub, claims? }` for a signed-in user, or `null` for an anonymous one:
+
+```ts
+const getIdentity: AppIdentity = async ({ cookies }) => {
+  const session = await readSession(cookies.get('session')?.value)
+  if (!session) return null
+  return {
+    sub: session.userId, // required, a non-empty string
+    claims: { name: session.name, email: session.email, roles: session.roles },
+  }
+}
+```
+
+- `sub` is required and becomes the token's `sub`. Each key of `claims` becomes a top-level claim. Keep claims small.
+- `iss`, `aud`, `sub`, `exp`, `iat`, `nbf` and `jti` are reserved. Setting one in `claims` throws `NF-002`.
+- If `getIdentity` throws, catch the error and return `null`. The visitor is then anonymous.
+
+On the remote, `getIdentity()` returns the verified payload:
+
+```ts
+{ sub: 'u_123', name: 'Ada', email: 'ada@example.com', roles: ['admin'],
+  iss: 'https://www.example.com', aud: 'shop', iat: 1763380000, exp: 1763380120 }
+```
+
+`sub` is unique per issuer only. When a remote trusts several hosts, key data by `(iss, sub)`. Treat claims such as `roles` as display hints unless the remote trusts that host to grant them.
+
+## Sign in and sign out
+
+These demo routes trust the posted user name. Replace them with your session login. Redirect with a relative `Location`: Next normalizes `req.url` to `localhost`.
+
+```ts title="app/api/login/route.ts (demo only)"
+import { NextResponse, type NextRequest } from 'next/server'
+
+export async function POST(req: NextRequest) {
+  const form = await req.formData()
+  const user = String(form.get('user') ?? 'alice')
+  // A relative redirect (with a basePath: `${basePath}/me`).
+  const res = new NextResponse(null, {
+    status: 303,
+    headers: { Location: '/me' },
+  })
+  res.cookies.set('session-user', user, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+  })
+  return res
+}
+```
+
+```ts title="app/api/logout/route.ts"
+export function POST() {
+  const res = Response.json({ ok: true })
+  res.headers.append(
+    'set-cookie',
+    'session-user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'
+  )
+  return res
+}
+```
+
+The `Secure` flag is on in production only. Safari may drop `Secure` cookies on plain `http://localhost`, so use `https` there.
+
+On sign-out, call `clearIslandTokens()` from `@next-federation/react` ([sign-out button](identity.mdx#sign-users-out)). On an App Router host in production:
+
+- **Islands:** the next render of a private island makes no request and shows `errorFallback`. The island on screen keeps its HTML until the page re-renders.
+- **Server Actions:** a public island sends no `Authorization` header, so `getIdentity()` is `null` and a `requireIdentity` action answers `401` [`NF-014`](../errors/invalid-token.md). A private island's cached token is dropped by `clearIslandTokens()`.
+- **Issued tokens** stay valid until they expire. There is no revocation list. Keep `identity.ttlSeconds` short.
+
+## Issuers and JWKS URLs
+
+`iss` must equal the key of the remote's `issuers` map exactly. `https://www.example.com` and `https://www.example.com/` are different, and so are `localhost` and `127.0.0.1`. With a `basePath`, the issuer and the JWKS URL include it:
+
+|                    | Host config                             | Remote `issuers` key            | JWKS URL                                               |
+| ------------------ | --------------------------------------- | ------------------------------- | ------------------------------------------------------ |
+| No `basePath`      | `issuer: 'https://www.example.com'`     | `'https://www.example.com'`     | `https://www.example.com/api/next-federation/jwks`     |
+| `basePath: '/app'` | `issuer: 'https://www.example.com/app'` | `'https://www.example.com/app'` | `https://www.example.com/app/api/next-federation/jwks` |
+
+The remote's `hosts` holds the host's origin, with no `basePath`. A new host origin needs a rebuild ([Writing an island remote](writing-an-island-remote.md#host-origins-and-issuers-must-match-exactly)). A mismatch answers `401` [`NF-016`](../errors/issuer-not-allowed.md).
+
+## Plain `http`
+
+Use `https`. Plain `http` is refused (`NF-002`) except for `localhost`, `127.0.0.0/8` and `[::1]`, or when `NODE_ENV` is `development` or `test`. It covers `identity.issuer`, remote origins and the `issuers` map. To allow it elsewhere, set `allowInsecureHttp: true`. It logs one warning per process.
+
+## Behaviour to expect
+
+- An anonymous visitor on a private island makes no request and sees `errorFallback`.
+- The remote rejects tokens older than 900 seconds (`maxAgeSeconds`). Clock tolerance is 30 seconds.
+- `aud` scopes a token to one remote's server. Any island on the page can request a token for any configured remote, so configure only remotes you trust.
+- The token never appears in HTML, RSC payloads or page props. The exception is a library linked from outside `node_modules` under `next dev` (`NF-037`, [Limits](limits.md#next-dev-and-linked-installs)).
+
+## Key rotation, and why it changes the marker
+
+Remotes cache the JWKS for up to 10 minutes, and an unknown `kid` triggers one refetch per 30 seconds. That is why the [rotation steps](identity.mdx#rotate-a-signing-key) wait 10 minutes. The per-user marker derives from the first signing key, so it changes for every user when the new key signs.
+
+Related errors: [NF-013](../errors/identity-not-configured.md), [NF-014](../errors/invalid-token.md),
+[NF-015](../errors/jwks-unavailable.md), [NF-016](../errors/issuer-not-allowed.md).

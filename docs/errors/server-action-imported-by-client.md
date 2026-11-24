@@ -1,19 +1,23 @@
 # NF-034: A client module imports a 'use server' file
 
-## What happened
+## Why This Error Occurred
 
-The island build failed because a module bundled for the browser or for SSR imports a file that
-starts with `'use server'`.
+The island build failed because a browser or SSR module imports a file that starts with `'use server'`. In an island remote, Server Actions reach client components only as props from a Server Component. The message names the importing module.
 
-## Why
+## Possible Ways to Fix It
 
-In an island remote, Server Actions reach client components only as props passed from a Server
-Component. Importing a `'use server'` file directly from a `'use client'` module would ship a client
-reference that the remote cannot serve safely across the federation boundary.
+- Import the action in a Server Component and pass it down as a prop:
 
-## How to fix
+  ```tsx
+  // app/page.tsx (Server Component)
+  import { addToCart } from './actions'
+  import { AddToCart } from './AddToCart'
 
-Import the action in a Server Component and pass it to the client component as a prop, for example
-`<AddToCart action={addToCart} />`. The error message names the importing module.
+  export default function Page() {
+    return <AddToCart action={addToCart} />
+  }
+  ```
 
-See [Server Actions in islands](../guides/server-actions.md).
+## Useful Links
+
+- [Server Actions in islands](../guides/server-actions.md)

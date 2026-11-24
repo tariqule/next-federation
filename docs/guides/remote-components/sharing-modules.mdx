@@ -1,0 +1,67 @@
+---
+title: 'Share Modules Between a Host and a Remote'
+description: Choose which modules a remote gets from the host: React, context modules, libraries and next/* modules.
+---
+
+Share a module between the host and a remote component, so both read the same context or store.
+
+## Choose what the remote gets from the host
+
+- **React:** `react`, `react-dom`, `react-dom/client` and `react/jsx-runtime` always come from the host. Listing them in `shared` is `NF-002`. No `react`, `react-dom` or `next` module (any subpath) ever falls back to a remote copy.
+- **Host-provided modules:** every other `shared` entry is host-provided by default. The host passes each with its real version, from `package.json`.
+- **Version ranges:** a remote can set `requiredVersion`. A module the host lacks, or provides outside the range, is `NF-036`: that component renders its fallback and the remote's other components still load.
+- **A fallback copy:** `fallback: true` bundles the remote's own copy, used only when the host provides none that satisfies the range. Use it for libraries that tolerate two copies. Never use it for a context module or a store, which must be the host's.
+- **`next/*` modules:** a remote can share `next/link`, `next/navigation` and `next/router`. They are always host-provided. Other `next/*` modules (`next/image`, `next/head`) cannot be shared (`NF-002`): pass props instead.
+
+Share a module in the remote:
+
+```ts title="vite.config.ts"
+shared: { '@acme/ui': { requiredVersion: '^2.0.0' } }
+```
+
+Provide it from the host, for one component or for all with `registerSharedModules`:
+
+```tsx title="lib/cart.tsx"
+'use client'
+import * as Ui from '@acme/ui'
+import { createRemoteComponent } from '@next-federation/next/components'
+
+export const Cart = createRemoteComponent({
+  expose: './Cart',
+  shared: { '@acme/ui': { version: '2.1.0', module: Ui } },
+})
+```
+
+`version` must be a semver version (`NF-002` otherwise).
+
+## Share `next/*` modules
+
+Sharing `next/link` or `next/navigation` turns off link rewiring ([Links](links.mdx)), so the component renders only on a Next.js host. Which modules a host provides depends on its entry point:
+
+| Host                                                    | Provides                       |
+| ------------------------------------------------------- | ------------------------------ |
+| App Router (`@next-federation/next/components`)         | `next/link`, `next/navigation` |
+| Pages Router (`@next-federation/next/pages/components`) | `next/link`, `next/router`     |
+| SPA (`@next-federation/react/components`)               | none                           |
+
+A component that imports a module its host does not provide renders its fallback (`NF-036`). The remote needs `next` as a dev dependency, for types.
+
+<Callout>
+  **Good to know:** The host checks the descriptor's signed `shared` field. A
+  dev remote (`vite`) publishes none, so a missing module fails at runtime
+  instead (`NF-029`).
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Host configuration" href="host-configuration.mdx">
+    Register shared modules in the host.
+  </Card>
+  <Card title="Links that work in every host" href="links.mdx">
+    The default for next/link and next/navigation.
+  </Card>
+  <Card title="NF-036" href="../../errors/component-shared-unavailable.md">
+    What happens when a shared module is missing.
+  </Card>
+</Cards>

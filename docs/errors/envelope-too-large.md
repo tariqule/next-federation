@@ -1,15 +1,19 @@
 # NF-024: Island envelope exceeds the size warning threshold
 
-## What happened
+## Why This Error Occurred
 
-An island envelope is larger than the recommended size.
+An island envelope is larger than the recommended size, usually because of big props or markup. This is a warning and rendering continues, but it slows every page that embeds the island.
 
-## Why
+## Possible Ways to Fix It
 
-Large envelopes usually mean big serialized props or markup, which slows every page that embeds the island.
+- Trim props, paginate data, or fetch it from the client after hydration.
+- Raise `islands.warnBytes` (102400 by default) if the size is intended:
 
-## How to fix
+  ```ts
+  // federation.ts
+  islands: { warnBytes: 204800 }
+  ```
 
-Trim props, paginate data, or fetch it from the client after hydration. This is a warning; rendering still proceeds. The threshold is `islands.warnBytes` in `defineFederation()` (102400 bytes by default).
+## Useful Links
 
-See [Limits](../guides/limits.md).
+- [Limits](../guides/limits.md)

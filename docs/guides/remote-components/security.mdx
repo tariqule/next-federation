@@ -1,0 +1,90 @@
+---
+title: 'Integrity and Server Rendering for Remote Components'
+description: How a host decides to server-render a remote build, how to rotate keys and how mixed-router hosts isolate builds.
+---
+
+Server rendering runs a remote's server code inside the host's server process, with access to its environment and secrets. This page covers when a host agrees to that, and what it costs.
+
+## Integrity (server rendering)
+
+The host evaluates remote server code only for a build it can verify. It renders every other build in the browser only (`NF-028`, logged once per build). There are three ways to verify:
+
+1. **Signed descriptor** (recommended): the remote signs its descriptor with an ES256 key.
+2. **Pinned builds:** the host lists allowed `buildId` and digest pairs, for teams that deploy both together.
+3. **`ssr: { integrity: 'unsafe-dev' }`:** trusts the descriptor as served. Allowed only when `NODE_ENV` is `development` or `test` (`NF-002` otherwise).
+
+Two optional checks: `components.name` (the expected container name) and `components.ssr.maxAge` (seconds a signed build stays acceptable after its build time; signed builds only).
+
+A descriptor whose `digest` does not match its payload, or whose `iat` is more than 60 seconds in the future, is refused (`NF-027`). Each server file the host fetches must match its sha384 in the verified descriptor before anything runs. A mismatch renders the build in the browser only (`NF-027`).
+
+Pass only the value of `getComponentDescriptor` (or `fetchDescriptorInBrowser`) as the `descriptor` prop. The server does not trust the prop: it evaluates a build only if the descriptor was verified in this process, or re-verifies it against the keys `defineFederation` registered.
+
+<Callout type="warn">
+  **Good to know:** Integrity is the only security boundary. The loader limits
+  `require` to the remote's own files and the host's Module Federation runtime
+  (`NF-030`), but that guards against a second React, not against malice.
+  Verified code runs with the host process's full authority. Server-render only
+  remotes you would deploy into the host yourself.
+</Callout>
+
+### Rotation
+
+`publicKeys` takes several keys. To rotate:
+
+1. Add the new public key to the host and deploy it.
+2. Build the remote with the new private key.
+3. Remove the old public key once no live build (`nf-serve` retention) uses it.
+
+To revoke a build, rotate the key and rebuild the builds you keep. Builds signed with the old key then render in the browser only. `ssr.maxAge` bounds how long any signed build is accepted.
+
+### Pinning
+
+Each build's `nf-components.json` has a `digest`. List it:
+
+```ts
+ssr: { pinned: { '<buildId>': '<digest>' } }
+```
+
+## Mixed-router hosts
+
+A host can have `app/` and `pages/` routes at once. Use each router's own entry on its own routes ([Host configuration](host-configuration.mdx)). Both routers server-render remote components.
+
+Runnable example: [examples/advanced/storefront](../../../examples/advanced/storefront).
+
+- **Links between the routers reload the page,** as in any Next.js app. Client navigation works inside each router.
+- **In `next dev`,** a `pages/` route that links to an `app/` route logs a `404` prefetch message. `next start` does not.
+- **Register shared modules in each router:** `registerSharedModules` in the root layout (`app/`) and in `_app` (`pages/`).
+
+The routers run two Reacts in one server process. Each router layer therefore keeps its own Module Federation host instance, its own copy of each build's server code (checked against the sha384 digests) and its own Module Federation globals.
+
+What this costs:
+
+- A mixed host loads each build up to twice, and `maxBuilds` applies per layer.
+- A server entry initialises in one layer at a time. A layer waits up to 10 s for the other, then the load fails and retries after the cooldown. The component renders in the browser meanwhile.
+- A layer that holds a different copy of a `fallback: true` module than the host's moves to a new scope and re-evaluates the remote. Module state is not shared with earlier copies. A layer moves at most 4 times, then renders that build in the browser only (`NF-028`).
+
+Two limits remain:
+
+- **Isolation is not a sandbox.** Verified code can still reach the real global object, and each layer's Module Federation instance stays visible in `__FEDERATION__`.
+- **Only known builds render in every layer.** `@module-federation/vite` 1.24.0 and `@module-federation/enhanced` 2.9.2 and 2.9.3 builds keep state apart. Any other build server-renders in the first layer that evaluates it, and renders in the browser only in the others (`NF-028`).
+
+A build whose manifest lists its own `remotes` never server-renders, because nested remotes would load outside the verified loader (`NF-028`). The same holds when the descriptor's `manifest` is the remote entry itself or does not answer JSON.
+
+`next dev --webpack` re-creates the host's server modules when it compiles another route. Each re-created runtime is a new layer that loads the remote again, and a build the loader cannot isolate renders in the browser only until the dev server restarts. Production and Turbopack dev create each runtime once.
+
+## Next steps
+
+<Cards>
+  <Card title="Host configuration" href="host-configuration.mdx">
+    Trust policy and descriptors per router.
+  </Card>
+  <Card
+    title="Generate a signing key"
+    href="vite-remote.mdx#generate-a-signing-key"
+  >
+    Sign the build in the remote.
+  </Card>
+  <Card title="CSP" href="../csp.mdx">
+    Allow the remote's origin.
+  </Card>
+</Cards>

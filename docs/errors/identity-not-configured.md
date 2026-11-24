@@ -1,15 +1,15 @@
 # NF-013: Private island used without identity configuration
 
-## What happened
+## Why This Error Occurred
 
-A private island was requested but no identity settings are configured.
+A private island was requested but identity is not configured. Without an issuer and key source, the remote cannot authenticate the call and refuses it.
 
-## Why
+## Possible Ways to Fix It
 
-Private islands need to verify who is asking. Without an issuer and key source the remote cannot authenticate the call, so it refuses.
+- On the host, set `identity` in `defineFederation()` and pass `getIdentity` to `createIslands` and the token routes.
+- On the remote, set `issuers`.
+- Or make the island public if it does not need authentication.
 
-## How to fix
+## Useful Links
 
-Configure identity on both sides, or mark the island public if it should not require authentication. On the host, set `identity` in `defineFederation()` and pass `getIdentity` to `createIslands` and the token routes. On the remote, set `issuers`.
-
-See [Identity](../guides/identity.md).
+- [Identity](../guides/identity.md)
