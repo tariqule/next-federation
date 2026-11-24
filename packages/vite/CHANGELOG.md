@@ -1,5 +1,16 @@
 # @next-federation/vite
 
+## 0.2.1
+
+### Patch Changes
+
+- 2c28803: Error and warning messages link to the new docs pages.
+- @next-federation/server@0.2.1
+  - @next-federation/island@0.2.1
+  - @next-federation/protocol@0.2.1
+  - @next-federation/router@0.2.1
+  - @next-federation/sdk@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

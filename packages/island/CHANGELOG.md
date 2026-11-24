@@ -1,5 +1,13 @@
 # @next-federation/island
 
+## 0.2.1
+
+### Patch Changes
+
+- @next-federation/server@0.2.1
+  - @next-federation/protocol@0.2.1
+  - @next-federation/sdk@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes
