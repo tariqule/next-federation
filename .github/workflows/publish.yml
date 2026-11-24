@@ -77,6 +77,7 @@ jobs:
       - name: Dry run, GitHub Release that would be created
         if: inputs.dry_run
         run: |
+          node scripts/release-tags.mjs --dry-run
           echo "Would create GitHub Release v$RELEASE_VERSION at $GITHUB_SHA (latest) with these notes:"
           echo "----------------------------------------"
           cat "$RUNNER_TEMP/release-notes.md"
@@ -92,9 +93,14 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+      # One <name>@<version> tag per package, named from package.json at this
+      # commit. Not `git push --tags`: changeset publish names its tags from the
+      # registry, which can still show the previous version while npm holds the
+      # new one as staged, so the new tags were never created (0.2.0, 0.2.1).
+      # Tags already on origin are skipped, so a re-run is safe.
       - name: Push release tags
         if: ${{ !inputs.dry_run }}
-        run: git push origin --tags
+        run: node scripts/release-tags.mjs
       # One release for the whole version, at the published commit. The tag
       # v<version> is created by `gh release create` (the "release tags"
       # ruleset allows creating v* tags). A re-run leaves an existing release

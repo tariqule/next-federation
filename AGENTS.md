@@ -18,6 +18,7 @@ scripts/
   check-pack.mjs                every package packs its README, LICENSE and CHANGELOG
   docs-prose-words.mjs          prose word count of docs pages, against the budgets in docs-style.md
   publish-wait.mjs              publish workflow step: `pnpm release`, waiting out npm staged versions
+  release-tags.mjs              publish workflow step: <name>@<version> tags from package.json, pushed
 docs/
   index.mdx, live-demo.mdx      docs home and the live demo
   architecture.mdx              how islands and remote components work

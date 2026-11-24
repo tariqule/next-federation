@@ -28,6 +28,11 @@ Versioning is automatic. Publishing is manual.
      pending (merge the Version Packages pull request first), runs `pnpm release` (`pnpm build`,
      then `changeset publish`, which skips versions already on npm), pushes the tags and creates the
      GitHub Release (below).
+   - Tags: `node scripts/release-tags.mjs` creates one `<name>@<version>` tag per package from
+     `package.json`, at the published commit, and pushes the ones origin does not have yet. The dry
+     run lists them (`--dry-run`). It does not use the tags `changeset publish` creates: those are
+     named from the registry, which can still show the previous version while npm stages the new
+     one.
 
 The job runs in the `npm-publish` GitHub environment. Add yourself as a **required reviewer** of
 that environment (Settings → Environments → `npm-publish`) to get an approval step between
