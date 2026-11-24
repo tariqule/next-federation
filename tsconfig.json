@@ -23,6 +23,9 @@
       "path": "./packages/island"
     },
     {
+      "path": "./packages/router"
+    },
+    {
       "path": "./packages/vite"
     },
     {

@@ -5,7 +5,10 @@ Runnable example: [examples/react-spa](../../examples/react-spa)
 A single-page app has no server to fetch envelopes, so the browser fetches them (CORS) and mounts
 them with `IslandMount`. Per-user islands need a server to mint tokens and are not covered here.
 
-Supported: React 19 (required: `IslandMount` uses React 19 APIs). This guide builds the SPA with
+Supported: React 19, or React 18.3 (tested on 18.3.1). Islands keep React 19 on the remote and boot
+as their own React root, so a React 18 host needs no other change. A remote components build must
+list React 18 in its `react` range, or that component renders its fallback with `NF-036`
+([React versions](remote-components.md#react-versions)). This guide builds the SPA with
 Vite; the library packages target Node.js 20.9 or newer.
 
 ## Choosing between remote components and islands
@@ -96,7 +99,32 @@ provideHostReact()
 ```
 
 Islands built on the host's exact React version then use the host's copy. It does nothing in
-development or on a pre-release React.
+development or on a pre-release React. On a React 18 host it does nothing for islands: they need
+React 19, so each boots on its own copy.
+
+## 5. Remote links with your router (optional)
+
+Remote components keep their own links (`next/link`, React Router's `Link`, `useNavigate`, ...):
+their build rewires them to whatever router the host gives. Give them yours once, at module
+scope, before the first remote component loads. React Router 7's hooks fit as they are:
+
+```tsx
+// src/main.tsx
+import { provideNavigation } from '@next-federation/react/components'
+import { useHref, useLocation, useNavigate } from 'react-router'
+
+provideNavigation({ useNavigate, useHref, useLocation })
+```
+
+Render the remote components inside your `<BrowserRouter>` (or `RouterProvider`). A remote
+`<Link href="/orders">` (or React Router `<Link to="/orders">` outside the remote's own router)
+then renders `href="/app/orders"` under `basename="/app"`, navigates on the client, and
+`usePathname()` (or `useLocation().pathname`) is `/orders`. A remote that renders its own
+`MemoryRouter` keeps routing inside it. Without `provideNavigation`, the remote's links do full
+page loads, and a plain `<a href>` in a remote always does. For another router, pass its
+equivalents: `useNavigate()` returning `(href, { replace?, scroll? }) => void`, and optionally
+`useHref(href)` and `useLocation()` (`{ pathname, search }`). See
+[Links that work in every host](remote-components.md#links-that-work-in-every-host).
 
 ## What to know
 

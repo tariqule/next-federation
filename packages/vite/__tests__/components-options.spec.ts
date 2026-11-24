@@ -30,7 +30,11 @@ function codeOf(fn: () => unknown): string | undefined {
   return undefined
 }
 
-const ctx = { command: 'build' as const, env: {}, now: 1_700_000_000_000 }
+const ctx = {
+  command: 'build' as const,
+  env: {},
+  now: 1_700_000_000_000,
+}
 const base = {
   name: 'components',
   base: 'https://remote.example',
@@ -87,6 +91,8 @@ test('a build gets an immutable /b/<buildId>/ base and its own folder', () => {
     'react-dom',
     'react-dom/client',
     'react/jsx-runtime',
+    // Shared by default (links): what the rewired router imports use.
+    '@next-federation/router',
     'components-context',
   ])
   expect(resolved.shared['components-context']).toEqual({

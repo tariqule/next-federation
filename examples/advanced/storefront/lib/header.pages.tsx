@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { createRemoteComponent } from '@next-federation/next/pages/components'
 import type { RemoteComponentDescriptor } from '@next-federation/react/components'
@@ -8,14 +7,12 @@ import type { HeaderLinks } from './header-shared'
 // Pages Router bindings of the same header components. In a mixed-router
 // app each router has its own React, so each has its own remote component
 // runtime (and loads the remote's server code once per router).
-const Header = createRemoteComponent<{ Link: typeof Link; links: HeaderLinks }>(
-  {
-    expose: './Header',
-    shared: headerShared,
-    fallback: <span>loading the header…</span>,
-    errorFallback: <span>header unavailable</span>,
-  }
-)
+const Header = createRemoteComponent<{ links: HeaderLinks }>({
+  expose: './Header',
+  shared: headerShared,
+  fallback: <span>loading the header…</span>,
+  errorFallback: <span>header unavailable</span>,
+})
 const MiniCart = createRemoteComponent({
   expose: './MiniCart',
   shared: headerShared,
@@ -36,9 +33,7 @@ const SearchBox = createRemoteComponent<{
 type Props = { descriptor: RemoteComponentDescriptor | null }
 
 export function PagesNav({ descriptor }: Props) {
-  return (
-    <Header descriptor={descriptor} Link={Link} links={headerLinks('en')} />
-  )
+  return <Header descriptor={descriptor} links={headerLinks('en')} />
 }
 
 export function PagesMiniCart({ descriptor }: Props) {

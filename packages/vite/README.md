@@ -214,14 +214,34 @@ build descriptor with the sha384 of every server file and each exposed module's 
 JS chunks, which hosts link and modulepreload; signed with ES256 when
 `NF_COMPONENTS_SIGNING_KEY` holds a private JWK) and `nf-build.json`; `nf-serve --dir <outDir>`
 serves it. React, `react-dom`, `react-dom/client` and `react/jsx-runtime` are always host-provided.
+`react` (default `'^19.0.0'`) is the semver range of React versions the remote accepts, written as
+the `requiredVersion` of those four modules: set `'^18.3.0 || ^19.0.0'` for a remote that also runs
+on React 18 hosts, and avoid React 19-only APIs (`use`, `useActionState`, `useOptimistic`, `ref` as
+a prop, `<link precedence>`). A host outside the range renders its fallback (`NF-036`); an invalid
+range is `NF-002`.
 Every other `shared` entry is host-provided too (never bundled) unless it sets `fallback: true`: then
 the build bundles its own copy and uses it when the host's copy is missing or outside
 `requiredVersion` (a semver range). Without a fallback, a missing or unsatisfying host copy renders
 the host's fallback (`NF-036`). `next/link`, `next/navigation` and `next/router` can be shared
-(host-provided only; the remote needs `next` as a dev dependency). No `react`, `react-dom` or
+(host-provided only, Next.js hosts; the remote needs `next` as a dev dependency); listing
+`next/link` or `next/navigation` turns off its rewiring (below). No `react`, `react-dom` or
 `next` module (any subpath, such as `react-dom/server`) can set `fallback: true` (`NF-002`). The
 descriptor lists each shared module with its range, its fallback flag and the exposed modules that
 import it (signed).
+Links (`links`, default true): the remote keeps its own router. The build rewires `next/link` and
+`next/navigation`, and `react-router` and `react-router-dom` when the remote's `package.json` lists
+one of them (`dependencies`, `devDependencies` or `peerDependencies`) and `react-router` 7 resolves
+from the remote's root (otherwise it leaves them alone and warns once, `NF-002`), to shims that navigate
+through the host's router: the App or Pages Router of a Next.js host, a host's
+`provideNavigation(...)`, or full page loads where the host has none. A React Router link inside a
+router the remote renders itself (a `MemoryRouter`) stays inside it. A plain `<a href>` is never
+intercepted. A specifier listed in `shared` is not rewired (`react-router` and `react-router-dom`
+as one). The shims run on the internal `@next-federation/router`, shared by default with this
+plugin's own copy: `{ requiredVersion: '>=<major>.<minor>.0 <1.0.0', fallback: true }` on 0.x,
+`'^<version>'` from 1.0; the host's copy is used when it is in the range, else the build's own (full
+page loads). `links: false` turns the rewiring and that entry off. Supported props and hooks, and
+the limits:
+[Links that work in every host](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md#links-that-work-in-every-host).
 An exposed module compiled with Fast Refresh fails the build (`NF-002`). The dev server answers
 `/_nf/components.json` with `ssr: null` (hosts render a dev remote in the browser only).
 Programmatic builds set `NF_VITE_COMMAND=build` (the plugin reads the command before Vite does).

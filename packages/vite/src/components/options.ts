@@ -1,11 +1,17 @@
 import {
   BUILD_ID_PATTERN,
+  DEFAULT_REACT_RANGE,
+  HOST_REACT_MODULES,
   assertSecureUrl,
   isNeverFallback,
   isSemverRange,
   parseAllowInsecureHttp,
 } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
+import {
+  routerEntryFile,
+  routerSharedEntry,
+} from '@next-federation/router/build'
 import { trimTrailingSlashes } from '../trim-slashes.ts'
 
 export type ComponentsRemoteOptions = {
@@ -28,8 +34,34 @@ export type ComponentsRemoteOptions = {
    * `next/link`, `next/navigation` and `next/router` can be listed (always
    * host-provided, from a Next.js host). No React, React DOM or Next.js
    * module (any subpath, such as `react-dom/server`) can have a fallback.
+   *
+   * `@next-federation/router` is shared by default (unless `links: false`
+   * or it is listed here): `{ requiredVersion: '>=<major>.<minor>.0 <1.0.0',
+   * fallback: true }` on 0.x, `^<version>` from 1.0. The copy this build
+   * bundles, and its version, are this plugin's own dependency, never one
+   * found in the remote's `node_modules`. The host's router is used when it
+   * satisfies the range, else this build's own copy.
    */
   shared?: string[] | Record<string, SharedModuleOptions>
+  /**
+   * The React versions this remote accepts: a semver range, the
+   * `requiredVersion` of `react`, `react-dom`, `react-dom/client` and
+   * `react/jsx-runtime`. Default '^19.0.0'. Set '^18.3.0 || ^19.0.0' for a
+   * remote that runs on both (it must avoid React 19-only APIs). A host whose
+   * React is outside the range renders its fallback (NF-036).
+   */
+  react?: string
+  /**
+   * Rewire the remote's own router imports so its links navigate through
+   * the host's router: `next/link` and `next/navigation`, and `react-router`
+   * and `react-router-dom` when `react-router` is installed, resolve to
+   * shims on `@next-federation/router` (shared, above). A React Router link
+   * inside a router the remote renders itself (a `MemoryRouter`) keeps using
+   * that router. A plain `<a href>` is never intercepted. A specifier listed
+   * in `shared` is not rewired. Default true; `false` turns the rewiring and
+   * the default `@next-federation/router` entry off.
+   */
+  links?: boolean
   buildId?: string
   /** Output folder, relative to the Vite root. Default 'dist'; builds go to `<outDir>/<buildId>`. */
   outDir?: string
@@ -62,6 +94,12 @@ export type SharedModuleOptions = {
 export type ResolvedSharedModule = {
   requiredVersion: string | false
   fallback: boolean
+  /**
+   * The bundled copy (an absolute path) and its version, when this plugin
+   * picks them (`@next-federation/router`: the plugin's own dependency).
+   */
+  import?: string
+  version?: string
 }
 
 export type ResolvedComponentsOptions = {
@@ -75,6 +113,7 @@ export type ResolvedComponentsOptions = {
   shared: Record<string, ResolvedSharedModule>
   ssr: boolean
   types: boolean
+  links: boolean
 }
 
 export type ComponentsResolveContext = {
@@ -84,19 +123,15 @@ export type ComponentsResolveContext = {
 }
 
 /** Always host-provided: the remote renders on the host's React. */
-export const HOST_REACT: readonly string[] = [
-  'react',
-  'react-dom',
-  'react-dom/client',
-  'react/jsx-runtime',
-]
+export const HOST_REACT: readonly string[] = HOST_REACT_MODULES
 /** The Next.js modules a Next host provides to remote components. */
 export const NEXT_SHARED: readonly string[] = [
   'next/link',
   'next/navigation',
   'next/router',
 ]
-const REACT_RANGE = '^19.0.0'
+/** `ROUTER_SHARE_NAME` of `@next-federation/router`. */
+export const ROUTER_PACKAGE = '@next-federation/router'
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 const BARE_SPECIFIER =
   /^(?:@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)(?:\/[\w.@-]+)*$/i
@@ -147,16 +182,52 @@ function resolveExposes(value: unknown): Record<string, string> {
   return Object.fromEntries(entries) as Record<string, string>
 }
 
+function resolveReactRange(value: unknown): string {
+  if (value === undefined) return DEFAULT_REACT_RANGE
+  if (typeof value !== 'string' || !isSemverRange(value)) {
+    throw invalid(
+      `\`react\` must be a semver range (such as "^18.3.0 || ^19.0.0"), got ${JSON.stringify(value)}.`
+    )
+  }
+  return value
+}
+
+/**
+ * This plugin's own `@next-federation/router` (its dependency, never one
+ * found from the remote's root): the module a build bundles as its fallback
+ * copy (that install's own entry), and the shared entry for it.
+ */
+export function ownRouter(): ResolvedSharedModule & {
+  import: string
+  version: string
+} {
+  const entry = routerSharedEntry()[ROUTER_PACKAGE]
+  return {
+    requiredVersion: entry.requiredVersion,
+    fallback: true,
+    // The file itself: Module Federation for Vite resolves a bare `import`
+    // from the remote's root. It stays out of the build's output.
+    import: routerEntryFile(),
+    version: entry.version,
+  }
+}
+
 function resolveSharedOption(
-  value: ComponentsRemoteOptions['shared']
+  value: ComponentsRemoteOptions['shared'],
+  context: { reactRange: string; links: boolean }
 ): ResolvedComponentsOptions['shared'] {
   const out: ResolvedComponentsOptions['shared'] = {}
   for (const name of HOST_REACT) {
-    out[name] = { requiredVersion: REACT_RANGE, fallback: false }
+    out[name] = { requiredVersion: context.reactRange, fallback: false }
   }
   const extra: Array<[string, SharedModuleOptions]> = Array.isArray(value)
     ? value.map((name) => [name, {}])
     : Object.entries(value ?? {})
+  // Not listed: shared with a fallback, this plugin's own copy (what the
+  // rewired router imports use).
+  if (context.links && !extra.some(([name]) => name === ROUTER_PACKAGE)) {
+    out[ROUTER_PACKAGE] = ownRouter()
+  }
   for (const [name, config] of extra) {
     if (typeof name !== 'string' || !BARE_SPECIFIER.test(name)) {
       throw invalid(
@@ -194,7 +265,11 @@ function resolveSharedOption(
         `${JSON.stringify(name)} cannot have a fallback: React, React DOM and Next.js modules are always the host's (a second copy breaks hooks, context or the router).`
       )
     }
-    out[name] = { requiredVersion: range, fallback }
+    out[name] =
+      name === ROUTER_PACKAGE && fallback
+        ? // The bundled copy is still this plugin's own.
+          { ...ownRouter(), requiredVersion: range }
+        : { requiredVersion: range, fallback }
   }
   return out
 }
@@ -232,6 +307,10 @@ export function resolveComponentsOptions(
   if (options.types !== undefined && typeof options.types !== 'boolean') {
     throw invalid('`types` must be true or false.')
   }
+  if (options.links !== undefined && typeof options.links !== 'boolean') {
+    throw invalid('`links` must be true or false.')
+  }
+  const links = options.links ?? true
   const build = ctx.command === 'build'
   return {
     name: options.name,
@@ -239,8 +318,12 @@ export function resolveComponentsOptions(
     publicBase: build ? `${base}b/${buildId}/` : base,
     outDir: build ? `${outDir}/${buildId}` : outDir,
     exposes,
-    shared: resolveSharedOption(options.shared),
+    shared: resolveSharedOption(options.shared, {
+      reactRange: resolveReactRange(options.react),
+      links,
+    }),
     ssr: options.ssr ?? true,
     types: options.types ?? false,
+    links,
   }
 }

@@ -289,6 +289,20 @@ describe('shared modules (version negotiation)', () => {
       `a fallback copy of ${name} (always the host's)`,
       withShared({ [name]: { requiredVersion: false, fallback: true } }),
     ]),
+    // A React module is checked for every expose (a host assumes ^19.0.0
+    // for an unlisted one): an `exposes` list would let the others skip it.
+    ...['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'].map(
+      (name) => [
+        `a per-expose list on ${name}`,
+        withShared({
+          [name]: {
+            requiredVersion: '^19.0.0',
+            fallback: false,
+            exposes: ['./A'],
+          },
+        }),
+      ]
+    ),
     [
       'a bundled version that is not semver',
       withShared({
@@ -450,6 +464,21 @@ test('isNeverFallback: react, react-dom and next with every subpath, nothing els
   ]) {
     expect(isNeverFallback(name)).toBe(false)
   }
+})
+
+test('a React module listed for every expose, and Next.js modules per expose, are accepted', () => {
+  const shared: Record<string, ComponentSharedModule> = {
+    react: { requiredVersion: '^18.3.0 || ^19.0.0', fallback: false },
+    'react-dom/server': {
+      requiredVersion: false,
+      fallback: false,
+      exposes: ['./A'],
+    },
+    'next/link': { requiredVersion: false, fallback: false, exposes: ['./A'] },
+  }
+  expect(
+    parseComponentDescriptorFile({ ...payload, shared, digest: 'd' })?.shared
+  ).toEqual(shared)
 })
 
 test('a fallback copy of a module that only starts like React or Next.js is accepted', () => {

@@ -10,8 +10,9 @@ builds what: **remotes are Vite builds** (remote components can also come from R
 apps are hosts only**. This guide maps the
 concepts, then walks a Pages Router app from nextjs-mf to next-federation.
 
-**Next 15 is supported; Next 14 is not.** next-federation needs React 19, so a Next 15 app can stay on
-Next 15 (`>=15.5.28`) and a Next 14 app must upgrade to Next 15 or 16 first. `cacheComponents` is Next
+**Next 15 is supported; Next 14 is not.** next-federation needs Next `>=15.5.28` (on React 19, or React
+18.3 for a Next 15 Pages Router host), so a Next 15 app can stay on Next 15 and a Next 14 app must
+upgrade to Next 15 or 16 first. `cacheComponents` is Next
 16 only ([Limits](limits.md#nextjs-15)).
 
 ## Concept map
@@ -23,7 +24,7 @@ Next 15 (`>=15.5.28`) and a Next 14 app must upgrade to Next 15 or 16 first. `ca
 | `NextFederationPlugin` in `next.config.js` (`name`, `remotes`, `filename`, `extraOptions`) | `withNextFederation()` around `next.config` (no bundler plugin) + `defineFederation({ remotes })` in a server-only module |
 | `remotes: { shop: 'shop@https://shop.example.com/_next/static/chunks/remoteEntry.js' }` | `remotes: { shop: { origin: 'https://shop.example.com', components: { … } } }`: the host reads the remote's build descriptor (`/_nf/components.json`) and loads the build it names |
 | `exposes` in the remote's Next config | A Vite remote: `nextFederationComponents({ exposes })` (client components) and/or `nextFederationIslands` (islands) |
-| `shared: { react: { singleton: true } }`, automatic sharing of `next/*` | React (`react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`) is always the host's; other modules are shared only when the remote lists them and the host passes them ([Sharing modules](remote-components.md#sharing-modules)), with an optional `requiredVersion` and a bundled `fallback` copy. `next/link`, `next/navigation` and `next/router` come from the host's router; no other `next/*` is shared |
+| `shared: { react: { singleton: true } }`, automatic sharing of `next/*` | React (`react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`) is always the host's; other modules are shared only when the remote lists them and the host passes them ([Sharing modules](remote-components.md#sharing-modules)), with an optional `requiredVersion` and a bundled `fallback` copy. `next/link` and `next/navigation` are rewired to the host's router, `next/router` is shared from a Pages Router host; no other `next/*` is shared |
 | `FlushedChunks` / `flushChunks()` in `_document` for SSR chunk preloading | Automatic: a server-rendered component emits its stylesheets and `modulepreload` links |
 | `revalidate()` from `@module-federation/nextjs-mf/utils` to pick up new remote builds | Automatic: the descriptor is re-read within `revalidate` seconds; the browser loads exactly the build the server rendered |
 | A Next app as a remote | Not supported. Move the shared code into a Vite remote: [Sharing components from a Next app](sharing-components-from-a-next-app.md) |
@@ -40,10 +41,13 @@ exposed module decide:
 
 - **Client component** (state, effects, event handlers; data comes in as props): a remote component.
 - **Renders server data or needs the remote's secrets**: island.
-- **Uses `next/link`, `next/navigation` or `next/router`**: keep it in a remote component. List the
-  module in the remote's `shared`, and create the component in the host with
-  `@next-federation/next/components` (App Router) or `@next-federation/next/pages/components`
-  (Pages Router). The component then renders only in a host with that router.
+- **Uses `next/link` or `next/navigation`**: keep it in a remote component, unchanged. The build
+  rewires both imports, so it navigates with the router of any host (`as` links such as
+  `href="/post/[pid]" as="/post/1"` keep working). See [Links that work in every
+  host](remote-components.md#links-that-work-in-every-host).
+- **Uses `next/router`**: list it in the remote's `shared` and create the component in the host
+  with `@next-federation/next/pages/components`; it then renders only in a Pages Router host. Or
+  move it to `next/navigation`.
 - **Uses `next/image` or `next/head`**: rewrite that part. In a remote component pass what it needs
   as props (an image URL builder, a callback). In an island use `Link` from
   `@next-federation/island`.
@@ -81,10 +85,12 @@ island entry of an island remote ([Writing an island remote](writing-an-island-r
    Remove `NEXT_PRIVATE_LOCAL_WEBPACK` from your scripts: Turbopack and webpack both work (Next 16
    defaults to Turbopack, `--webpack` opts out; Next 15 defaults to webpack, `--turbopack` opts in).
 2. Remove `FlushedChunks` / `flushChunks` from `pages/_document` and any `revalidate()` call.
-3. On Next 15, make sure React is 19: `pnpm add next@15 react@19 react-dom@19` (Next 15's Pages Router
-   also runs on React 18, which next-federation does not support). On Next 14, upgrade: `pnpm add
-   next@16 react@19 react-dom@19` (or `next@15`), then follow the Next 15 (and 16) upgrade guides for
-   the rest of the app (async request APIs, removed options).
+3. On Next 15, a Pages Router host can stay on React 18.3 ([React 18](limits.md#react-18)): its
+   islands need no change, and a remote component renders on it once the remote accepts React 18
+   with its `react` range ([React versions](remote-components.md#react-versions)). Otherwise use
+   React 19: `pnpm add next@15 react@19 react-dom@19`. On Next 14, upgrade: `pnpm add next@16
+   react@19 react-dom@19` (or `next@15`), then follow the Next 15 (and 16) upgrade guides for the
+   rest of the app (async request APIs, removed options).
 4. Install next-federation and wrap the config:
 
 ```sh
@@ -177,9 +183,9 @@ The same remote works in App Router pages: `getComponentDescriptor` from
 
 - **Next apps as remotes**, including exposed pages (`exposePages`) and exposing `app/` or `pages/`
   components. Move shared code into a Vite remote.
-- **Sharing all of `next/*`** (nextjs-mf shared Next's modules automatically). Only `next/link`,
-  `next/navigation` and `next/router` are shared, from the host's router. Pass anything else as
-  props.
+- **Sharing all of `next/*`** (nextjs-mf shared Next's modules automatically). Only `next/link`
+  and `next/navigation` (rewired) and `next/router` (shared) reach the host's router. Pass anything
+  else as props.
 - **`strictVersion`, `eager` and `singleton` per module.** A remote sets `requiredVersion` and
   `fallback` only; the host checks the range before loading (`NF-036`), and React is always the
   host's.

@@ -22,19 +22,23 @@ What the components show:
 - **Two host contexts.** `MiniCart` and `AddToCart` read the host's cart, `Header` and `MiniCart`
   the host's session. Both context packages are host-provided shared modules (`import: false`): the
   remote never bundles them, so it reads the host's context objects.
-- **The host's router.** `Header` takes the host's link component as a prop (`next/link` in the
-  storefront, a client router's link in an SPA), and `SearchBox` calls the host's `onSearch`, which
-  navigates with the host's router. Remote components take any props, functions and components
-  included.
+- **The host's router.** `Header` writes its links with plain `next/link`. `rspack.config.ts`
+  rewires that import with `routerShimAliases()` and shares what it runs on with
+  `routerSharedEntry()` (both from `@next-federation/router/build`, in both builds), so the links
+  navigate with the storefront's router and get its `/store` basePath. In an SPA that calls
+  `provideNavigation` they use its router; in a host with none they are plain links. `SearchBox`
+  calls the host's `onSearch`, which navigates with the host's router. Remote components take any
+  props, functions and components included.
 - **A shared module with a fallback.** [`example-design-system`](../design-system/README.md) is a
   bundled, non-singleton share requiring `^2.0.0`. The storefront passes its copy, so the remote
   uses it; a host that passes none gets the remote's own copy.
 
-Why not share `next/link` itself? A Vite components remote can list `next/link` in `shared` and
-get the host's. An Rspack build's descriptor has no per-component list of shared modules, so every
-exposed component would then need `next/link`, and an SPA host (which has no Next.js) could load
-none of them (`NF-036`; see "Rspack and webpack remotes get coarser checks" in
-[Limits](../../../docs/guides/limits.md)). Passing the link as a prop works on every host.
+Why not share `next/link` itself (`import: false`, host-provided)? It would exist only in a Next.js
+host, and an Rspack build's descriptor has no per-component list of shared modules, so every
+exposed component would then need it: an SPA host could load none of them (`NF-036`; see "Rspack
+and webpack remotes get coarser checks" in [Limits](../../../docs/guides/limits.md)). The rewired
+`next/link` works on every host. See
+[Links that work in every host](../../../docs/guides/remote-components.md#links-that-work-in-every-host).
 
 ## Run it
 

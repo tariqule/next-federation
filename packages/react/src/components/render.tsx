@@ -9,13 +9,19 @@ import {
   Component,
   Suspense,
   createElement,
-  use,
   useId,
   useState,
   useSyncExternalStore,
 } from 'react'
 import type { ComponentType, ReactNode } from 'react'
-import { preinit, preload, preloadModule } from 'react-dom'
+import {
+  ensureStylesheet,
+  preloadModuleScript,
+  preloadStyle,
+  readThenable,
+  supportsResources,
+  useIsomorphicLayoutEffect,
+} from '../react-compat.ts'
 import type {
   ComponentEvent,
   ComponentRuntime,
@@ -230,6 +236,13 @@ function hasBrowserOnlyMark(id: string): boolean {
  * a rendered one would hold the commit (the host's navigation) until it
  * loads. Either way the stylesheet is in the document before the module
  * loads, so the remote's own CSS loader finds it and never adds another.
+ *
+ * React 18 has no stylesheet resources (react-compat.ts). There a client
+ * mount appends a `<link data-precedence>` to the end of `<head>` (once per
+ * href, never removed); server HTML carries an inline `<link
+ * data-precedence>` ahead of the component markup, and hydration adds the
+ * same head copy, so the styles stay when the inline link leaves with its
+ * component (a client navigation) while another instance still uses them.
  */
 const CSS_PRECEDENCE = 'next-federation'
 
@@ -396,10 +409,15 @@ export function createBindings({
     const css = files?.css ?? []
     if (clientMount) {
       // Before the load below starts (see CSS_PRECEDENCE).
-      for (const href of css) {
-        preinit(href, { as: 'style', precedence: CSS_PRECEDENCE })
-      }
+      for (const href of css) ensureStylesheet(href)
     }
+    const cssKey = css.join('\n')
+    // React 18, server-rendered or hydrated boundary: the head copy of its
+    // inline links (it stays after this boundary unmounts).
+    useIsomorphicLayoutEffect(() => {
+      if (clientMount || supportsResources()) return
+      for (const href of css) ensureStylesheet(href)
+    }, [clientMount, cssKey])
     const markAndFallback = (
       <>
         <template {...{ [BROWSER_ONLY_ATTR]: id }} />
@@ -430,21 +448,30 @@ export function createBindings({
     ) {
       loadFailures.add(loading.reason)
     }
-    const mod = use(loading as Promise<RemoteModule | null>)
+    const mod = readThenable(loading)
     if (!mod) return browserOnly
     const Render = renderer(mod.default, isServer, renderers)
     return (
       <>
         {clientMount
           ? null
-          : css.map((href) => (
-              <link
-                key={href}
-                rel="stylesheet"
-                href={href}
-                precedence={CSS_PRECEDENCE}
-              />
-            ))}
+          : css.map((href) =>
+              supportsResources() ? (
+                <link
+                  key={href}
+                  rel="stylesheet"
+                  href={href}
+                  precedence={CSS_PRECEDENCE}
+                />
+              ) : (
+                <link
+                  key={href}
+                  rel="stylesheet"
+                  href={href}
+                  data-precedence={CSS_PRECEDENCE}
+                />
+              )
+            )}
         {Render ? (
           <Render
             props={props}
@@ -476,9 +503,9 @@ export function createBindings({
     if (!descriptor.ssr || runtime.serverBlock(descriptor)) return
     const files = exposeAssets(descriptor, expose)
     if (!files) return
-    for (const href of files.css) preload(href, { as: 'style' })
-    if (files.entry) preloadModule(files.entry)
-    for (const href of files.js) preloadModule(href)
+    for (const href of files.css) preloadStyle(href)
+    if (files.entry) preloadModuleScript(files.entry)
+    for (const href of files.js) preloadModuleScript(href)
   }
 
   /**

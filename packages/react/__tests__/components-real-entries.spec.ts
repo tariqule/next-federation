@@ -66,6 +66,7 @@ async function readBuild(
 }
 
 let vite: Build
+let vite2: Build
 let rspack: Build
 
 beforeAll(async () => {
@@ -85,6 +86,22 @@ beforeAll(async () => {
     }
   )
   vite = await readBuild('components-remote', 'rv1', 4997)
+  // A second build of the same container name ("components").
+  execFileSync(
+    process.execPath,
+    [
+      join(viteFixture, 'node_modules', 'vite', 'bin', 'vite.js'),
+      'build',
+      '--logLevel',
+      'error',
+    ],
+    {
+      cwd: viteFixture,
+      env: buildEnv({ NF_OUT: OUT, NF_BUILD_ID: 'rv2', PORT: '4997' }),
+      stdio: ['ignore', 'ignore', 'pipe'],
+    }
+  )
+  vite2 = await readBuild('components-remote', 'rv2', 4997)
   const rspackFixture = join(fixtures, 'components-remote-rspack')
   execFileSync(process.execPath, ['scripts/build.ts'], {
     cwd: rspackFixture,
@@ -102,7 +119,7 @@ afterAll(async () => {
 
 /** Serves both builds from disk, as nf-serve would. */
 async function get(url: string) {
-  for (const build of [vite, rspack]) {
+  for (const build of [vite, vite2, rspack]) {
     const prefix = `http://127.0.0.1:${build.port}/b/${build.buildId}/`
     if (!url.startsWith(prefix)) continue
     try {
@@ -320,4 +337,48 @@ test('Rspack build: layer A gets its own React even when layer B initialises bet
   expect(
     (fed?.__INSTANCES__ ?? []).some((i) => i.name === 'components_rspack')
   ).toBe(false)
+}, 60_000)
+
+/** The build id the Counter of a loaded module renders (data-build). */
+function renderedBuild(mod: Loaded | null): unknown {
+  const tree = mod?.default({ start: 0 }) as {
+    props?: { 'data-build'?: unknown }
+  } | null
+  return tree?.props?.['data-build']
+}
+
+test('two builds of one container name loaded at once: each gets its own build, in one layer and across two', async () => {
+  await expectIsolated(vite, false)
+  const errors = rs.spyOn(console, 'error').mockImplementation(() => {})
+  const app = layer('app')
+  const pages = layer('pages')
+  const loads = (await Promise.all([
+    app.runtime.serverLoad(vite.descriptor, './Counter'),
+    pages.runtime.serverLoad(vite2.descriptor, './Counter'),
+    app.runtime.serverLoad(vite2.descriptor, './Counter'),
+    pages.runtime.serverLoad(vite.descriptor, './Counter'),
+  ])) as unknown as Array<Loaded | null>
+  expect(errors.mock.calls.map((c) => String(c[0]))).toEqual([])
+  expect(loads.map(renderedBuild)).toEqual(['rv1', 'rv2', 'rv2', 'rv1'])
+}, 60_000)
+
+test('another build of the container after a new MF instance (a module registered late) loads that build, not the one loaded before', async () => {
+  await expectIsolated(vite, false)
+  const errors = rs.spyOn(console, 'error').mockImplementation(() => {})
+  const app = layer('app')
+  const first = (await app.runtime.serverLoad(
+    vite.descriptor,
+    './Counter'
+  )) as unknown as Loaded | null
+  expect(renderedBuild(first)).toBe('rv1')
+  // A shared module the instance did not have: the next load starts over.
+  app.runtime.registerShared({
+    'late-module': { version: '1.0.0', module: {} },
+  })
+  const second = (await app.runtime.serverLoad(
+    vite2.descriptor,
+    './Counter'
+  )) as unknown as Loaded | null
+  expect(errors.mock.calls.map((c) => String(c[0]))).toEqual([])
+  expect(renderedBuild(second)).toBe('rv2')
 }, 60_000)

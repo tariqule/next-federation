@@ -1,8 +1,10 @@
+import { createInstance } from '@module-federation/runtime'
 import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import {
   MAX_SCOPES,
   createComponentRuntime,
+  hostSharesPlugin,
 } from '../src/components/runtime.ts'
 import type {
   FederationInstance,
@@ -68,6 +70,8 @@ type Scope = {
   layer: string
   globals: Record<string, unknown>
   blocked: Map<string, unknown>
+  builds: Map<string, { bundlesRuntime?: boolean }>
+  plugins?: unknown[]
 }
 
 function setup(overrides: Partial<RuntimeDeps> = {}) {
@@ -732,7 +736,7 @@ describe('shared modules: version negotiation (NF-036)', () => {
     )
     const p = runtime.load(d, './Counter')
     expect(await codeOf(p)).toBe('NF-036')
-    await expect(p).rejects.toThrow(/"lib" \^2\.0\.0.*1\.4\.0/)
+    await expect(p).rejects.toThrow(/"lib" "\^2\.0\.0".*1\.4\.0/)
     expect(instance.loads).toEqual([])
   })
 
@@ -777,6 +781,61 @@ describe('shared modules: version negotiation (NF-036)', () => {
     )
     expect(await settle(runtime.load(d, './Counter'))).toBe('ok')
     expect(await codeOf(runtime.load(d, './PagesNavLink'))).toBe('NF-036')
+  })
+
+  // Builds made before remotes listed their React range were React
+  // 19-only: a descriptor without a React entry counts as react ^19.0.0.
+  const hostReact = (version: string): Partial<RuntimeDeps> => ({
+    hostShared: {
+      react: { version, module: { ...fakeReact, version } },
+      'react-dom': { version, module: {} },
+    },
+  })
+
+  test('no React entry counts as react ^19.0.0: React 18.3.1 refuses (NF-036), 19.3.1 loads', async () => {
+    const old = setup(hostReact('18.3.1'))
+    const p = old.runtime.load(descriptor('c1'), './Counter')
+    expect(await codeOf(p)).toBe('NF-036')
+    await expect(p).rejects.toThrow(/"react" "\^19\.0\.0".*18\.3\.1/)
+    expect(old.instance.loads).toEqual([])
+    const current = setup(hostReact('19.3.1'))
+    expect(
+      await settle(current.runtime.load(descriptor('c1'), './Counter'))
+    ).toBe('ok')
+  })
+
+  test('a Next.js canary React counts by its release numbers (App Router hosts)', async () => {
+    const { runtime } = setup(hostReact('19.3.0-canary-278794d7-20261002'))
+    expect(await settle(runtime.load(descriptor('c1'), './Counter'))).toBe('ok')
+    const listed = descriptor(
+      'c2',
+      shared({
+        react: { requiredVersion: '^18.3.0 || ^19.0.0', fallback: false },
+      })
+    )
+    expect(await settle(runtime.load(listed, './Counter'))).toBe('ok')
+  })
+
+  test('a listed React range replaces the default, per module', async () => {
+    const { runtime, instance } = setup(hostReact('18.3.1'))
+    const range = '^18.3.0 || ^19.0.0'
+    const d = descriptor(
+      'c18',
+      shared({
+        react: { requiredVersion: range, fallback: false },
+        'react-dom': { requiredVersion: range, fallback: false },
+      })
+    )
+    expect(await settle(runtime.load(d, './Counter'))).toBe('ok')
+    // A module still left out keeps the default range.
+    const partial = descriptor(
+      'c19',
+      shared({ react: { requiredVersion: range, fallback: false } })
+    )
+    const p = runtime.load(partial, './Counter')
+    expect(await codeOf(p)).toBe('NF-036')
+    await expect(p).rejects.toThrow(/"react-dom" "\^19\.0\.0".*18\.3\.1/)
+    expect(instance.loads).toHaveLength(1)
   })
 
   test('a host module version must be a semver version (NF-002)', () => {
@@ -900,6 +959,32 @@ describe('shared modules registered late, and fallback copies', () => {
     ).toBeUndefined()
   })
 
+  test("fallback: the host's copy is seeded before any expose of the build loads, also one that does not import it", async () => {
+    // A @module-federation/vite build's init caches its own copy of every
+    // fallback share whose key is empty, whatever expose loads first: a
+    // later expose that imports it would read the bundled copy.
+    const hostCopy = { copy: 'host' }
+    const { runtime, scope } = setup()
+    runtime.registerShared({ lib: { version: '2.1.0', module: hostCopy } })
+    const d = descriptor('c1', {
+      shared: {
+        lib: {
+          requiredVersion: '^2.0.0',
+          fallback: true,
+          version: '2.0.0',
+          exposes: ['./RouterLink'],
+        },
+      },
+    })
+    await runtime.load(d, './Counter')
+    const share = (
+      scope().globals as {
+        __mf_module_cache__?: { share: Record<string, unknown> }
+      }
+    ).__mf_module_cache__?.share
+    expect(share?.['default:lib@2.0.0']).toBe(hostCopy)
+  })
+
   test("fallback: never for React or next/* (always the host's), even in a descriptor that says so", async () => {
     const { runtime, scope } = setup()
     // Every React, React DOM and Next.js module, subpaths included.
@@ -934,6 +1019,128 @@ describe('shared modules registered late, and fallback copies', () => {
     for (const name of names) {
       expect(share[`default:${name}@19.3.1`]).toBeUndefined()
     }
+  })
+
+  test("runtime warns once when the host's router misses the remote's range", async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const ROUTER = '@next-federation/router'
+    const hostRouter = { Link: () => null }
+    const { runtime } = setup({ isServer: false })
+    runtime.registerShared({
+      [ROUTER]: { version: '0.1.2', module: hostRouter },
+    })
+    const miss = (remote: string, buildId: string) =>
+      descriptor(buildId, {
+        remote,
+        name: remote,
+        shared: {
+          [ROUTER]: {
+            requiredVersion: '>=9.0.0',
+            fallback: true,
+            version: '9.1.0',
+          },
+        },
+      })
+    await runtime.load(miss('router_miss', 'm1'), './RouterLink')
+    // Another expose and another build of the same remote: no second line.
+    await runtime.load(miss('router_miss', 'm1'), './RouterSearch')
+    await runtime.load(miss('router_miss', 'm2'), './RouterLink')
+    const lines = () =>
+      warn.mock.calls
+        .map((c) => c.join(' '))
+        .filter((l) => l.includes('bundles its own'))
+    expect(lines()).toHaveLength(1)
+    expect(lines()[0]).toContain(
+      'router_miss bundles its own "@next-federation/router" (host has 0.1.2, remote needs ">=9.0.0")'
+    )
+    expect(lines()[0]).toContain('NF-036')
+    // Nothing seeded: the remote uses its own copy.
+    expect(
+      (
+        globalThis as {
+          __mf_module_cache__?: { share?: Record<string, unknown> }
+        }
+      ).__mf_module_cache__?.share?.[`default:${ROUTER}@9.1.0`]
+    ).toBeUndefined()
+    // Another remote: its own line.
+    await runtime.load(miss('router_miss_other', 'o1'), './RouterLink')
+    expect(lines()).toHaveLength(2)
+    expect(lines()[1]).toContain('router_miss_other bundles its own')
+    // A satisfying host copy, or an expose that does not import it: silent.
+    await runtime.load(
+      descriptor('s1', {
+        remote: 'router_fits',
+        name: 'router_fits',
+        shared: {
+          [ROUTER]: {
+            requiredVersion: '>=0.1.0 <1.0.0',
+            fallback: true,
+            version: '0.1.0',
+          },
+        },
+      }),
+      './RouterLink'
+    )
+    await runtime.load(
+      descriptor('x1', {
+        remote: 'router_unused',
+        name: 'router_unused',
+        shared: {
+          [ROUTER]: {
+            requiredVersion: '>=9.0.0',
+            fallback: true,
+            version: '9.1.0',
+            exposes: ['./RouterLink'],
+          },
+        },
+      }),
+      './Counter'
+    )
+    expect(lines()).toHaveLength(2)
+  })
+
+  test('a range is quoted in the warning and in NF-036: a newline in it never splits the log line', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = rs.spyOn(console, 'error').mockImplementation(() => {})
+    const { runtime } = setup({ isServer: false })
+    runtime.registerShared({
+      lib: { version: '1.0.0', module: {} },
+      other: { version: '1.0.0', module: {} },
+    })
+    const range = '>=9.0.0\nNF-000: forged line'
+    await runtime.load(
+      descriptor('q1', {
+        remote: 'quoted_range',
+        name: 'quoted_range',
+        shared: {
+          lib: { requiredVersion: range, fallback: true, version: '9.0.0' },
+        },
+      }),
+      './Counter'
+    )
+    const warned = warn.mock.calls
+      .map((c) => c.join(' '))
+      .find((l) => l.includes('quoted_range bundles its own'))
+    expect(warned).toContain('remote needs ">=9.0.0\\nNF-000: forged line"')
+    expect(warned).not.toContain('\n')
+    let refused: unknown
+    try {
+      await runtime.load(
+        descriptor('q2', {
+          remote: 'quoted_refused',
+          name: 'quoted_refused',
+          shared: { other: { requiredVersion: range, fallback: false } },
+        }),
+        './Counter'
+      )
+    } catch (e) {
+      refused = e
+    }
+    const message = (refused as Error).message
+    expect(message).toContain('NF-036')
+    expect(message).toContain('"other" ">=9.0.0\\nNF-000: forged line"')
+    expect(message).not.toContain('\n')
+    error.mockRestore()
   })
 
   const fallbackDescriptor = () =>
@@ -1165,12 +1372,13 @@ describe('shared modules registered late, and fallback copies', () => {
     expect(cachedLib()).toBe(hostCopy)
   })
 
-  test('fallback: an unsatisfying host copy, another expose, or a copy already in use is left alone', async () => {
+  test("fallback: an unsatisfying host copy or a copy already in use is left alone; another expose's module is seeded too", async () => {
     const bundled = { copy: 'bundled' }
+    const otherCopy = { copy: 'other' }
     const { runtime, scope } = setup()
     runtime.registerShared({
       lib: { version: '1.4.0', module: {} },
-      other: { version: '2.0.0', module: {} },
+      other: { version: '2.0.0', module: otherCopy },
       used: { version: '1.0.0', module: {} },
     })
     await runtime.load(descriptor('c0'), './Counter')
@@ -1200,7 +1408,8 @@ describe('shared modules registered late, and fallback copies', () => {
       }
     ).__mf_module_cache__.share
     expect(share['default:lib@2.0.0']).toBeUndefined()
-    expect(share['default:other@2.0.0']).toBeUndefined()
+    // The build's init would cache its own copy otherwise (see above).
+    expect(share['default:other@2.0.0']).toBe(otherCopy)
     expect(share['default:used@1.0.0']).toBe(bundled)
   })
 })
@@ -1241,4 +1450,377 @@ describe('next/* modules', () => {
     })
     expect(await settle(runtime.load(strict, './Counter'))).toBe('failed')
   })
+})
+
+describe("a bundled copy never replaces the host's for another remote (fallback shares)", () => {
+  const ROUTER = '@next-federation/router'
+  const hostRouter = { name: 'host router' }
+  const copyA = { name: 'copy of remote A' }
+  const copyB = { name: 'copy of remote B' }
+
+  type Share = {
+    version: string
+    get: () => Promise<() => unknown>
+    from: string
+    loaded?: boolean
+    lib?: () => unknown
+    scope: string[]
+    shareConfig: { singleton: false; requiredVersion: string }
+    strategy: 'loaded-first'
+  }
+  const own = (from: string, copy: object, range: string): Share => ({
+    version: '0.99.0',
+    get: async () => () => copy,
+    from,
+    scope: ['default'],
+    shareConfig: { singleton: false, requiredVersion: range },
+    strategy: 'loaded-first',
+  })
+
+  type Host = ReturnType<typeof createInstance>
+  const rand = () => Math.random().toString(36).slice(2)
+
+  /** A plain Module Federation host providing the router (no next-federation runtime). */
+  function plainHost(): Host {
+    return createInstance({
+      name: `plain_host_${rand()}`,
+      remotes: [],
+      shared: {
+        [ROUTER]: {
+          version: '0.1.2',
+          lib: () => hostRouter,
+          shareConfig: { singleton: true, requiredVersion: false },
+        },
+      },
+    })
+  }
+
+  /**
+   * Remote containers that bundle their own Module Federation runtime
+   * (Rspack): each has its own instance, on `host`'s share scope, and
+   * registers its bundled copy of `name` there, as the bundler runtime does
+   * (the first registration of a version is kept). The returned function is
+   * what the bundler runtime's consumes does: the share scope's choice, else
+   * (false) its own bundled copy.
+   */
+  function rspackRemotes(
+    plugins: unknown[],
+    host: Host,
+    { name = ROUTER, version = '0.99.0' } = {}
+  ) {
+    const scope = (host.shareScopeMap.default ??= {}) as Record<
+      string,
+      Record<string, unknown>
+    >
+    const remote = (container: string, copy: object, range: string) => {
+      const instance = createInstance({
+        name: `${container}_${rand()}`,
+        remotes: [],
+        shared: {},
+        plugins: plugins as never,
+      })
+      instance.initShareScopeMap('default', scope as never)
+      const share = {
+        ...own(instance.options.name, copy, range),
+        version,
+      }
+      ;(scope[name] ??= {})[version] ??= { ...share }
+      return async () => {
+        const factory = await instance.loadShare(name, {
+          customShareInfo: share as never,
+        })
+        return factory === false || !factory ? copy : factory()
+      }
+    }
+    return { remote }
+  }
+
+  /**
+   * A next-federation runtime on a real Module Federation instance (its
+   * loads stubbed), providing the router: its plugins and its host instance.
+   */
+  async function nfHost(isServer = false) {
+    const registered: unknown[] = []
+    let host: Host | undefined
+    const ctx = setup({
+      isServer,
+      registerGlobalPlugins: (plugins) => registered.push(...plugins),
+      createInstance: (options) => {
+        host = createInstance({
+          ...(options as unknown as Parameters<typeof createInstance>[0]),
+          plugins: [],
+        })
+        host.loadRemote = (async () => ({ default: () => null })) as never
+        return host as unknown as FederationInstance
+      },
+    })
+    ctx.runtime.registerShared({
+      [ROUTER]: { version: '0.1.2', module: hostRouter },
+    })
+    await ctx.runtime.load(descriptor('c1'), './Counter')
+    await ctx.runtime.load(descriptor('c2'), './Counter')
+    const plugins = isServer ? (ctx.scope().plugins ?? []) : registered
+    // Browser: registered once, before any remote entry creates its own
+    // instance. Server: the scope carries it.
+    expect(plugins.map((p) => (p as { name: string }).name)).toEqual([
+      'nf-components-host-shares',
+    ])
+    return { plugins, host: host! }
+  }
+
+  test('Module Federation alone: the bundled copy remote A loaded hijacks remote B (the bug this guards)', async () => {
+    const { remote } = rspackRemotes([], plainHost())
+    expect(await remote('remote_a', copyA, '>=0.99.0')()).toBe(copyA)
+    expect(await remote('remote_b', copyB, '>=0.0.0 <1.0.0')()).toBe(copyA)
+  })
+
+  test("Rspack remotes: remote A with a range that excludes the host loads its own copy; remote B (range the host satisfies) still gets the host's copy afterwards", async () => {
+    const { plugins, host } = await nfHost()
+    const { remote } = rspackRemotes(plugins, host)
+    expect(await remote('remote_a', copyA, '>=0.99.0')()).toBe(copyA)
+    expect(await remote('remote_b', copyB, '>=0.0.0 <1.0.0')()).toBe(hostRouter)
+    // And the other order; a third remote excluded by its range: its own.
+    const other = await nfHost()
+    const second = rspackRemotes(other.plugins, other.host)
+    expect(await second.remote('remote_b', copyB, '^0.1.0')()).toBe(hostRouter)
+    expect(await second.remote('remote_c', copyB, '>=0.99.0')()).toBe(copyB)
+  })
+
+  test('server: the runtimes remote entries bundle get the plugin through the scope', async () => {
+    const { plugins, host } = await nfHost(true)
+    const { remote } = rspackRemotes(plugins, host)
+    expect(await remote('remote_a', copyA, '>=0.99.0')()).toBe(copyA)
+    expect(await remote('remote_b', copyB, '>=0.0.0 <1.0.0')()).toBe(hostRouter)
+  })
+
+  test("another Module Federation host's share scope is left alone: its singleton: false shares still dedupe between two of its containers", async () => {
+    const { plugins } = await nfHost()
+    // Not the next-federation host's share scope: a name it never registered...
+    const lib = rspackRemotes(plugins, plainHost(), {
+      name: 'unrelated-lib',
+      version: '1.0.0',
+    })
+    expect(await lib.remote('c_one', copyA, '^1.0.0')()).toBe(copyA)
+    expect(await lib.remote('c_two', copyB, '^1.0.0')()).toBe(copyA)
+    // ...and even a name it did register (the router), in that other scope.
+    const router = rspackRemotes(plugins, plainHost())
+    expect(await router.remote('c_one', copyA, '>=0.99.0')()).toBe(copyA)
+    expect(await router.remote('c_two', copyB, '>=0.0.0 <1.0.0')()).toBe(copyA)
+  })
+
+  test("the host's scope, a name the host did not register: Module Federation's own choice", async () => {
+    const { plugins, host } = await nfHost()
+    const lib = rspackRemotes(plugins, host, {
+      name: 'unrelated-lib',
+      version: '1.0.0',
+    })
+    expect(await lib.remote('c_one', copyA, '^1.0.0')()).toBe(copyA)
+    expect(await lib.remote('c_two', copyB, '^1.0.0')()).toBe(copyA)
+  })
+
+  describe('hostSharesPlugin hardening', () => {
+    const versions = new Map([[ROUTER, '0.1.2']])
+    const modules = new Map<string, unknown>([[ROUTER, hostRouter]])
+    function resolve(
+      entry: { from: string; lib: () => unknown },
+      shareConfig: Record<string, unknown> = {
+        singleton: false,
+        requiredVersion: '>=0.1.0 <1.0.0',
+      }
+    ) {
+      const scope = { [ROUTER]: { '0.1.2': entry } }
+      const original = () => undefined
+      const plugin = hostSharesPlugin(versions, modules, () => ({
+        name: 'nf_host',
+        shareScopeMap: { default: scope },
+      }))
+      const args = plugin.resolveShare({
+        shareScopeMap: { default: scope },
+        scope: 'default',
+        pkgName: ROUTER,
+        shareInfo: { shareConfig },
+        resolver: original,
+      })
+      return { args, original, scope }
+    }
+
+    test("returns a copy of the host's entry whose lib is the host module (a later swap of the entry changes nothing)", () => {
+      const entry: { from: string; lib: () => unknown } = {
+        from: 'nf_host',
+        lib: () => hostRouter,
+      }
+      const { args } = resolve(entry)
+      const result = args.resolver()
+      entry.lib = () => ({ evil: true })
+      expect(result?.shared).not.toBe(entry)
+      expect(result?.shared.lib?.()).toBe(hostRouter)
+    })
+
+    test('an entry at the host version that the host instance did not register is never returned', () => {
+      const { args } = resolve({ from: 'remote_x', lib: () => hostRouter })
+      expect(args.resolver()).toBeUndefined()
+    })
+
+    test("a consumer with import: false keeps Module Federation's own choice", () => {
+      const { args, original } = resolve(
+        { from: 'nf_host', lib: () => hostRouter },
+        { singleton: false, import: false, requiredVersion: '>=0.1.0 <1.0.0' }
+      )
+      expect(args.resolver).toBe(original)
+    })
+
+    // The canary React an App Router host runs passes the descriptor check
+    // by its release numbers (unmetShared): a remote that bundles React
+    // (singleton: false, with an import) must still get the host's React,
+    // never its own copy on the host's server.
+    test.each([
+      ['react', '19.3.0-canary-a1b2c3d4-20261101', '^19.0.0'],
+      ['react-dom', '19.3.0-canary-a1b2c3d4-20261101', '^19.0.0'],
+      ['next/link', '16.5.0-canary.3', '>=16.0.0'],
+    ])(
+      "%s at a canary or prerelease host version: the host's module, as the descriptor check counts it",
+      (name, version, range) => {
+        const hostModule = { name: `host ${name}` }
+        const entry = { from: 'nf_host', lib: () => hostModule }
+        const scope = { [name]: { [version]: entry } }
+        const plugin = hostSharesPlugin(
+          new Map([[name, version]]),
+          new Map<string, unknown>([[name, hostModule]]),
+          () => ({ name: 'nf_host', shareScopeMap: { default: scope } })
+        )
+        const args = plugin.resolveShare({
+          shareScopeMap: { default: scope },
+          scope: 'default',
+          pkgName: name,
+          shareInfo: {
+            shareConfig: {
+              singleton: false,
+              requiredVersion: range,
+              import: `./node_modules/${name}`,
+            },
+          },
+          resolver: () => undefined,
+        })
+        expect(args.resolver()?.shared.lib?.()).toBe(hostModule)
+      }
+    )
+  })
+
+  test("Vite builds on the server: remote A, whose range excludes the host, never renders the host's copy; remote B (range the host satisfies) still gets the host's copy afterwards", async () => {
+    rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const vite = (remote: string, buildId: string, range: string) =>
+      descriptor(buildId, {
+        remote,
+        name: remote,
+        shared: {
+          [ROUTER]: {
+            requiredVersion: range,
+            fallback: true,
+            version: '0.1.2',
+          },
+        },
+      })
+    const key = `default:${ROUTER}@0.1.2`
+    const ownCopy = { name: 'bundled copy' }
+    /**
+     * A server runtime loading Vite builds: the loader records each as a
+     * Vite build, and the build's share proxy caches its own copy under the
+     * versioned key when nothing is there (first writer wins), as
+     * @module-federation/vite does.
+     */
+    function viteRuntime() {
+      const ctx = setup()
+      ctx.instance.loadRemote = (async () => {
+        const s = ctx.scope()
+        for (const id of ['a1', 'b1', 'b2']) {
+          s.builds.set(descriptor(id).base, { bundlesRuntime: false })
+        }
+        const cache = ((
+          s.globals as Record<string, unknown>
+        ).__mf_module_cache__ ??= { share: {}, remote: {} }) as {
+          share: Record<string, unknown>
+        }
+        cache.share[key] ??= ownCopy
+        return { default: () => null, copy: cache.share[key] }
+      }) as never
+      ctx.runtime.registerShared({
+        [ROUTER]: { version: '0.1.2', module: hostRouter },
+      })
+      const copy = async (d: RemoteComponentDescriptor) =>
+        (
+          (await ctx.runtime.serverLoad(d, './RouterLink')) as {
+            copy?: unknown
+          } | null
+        )?.copy ?? null
+      return { ...ctx, copy }
+    }
+    const a = vite('remote_a', 'a1', '>=9.0.0')
+    const b = vite('remote_b', 'b1', '>=0.1.0 <1.0.0')
+    const b2 = vite('remote_b', 'b2', '>=0.1.0 <1.0.0')
+
+    // B first: the host's copy is seeded under the key.
+    const first = viteRuntime()
+    expect(await first.copy(b)).toBe(hostRouter)
+    // A (range excludes the host): the cache holds the host's copy under
+    // its key, so the server never renders A (browser only: its own copy).
+    expect(await first.copy(a)).toBeNull()
+    expect(first.runtime.serverBlock(a)).toBe('stale')
+    // B again: still the host's copy.
+    expect(await first.copy(b2)).toBe(hostRouter)
+
+    // The reverse order: A first caches its own copy...
+    const reverse = viteRuntime()
+    expect(await reverse.copy(a)).toBe(ownCopy)
+    // ...and B gets a new scope with the host's copy, never A's.
+    expect(await reverse.copy(b)).toBe(hostRouter)
+    expect(
+      (
+        reverse.scope().globals as {
+          __mf_module_cache__?: { share: Record<string, unknown> }
+        }
+      ).__mf_module_cache__?.share[key]
+    ).toBe(hostRouter)
+  })
+})
+
+test('a new MF instance while a load awaits its manifest check: the next load still registers its remote on the instance it uses', async () => {
+  // As MF: each instance knows only the remotes registered on it.
+  const instances: Fake[] = []
+  const create = () => {
+    const inst = fakeInstance()
+    const load = inst.loadRemote.bind(inst)
+    inst.loadRemote = async (id) => {
+      if (inst.registrations.length === 0) {
+        throw new Error(`Failed to locate remote: ${id}`)
+      }
+      return load(id)
+    }
+    instances.push(inst)
+    return inst
+  }
+  let release!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  let gated = true
+  const errors = rs.spyOn(console, 'error').mockImplementation(() => {})
+  const { runtime } = setup({
+    createInstance: create,
+    serverPlugin: () =>
+      ({
+        name: 'test-preflight',
+        async preflight() {
+          if (gated) await gate
+        },
+      }) as never,
+  })
+  const first = runtime.load(descriptor('c1'), './Counter')
+  await new Promise((r) => setTimeout(r, 0))
+  // A module registered late (a router host) while the manifest check awaits.
+  runtime.registerShared({ 'late-module': { version: '1.0.0', module: {} } })
+  gated = false
+  release()
+  await first
+  await expect(runtime.load(descriptor('c1'), './Boom')).resolves.toMatchObject(
+    { entry: descriptor('c1').manifest }
+  )
+  expect(errors).not.toHaveBeenCalled()
 })

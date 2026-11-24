@@ -37,17 +37,28 @@ packages/
               components.ts (remote components descriptor fetch + verify)         → export "./components"
   react/      error-boundary.tsx, island-mount.tsx, island-registry.ts, token-client.ts, events.ts,
               host-react.ts, index.ts; provide-host-react.ts → export "./share";
-              components/ (index.tsx, render.tsx, runtime.ts) → export "./components",
+              components/ (index.tsx: provideNavigation; render.tsx, runtime.ts) → export "./components",
               components/server-loader.ts (+ .browser.ts) → export "./components/server-loader"
   server/     strip-html.ts, identity-verify.ts, identity-context.ts, cors.ts, handler.ts,
               action.ts (Server Actions, requireIdentity marker), index.ts,
               node/ (listener.ts, serve-builds.ts, retention.ts, cli.ts) → export "./node", bin "nf-serve",
               node/components-descriptor.ts (components descriptor, shared with the Vite plugin),
               node/describe.ts, node/describe-cli.ts → bin "nf-describe" (any MF 2.0 remote)
+              node/installed-version.ts (a project's installed package version)
   island/     bridge-context.tsx, link.tsx, form.tsx (<Form>), require-identity.client.ts,
               index.client.ts, index.server.ts, bootstrap/ (create-bootstrap.tsx, flight-scope.ts,
               share-scope.ts, call-server.ts (Server Action client), index.ts) → export
               "./bootstrap"; bootstrap/share-scope.ts → export "./share-scope"
+  router/     internal (no application imports it): index.ts, create-router-module.tsx
+              (RouterModule, provideRouter), document-router.tsx (default
+              Link/useNavigate/usePathname/useSearchParams), safe-href.ts (same-origin guards),
+              version.ts, react-router.tsx (reactRouterModule) → export "./react-router",
+              host-navigation.tsx (provideNavigation's module) → "./host-navigation",
+              next-host.tsx (the guarded next/link, next/navigation, next/router a
+              Next.js host shares) → "./next-host",
+              shims/ (next-link.tsx, next-navigation.ts, react-router.tsx: what remote builds
+              rewire next/link, next/navigation and react-router to) → "./shims/*",
+              build.ts (routerShimAliases, routerSharedEntry; Node only) → "./build"
   vite/       index.ts, options.ts, scope-flight-client.ts, checks.ts, share.ts (React sharing),
               code-literal.ts, trim-slashes.ts,
               plugin-rsc/ (plugin.ts, entry.rsc.tsx, entry.ssr.tsx, entry.client.tsx,
@@ -66,7 +77,8 @@ test/
   fixtures/host-app/        App Router host (with and without cacheComponents)
   fixtures/host-pages/      Pages Router host (with and without basePath + i18n)
   fixtures/host-spa/        Vite SPA host (StrictMode on) for lifecycle and skew
-  fixtures/components-remote/  Vite components remote (signed, tampered and unsigned builds)
+  fixtures/components-remote/  Vite components remote (signed, tampered and unsigned builds; the
+                               links build l1/rm1: next/link, next/navigation, react-router rewired)
   fixtures/components-context/ the React context hosts share with it
   e2e/                      playwright.config.ts, servers.ts, *.spec.ts, fixtures/jwks-server.ts,
                             data/measurements.json (island size report written by measure.spec.ts)
@@ -83,6 +95,8 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 - `pnpm install`
 - `pnpm build`: build every package in `packages/`
 - `pnpm test`: rstest unit tests (`packages/*/__tests__`, `scripts/__tests__`)
+- `pnpm test` also needs the React 18 unit lane installed outside the workspace (its own
+  lockfile): `cd test/react18 && pnpm install --ignore-workspace`. CI uses `--frozen-lockfile`.
 - `pnpm typecheck`: `tsc -b`
 - `pnpm lint`: ESLint (flat config)
 - `pnpm lint:docs`: inclusive-language check on docs
@@ -91,6 +105,8 @@ Workspace tooling needs Node >= 24 and pnpm 10. Published packages target Node >
 - `pnpm format` / `pnpm format:check`: Prettier
 - `pnpm check:pack`: every package's tarball contents (run after building)
 - `pnpm e2e`: Playwright suites (`NF_LANE=b` runs on a second port range)
+  The React sharing e2e also needs the old-React island remote installed the same way:
+  `cd test/fixtures/island-remote-old-react && pnpm install --ignore-workspace`.
 - `pnpm examples:smoke`: start the examples and check every page
 - `pnpm examples:platform:smoke`: the same for the commerce platform (`examples/advanced`)
 
@@ -119,8 +135,11 @@ trust, globals and sharing rules. Do not weaken a check to make a change pass.
 
 ### Package boundaries
 
-- `sdk`, `protocol`, `core`, `react`, `server` and `island` import no framework (`next`, `vite`,
-  `@vitejs/*`). ESLint enforces it per package.
+- `sdk`, `protocol`, `core`, `react`, `server`, `island` and `router` import no framework (`next`,
+  `vite`, `@vitejs/*`). ESLint enforces it per package. `router` imports `react-router` only in
+  `src/react-router.tsx` (its `./react-router` entry) and `src/shims/react-router.tsx` (by the
+  private name `@next-federation/router/real-react-router`, which the build resolves to the
+  remote's own `react-router`).
 - The protocol is bundler-neutral. Nothing in `protocol`, `core`, `react`, `server` or `island` may
   assume Vite. A remote is anything that serves the envelope and a bootstrap ES module that honours
   `IslandBootstrapModule`.
@@ -181,6 +200,18 @@ trust, globals and sharing rules. Do not weaken a check to make a change pass.
   `__mf_init__*` entries, held in the scope and never on the process-wide `globalThis`. A server
   entry that bundles its own Module Federation runtime also gets its own `__FEDERATION__`,
   `__VMOK__` and `__GLOBAL_LOADING_REMOTE_ENTRY__` there.
+- Module Federation global plugin: the component runtime registers one, `nf-components-host-shares`
+  (`hostSharesPlugin` in `packages/react/src/components/runtime.ts`), so a remote that bundles its
+  own runtime (Rspack, webpack) resolves a `singleton: false` share to the host's copy when that
+  copy satisfies its range (React and Next.js modules by their release numbers, as the descriptor
+  check counts them), and otherwise to its own bundled copy, never another remote's. It
+  acts only on consumers resolving from the host instance's own share scope, only for names the
+  host registered, and never for `import: false` consumers; every other Module Federation
+  instance and name keeps Module Federation's own choice. It returns a copy of the host's entry
+  (checked by the host instance's name, with the host's module fixed). In the browser through
+  Module Federation's `registerGlobalPlugins` (`__FEDERATION__.__GLOBAL_PLUGIN__`); on the server
+  only in each scope's own registry (the server loader starts a scope's `__FEDERATION__` with
+  it), never the process-wide one.
 - Exception: `provideFallbackCopies` in `packages/react/src/components/runtime.ts` may set
   `__mf_module_cache__.share['default:<name>@<version>']`.
   - Only for a `fallback: true` entry of a verified descriptor, only with a module the host
@@ -193,6 +224,13 @@ trust, globals and sharing rules. Do not weaken a check to make a change pass.
   - A runtime has one scope at a time: one runtime per router layer, plus one more per
     `next dev --webpack` reload. A runtime gets a new scope only when its cache holds a stale
     fallback copy, at most 4 per runtime (`MAX_SCOPES`). A timed-out load keeps the scope.
+  - The key is per version, not per build. In the browser, within one page, the first build to
+    cache `<name>@<version>` decides it for every build that bundles that version, in both
+    directions (a build whose range excludes the host's copy can get the host's copy; a build
+    the host satisfies can get another build's bundled copy). Only explicit ranges reach it (two
+    builds, one bundled version, different ranges). On the server, a Vite build whose range
+    excludes the host's copy while the cache holds the host's copy under its key renders in the
+    browser only, and a build the host satisfies whose key holds another copy gets a new scope.
   - It depends on the pinned `@module-federation/vite` version. Re-verify it on every bump (see
     [docs/maintainers/mf-vite-init-keys.md](docs/maintainers/mf-vite-init-keys.md)).
 

@@ -3,12 +3,17 @@
 // exposed modules on the host's own React. Framework-free; the 'use client'
 // entry wires it.
 import {
+  DEFAULT_REACT_RANGE,
+  HOST_REACT_MODULES,
   componentTrustRegistry,
   isNeverFallback,
   isSemverVersion,
   satisfies,
 } from '@next-federation/protocol'
-import type { RemoteComponentDescriptor } from '@next-federation/protocol'
+import type {
+  ComponentSharedModule,
+  RemoteComponentDescriptor,
+} from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
 
@@ -104,6 +109,12 @@ export type ServerScope = {
    * another layer holds `componentTrustRegistry().unlistedLayer`.
    */
   unlisted: Set<string>
+  /**
+   * Module Federation plugins every runtime a remote's server entry bundles
+   * (Rspack, webpack) gets in this scope (its `__GLOBAL_PLUGIN__`): the
+   * host's shared-module resolution (hostSharesPlugin).
+   */
+  plugins?: unknown[]
 }
 
 export type RuntimeDeps = {
@@ -126,6 +137,12 @@ export type RuntimeDeps = {
    * tag (entry loads, manifests, snapshots), so neither stays alive.
    */
   forget?: (instance: FederationInstance, scope?: ServerScope) => void
+  /**
+   * Browser only: Module Federation's `registerGlobalPlugins`. A remote that
+   * bundles its own runtime (Rspack, webpack) creates its own instance, which
+   * the host instance's plugins never reach; global plugins reach it.
+   */
+  registerGlobalPlugins?: (plugins: unknown[]) => void
   /** Server only: Node can evaluate remote code (`process.getBuiltinModule`). */
   canLoadServerCode: () => boolean
   /**
@@ -255,6 +272,126 @@ function staleFallbackCopy(
   return null
 }
 
+/**
+ * A `fallback` module the host registered at a version outside this build's
+ * range, while the cache holds the host's copy under the build's versioned
+ * key (seeded for another build of the same bundled version): the build
+ * would read the host's copy, not its own. The server must not render it
+ * from this scope (the browser of a fresh page loads the build's own copy).
+ */
+function hostCopyOutOfRange(
+  d: RemoteComponentDescriptor,
+  versions: Map<string, string>,
+  modules: Map<string, unknown>,
+  holder: { __mf_module_cache__?: unknown }
+): string | null {
+  const cache = (holder.__mf_module_cache__ as ModuleCache | undefined)?.share
+  if (!cache) return null
+  for (const [name, need] of Object.entries(d.shared ?? {})) {
+    if (!need.fallback || need.version === undefined) continue
+    if (need.requiredVersion === false || isNeverFallback(name)) continue
+    const version = versions.get(name)
+    if (version === undefined || satisfies(version, need.requiredVersion)) {
+      continue
+    }
+    const key = `${name}@${need.version}`
+    const held = cache[`default:${key}`] ?? cache[key]
+    if (held !== undefined && held === modules.get(name)) return name
+  }
+  return null
+}
+
+type ShareEntry = { lib?: () => unknown; from?: string }
+type ResolveShareArgs = {
+  shareScopeMap: Record<string, Record<string, Record<string, ShareEntry>>>
+  scope: string
+  pkgName: string
+  shareInfo?: {
+    shareConfig?: {
+      singleton?: boolean
+      requiredVersion?: string | false
+      import?: unknown
+    }
+  }
+  resolver: () => { shared: ShareEntry; useTreesShaking: boolean } | undefined
+}
+
+/** The host's current Module Federation instance: its name and share scopes. */
+export type HostInstanceInfo = {
+  name: string
+  shareScopeMap: Record<string, unknown>
+} | null
+
+/**
+ * Module Federation runtime plugin: how a remote container that bundles its
+ * own runtime (Rspack, webpack) resolves a shared module it may bundle
+ * (`singleton: false`, a `fallback` entry). It acts only on a consumer
+ * resolving from the host instance's own share scope, and only for a name
+ * the host registered: the consumer gets the host's copy when the host's
+ * version satisfies its `requiredVersion`, otherwise none, so it uses its
+ * own bundled copy. Never another container's copy: without this, a bundled
+ * copy one remote loaded (its range excluded the host's) becomes the highest
+ * loaded version in the share scope and every later consumer it satisfies
+ * gets it, for the life of the scope. Singletons, `import: false` consumers,
+ * other share scopes (another Module Federation app on the page) and names
+ * the host did not register keep Module Federation's own choice.
+ */
+export function hostSharesPlugin(
+  versions: Map<string, string>,
+  modules: Map<string, unknown>,
+  hostInstance: () => HostInstanceInfo
+): {
+  name: string
+  resolveShare: (args: ResolveShareArgs) => ResolveShareArgs
+} {
+  return {
+    name: 'nf-components-host-shares',
+    resolveShare(args) {
+      const config = args.shareInfo?.shareConfig
+      if (!config || config.singleton !== false || config.import === false) {
+        return args
+      }
+      const { shareScopeMap, scope, pkgName } = args
+      const host = hostInstance()
+      const version = versions.get(pkgName)
+      if (
+        !host ||
+        version === undefined ||
+        shareScopeMap[scope] === undefined ||
+        shareScopeMap[scope] !== host.shareScopeMap[scope]
+      ) {
+        return args
+      }
+      args.resolver = () => {
+        const module = modules.get(pkgName)
+        const range = config.requiredVersion
+        const fits =
+          range === undefined ||
+          range === false ||
+          range === '*' ||
+          satisfies(comparedVersion(pkgName, version), range)
+        if (!fits) return undefined
+        // The host's entry: registered by the host instance at its version,
+        // with a `lib` that returns its module. A copy is returned, with the
+        // host's module fixed, so nothing swapped on the entry later counts.
+        const entry = shareScopeMap[scope]?.[pkgName]?.[version]
+        if (
+          entry?.from !== host.name ||
+          typeof entry.lib !== 'function' ||
+          entry.lib() !== module
+        ) {
+          return undefined
+        }
+        return {
+          shared: { ...entry, lib: () => module },
+          useTreesShaking: false,
+        }
+      }
+      return args
+    },
+  }
+}
+
 /** Server: the most scopes one runtime uses (see renewScope). */
 export const MAX_SCOPES = 4
 
@@ -264,10 +401,43 @@ const NEXT_MODULES = new Set(['next/link', 'next/navigation', 'next/router'])
 /** `16.5.0-canary.3` -> `16.5.0` (build metadata dropped too). */
 const releaseOf = (version: string): string => version.replace(/[-+].*$/, '')
 
+/**
+ * The host version a range is checked against: a canary or prerelease Next
+ * host (and the canary React an App Router host runs) counts by its release
+ * numbers, everywhere (the descriptor check and hostSharesPlugin agree).
+ */
+function comparedVersion(name: string, version: string): string {
+  return NEXT_MODULES.has(name) || HOST_REACT_MODULES.includes(name)
+    ? releaseOf(version)
+    : version
+}
+
 function notProvidedHint(name: string): string {
   return NEXT_MODULES.has(name)
     ? 'next/link, next/navigation and next/router come only from a Next.js host that creates its remote components with @next-federation/next/components (App Router: next/link, next/navigation) or @next-federation/next/pages/components (Pages Router: next/link, next/router).'
     : 'Provide it with createRemoteComponent({ shared }), or let the remote bundle a copy (`fallback: true` in its `shared`).'
+}
+
+/**
+ * The descriptor's shared modules, plus DEFAULT_REACT_RANGE for each React
+ * module it does not list and the host registered: builds list React only
+ * for another range, and every build made before remotes could declare one
+ * was React 19-only.
+ */
+function sharedNeeds(
+  d: RemoteComponentDescriptor,
+  versions: Map<string, string>
+): Array<[string, ComponentSharedModule]> {
+  const needs = Object.entries(d.shared ?? {})
+  for (const name of HOST_REACT_MODULES) {
+    if (d.shared && Object.hasOwn(d.shared, name)) continue
+    if (!versions.has(name)) continue
+    needs.push([
+      name,
+      { requiredVersion: DEFAULT_REACT_RANGE, fallback: false },
+    ])
+  }
+  return needs
 }
 
 /**
@@ -281,7 +451,7 @@ function unmetShared(
   expose: string,
   versions: Map<string, string>
 ): NFError | null {
-  for (const [name, need] of Object.entries(d.shared ?? {})) {
+  for (const [name, need] of sharedNeeds(d, versions)) {
     if (need.fallback) continue
     if (need.exposes && !need.exposes.includes(expose)) continue
     const version = versions.get(name)
@@ -294,15 +464,11 @@ function unmetShared(
     }
     if (
       need.requiredVersion !== false &&
-      !satisfies(
-        // A canary or prerelease Next host counts by its release numbers.
-        NEXT_MODULES.has(name) ? releaseOf(version) : version,
-        need.requiredVersion
-      )
+      !satisfies(comparedVersion(name, version), need.requiredVersion)
     ) {
       return new NFError(
         'NF-036',
-        `${who} needs "${name}" ${need.requiredVersion}, but the host provides ${version}. Upgrade the host's copy, widen the remote's requiredVersion, or let the remote bundle a copy (\`fallback: true\`).`
+        `${who} needs "${name}" ${JSON.stringify(need.requiredVersion)}, but the host provides ${version}. Upgrade the host's copy, widen the remote's requiredVersion, or let the remote bundle a copy (\`fallback: true\`).`
       )
     }
   }
@@ -323,7 +489,7 @@ function seedableFallbacks(
   const out: Array<{ name: string; key: string }> = []
   for (const [name, need] of Object.entries(d.shared ?? {})) {
     if (!need.fallback || need.version === undefined) continue
-    // React and the router are always the host's (the parser refuses such
+    // React and Next.js are always the host's (the parser refuses such
     // an entry too; never trust that alone before a global write).
     if (isNeverFallback(name)) continue
     if (expose !== undefined && need.exposes?.includes(expose) === false) {
@@ -343,15 +509,47 @@ function seedableFallbacks(
 }
 
 /**
+ * A `fallback` module of this expose that the host registered, at a version
+ * outside the build's range: the build uses its own copy (for
+ * `@next-federation/router`, the document router: full page navigations).
+ * Warned once per module and remote.
+ */
+function warnBundledCopies(
+  d: RemoteComponentDescriptor,
+  expose: string,
+  versions: Map<string, string>
+): void {
+  for (const [name, need] of Object.entries(d.shared ?? {})) {
+    if (!need.fallback || need.requiredVersion === false) continue
+    if (isNeverFallback(name) || need.exposes?.includes(expose) === false) {
+      continue
+    }
+    const version = versions.get(name)
+    if (version === undefined || satisfies(version, need.requiredVersion)) {
+      continue
+    }
+    logger.warnOnce(
+      'NF-036',
+      `bundled-copy:${d.remote}:${name}`,
+      `${d.remote} bundles its own "${name}" (host has ${version}, remote needs ${JSON.stringify(need.requiredVersion)}).`
+    )
+  }
+}
+
+/**
  * `fallback` modules: a build's own copy is not a singleton, and its
  * `@module-federation/vite` share proxy resolves `default:<name>@<its
  * version>` in the module cache (`__mf_module_cache__`, the layout of the
  * pinned 1.24.0) before falling back to the bundled copy; it never asks the
  * share scope. When the host's copy satisfies the range, put it there, so
  * the build uses the host's copy. A key already set (a copy already
- * evaluated) is left alone. `holder`: the browser's `globalThis` (one React
- * per page), or on the server this runtime's scope (never the process-wide
- * object: another layer would read this layer's copy).
+ * evaluated) is left alone. Every such module of the build is seeded,
+ * whichever expose loads: the build's init caches its own copy of each
+ * fallback share whose key is still empty, so an expose that imports it
+ * later would read the bundled copy (and the server check, which reads all
+ * of them, would find a stale copy). `holder`: the browser's `globalThis`
+ * (one React per page), or on the server this runtime's scope (never the
+ * process-wide object: another layer would read this layer's copy).
  */
 function provideFallbackCopies(
   d: RemoteComponentDescriptor,
@@ -360,7 +558,8 @@ function provideFallbackCopies(
   modules: Map<string, unknown>,
   holder: { __mf_module_cache__?: ModuleCache }
 ): void {
-  for (const { name, key } of seedableFallbacks(d, expose, versions)) {
+  warnBundledCopies(d, expose, versions)
+  for (const { name, key } of seedableFallbacks(d, undefined, versions)) {
     const cache = (holder.__mf_module_cache__ ??= { share: {}, remote: {} })
     const share = (cache.share ??= {})
     if (share[`default:${key}`] !== undefined || share[key] !== undefined) {
@@ -409,6 +608,46 @@ const sameIntegrity = (
   return (
     keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
   )
+}
+
+/**
+ * Points the host snapshot MF keeps for `instance` (process- or page-wide,
+ * keyed by the instance's name) at the build of container `name` just
+ * registered on it. MF records a host's remote there by container name, once
+ * (only while absent), and resolves every later load of that name through
+ * it: a replacement instance of the same name (after a timed-out load or a
+ * module registered late), whose first registration removes nothing, would
+ * otherwise load the build an earlier instance recorded, silently, with no
+ * error. Set after each registration, inside the per-name lock.
+ */
+export function pinRemoteSnapshot(
+  instance: FederationInstance,
+  name: string
+): void {
+  const options = (
+    instance as {
+      options?: {
+        name?: unknown
+        version?: unknown
+        remotes?: Array<{ name: string; entry?: string }>
+      }
+    }
+  ).options
+  const entry = options?.remotes?.find((r) => r.name === name)?.entry
+  if (typeof options?.name !== 'string' || typeof entry !== 'string') return
+  const fed = (
+    globalThis as {
+      __FEDERATION__?: { moduleInfo?: Record<string, unknown> }
+    }
+  ).__FEDERATION__
+  const info = fed?.moduleInfo
+  if (!info) return
+  const host = (info[options.name] ??= {
+    version: typeof options.version === 'string' ? options.version : '',
+    remoteEntry: '',
+    remotesInfo: {},
+  }) as { remotesInfo?: Record<string, unknown> }
+  host.remotesInfo = { ...host.remotesInfo, [name]: { matchedVersion: entry } }
 }
 
 /**
@@ -497,6 +736,18 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       ? 'unisolated'
       : undefined
   }
+  // The host's resolution of shared modules a remote may bundle, for the
+  // runtimes remote containers bundle (Rspack, webpack).
+  const sharesPlugin = hostSharesPlugin(versions, provided, () => {
+    const current = instance as {
+      options?: { name?: unknown }
+      shareScopeMap?: Record<string, unknown>
+    } | null
+    return typeof current?.options?.name === 'string' && current.shareScopeMap
+      ? { name: current.options.name, shareScopeMap: current.shareScopeMap }
+      : null
+  })
+  let globalPluginRegistered = false
   const newScope = (): ServerScope => ({
     id: `${layer}.${++scopes}`,
     layer,
@@ -505,6 +756,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     builds: buildInfo,
     failures,
     unlisted,
+    plugins: [sharesPlugin],
   })
   let scope: ServerScope | null = deps.isServer ? newScope() : null
   // Server: the scope each load ran in (the post-load check reads that one).
@@ -580,6 +832,11 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
 
   function getInstance(): FederationInstance {
     if (instance) return instance
+    if (!scope && !globalPluginRegistered) {
+      // Before any remote entry creates its own instance.
+      globalPluginRegistered = true
+      deps.registerGlobalPlugins?.([sharesPlugin])
+    }
     const plugin =
       scope && deps.serverPlugin ? deps.serverPlugin(integrityFor, scope) : null
     loaderPlugin = plugin as typeof loaderPlugin
@@ -626,19 +883,25 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     expose: string,
     fresh: boolean
   ): Promise<RemoteModule> {
-    const mf = getInstance()
+    let mf = getInstance()
     const current = registered.get(d.name)
     if (current !== d.base || fresh) {
       // Server: the loader checks the manifest first, so its refusal
       // (NF-028) or a failed fetch is thrown here, never inside the MF
       // runtime (which logs what its hooks throw, with a stack).
       await loaderPlugin?.preflight?.(d.manifest)
+      // The instance may have been replaced meanwhile (a module registered
+      // late, a timed-out load), which cleared `registered`: register on
+      // the current one, or the next load of this build would skip its
+      // registration and find no remote on it.
+      mf = getInstance()
       mf.registerRemotes([{ name: d.name, entry: d.manifest }], {
         // Always: MF keeps remote state by name process-wide, and an earlier
         // copy of this runtime (a dev server reload) may have registered
         // another build of this container.
         force: true,
       })
+      pinRemoteSnapshot(mf, d.name)
       registered.set(d.name, d.base)
     }
     const mod = await mf.loadRemote<RemoteModule>(
@@ -841,9 +1104,16 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     const holder = (s?.globals ?? globalThis) as {
       __mf_module_cache__?: ModuleCache
     }
+    // A `@module-federation/vite` build (known once the loader checked its
+    // manifest) whose range excludes the host's copy, which the cache holds
+    // under its key: it would render the host's copy here and its own in
+    // the browser, so it renders in the browser only (checked again after
+    // the first load). A build with its own runtime never reads this cache.
+    const viteBuild = s?.builds.get(d.base)?.bundlesRuntime === false
     const stale =
       staleSharedModule(deps.react, provided, holder) ??
-      staleFallbackCopy(d, versions, provided, holder)
+      staleFallbackCopy(d, versions, provided, holder) ??
+      (viteBuild ? hostCopyOutOfRange(d, versions, provided, holder) : null)
     if (stale === 'react') {
       warnOnce(
         'react',

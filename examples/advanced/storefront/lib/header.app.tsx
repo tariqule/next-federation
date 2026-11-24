@@ -1,5 +1,4 @@
 'use client'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createRemoteComponent } from '@next-federation/next/components'
 import type { RemoteComponentDescriptor } from '@next-federation/react/components'
@@ -9,14 +8,12 @@ import type { HeaderLinks } from './header-shared'
 // App Router bindings of the header remote's components (Rspack build).
 // They run on this host's React; on the server they render only from a
 // verified (signed) build.
-const Header = createRemoteComponent<{ Link: typeof Link; links: HeaderLinks }>(
-  {
-    expose: './Header',
-    shared: headerShared,
-    fallback: <span>loading the header…</span>,
-    errorFallback: <span>header unavailable</span>,
-  }
-)
+const Header = createRemoteComponent<{ links: HeaderLinks }>({
+  expose: './Header',
+  shared: headerShared,
+  fallback: <span>loading the header…</span>,
+  errorFallback: <span>header unavailable</span>,
+})
 const MiniCart = createRemoteComponent({
   expose: './MiniCart',
   shared: headerShared,
@@ -42,11 +39,10 @@ export const AddToCart = createRemoteComponent<{ sku: string; label: string }>({
 
 type Props = { descriptor: RemoteComponentDescriptor | null; lang: string }
 
-// The host passes its own router's Link: the remote's links navigate with it.
+// The header's links are its own next/link, rewired by its build: this entry
+// gives them the App Router, so they navigate with this host's router.
 export function SiteNav({ descriptor, lang }: Props) {
-  return (
-    <Header descriptor={descriptor} Link={Link} links={headerLinks(lang)} />
-  )
+  return <Header descriptor={descriptor} links={headerLinks(lang)} />
 }
 
 export function SiteMiniCart({ descriptor }: Props) {

@@ -17,11 +17,15 @@ pnpm build
 
 - `pnpm build`: build every package
 - `pnpm test`: unit tests (rstest)
+- `pnpm test` also needs the React 18 unit lane installed outside the workspace (its own
+  lockfile): `cd test/react18 && pnpm install --ignore-workspace`. CI uses `--frozen-lockfile`.
 - `pnpm typecheck`, `pnpm lint`, `pnpm lint:docs`, `pnpm format:check`
 - `pnpm guardrail`: grep guardrail (run before building)
 - `pnpm check:error-docs`, `pnpm check:pack`: run after building
 - `pnpm e2e`: Playwright suites. Cells: `pnpm e2e:dev`, `e2e:dev:webpack`, `e2e:prod`,
   `e2e:prod:webpack`, `e2e:skew`. `NF_LANE=b` runs on a second port range.
+  The React sharing e2e also needs the old-React island remote installed the same way:
+  `cd test/fixtures/island-remote-old-react && pnpm install --ignore-workspace`.
 
 ## Pull requests
 

@@ -1,20 +1,18 @@
-import type { ComponentType, ReactNode } from 'react'
+import Link from 'next/link'
 import { useSession } from 'example-session-context'
 
-type LinkProps = { href: string; className?: string; children: ReactNode }
-
 /**
- * The site header's navigation, a remote component. It runs on the host's
- * React, so the host passes its own router's link component as a prop
- * (`next/link` in a Next.js host, a client router's link in an SPA): links
- * then navigate with the host's router. It reads who is signed in from the
- * host's session context (a host-provided shared module).
+ * The site header's navigation, a remote component. Its links are plain
+ * `next/link`: the build rewires that import (rspack.config.ts), so they
+ * navigate with whatever router the host has (the storefront's App or Pages
+ * Router, with its `/store` basePath; an SPA's router through
+ * `provideNavigation`), and do full page loads in a host with none. It reads
+ * who is signed in from the host's session context (a host-provided shared
+ * module).
  */
 export default function Header({
-  Link,
   links,
 }: {
-  Link: ComponentType<LinkProps>
   links: { href: string; label: string }[]
 }) {
   const { user, role } = useSession()

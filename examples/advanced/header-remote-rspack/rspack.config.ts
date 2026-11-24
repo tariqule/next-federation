@@ -4,6 +4,10 @@
 // server-render the components (only after verifying the signed
 // descriptor). scripts/build.ts runs both, then nf-describe.
 import { ModuleFederationPlugin } from '@module-federation/enhanced/rspack'
+import {
+  routerSharedEntry,
+  routerShimAliases,
+} from '@next-federation/router/build'
 import { rspack } from '@rspack/core'
 import type { Configuration } from '@rspack/core'
 import { join } from 'node:path'
@@ -36,6 +40,10 @@ const shared = {
   // Bundled (not a singleton): the host's copy when it passes one that
   // satisfies ^2.0.0, else this build's own copy (the fallback copy).
   'example-design-system': { singleton: false, requiredVersion: '^2.0.0' },
+  // Links (Header's next/link, rewired below): what the rewired import runs
+  // on, bundled. The host's copy when it is in the range, else this build's
+  // own (plain links).
+  ...routerSharedEntry(),
 }
 const exposes = {
   './Header': './src/Header.tsx',
@@ -49,7 +57,12 @@ const common = (): Configuration => ({
   context: import.meta.dirname,
   entry: {},
   devtool: false,
-  resolve: { extensions: ['.tsx', '.ts', '.js'] },
+  resolve: {
+    extensions: ['.tsx', '.ts', '.js'],
+    // next/link and next/navigation -> shims that navigate with the host's
+    // router (exact matches).
+    alias: routerShimAliases(),
+  },
   module: {
     rules: [
       {
@@ -89,6 +102,10 @@ export const browser: Configuration = {
       library: { type: 'module' },
       exposes,
       shared,
+      // Keeps Module Federation from initialising every remote eagerly. Not
+      // what makes the host's router win: the host registers its router as
+      // loaded, and its runtime picks it when it is in the range.
+      shareStrategy: 'loaded-first',
       manifest: true,
       dts: false,
     }),
@@ -120,6 +137,10 @@ export const server: Configuration = {
       library: { type: 'commonjs-module' },
       exposes,
       shared,
+      // Keeps Module Federation from initialising every remote eagerly. Not
+      // what makes the host's router win: the host registers its router as
+      // loaded, and its runtime picks it when it is in the range.
+      shareStrategy: 'loaded-first',
       manifest: true,
       dts: false,
     }),

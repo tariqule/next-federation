@@ -614,6 +614,112 @@ describe('shared modules (version checks)', () => {
     expect(parseComponentDescriptorFile(file)?.shared).toEqual(file.shared)
   })
 
+  const reactShares = (requiredVersion: string) =>
+    ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'].map(
+      (name) => ({ name, singleton: true, requiredVersion, version: '' })
+    )
+  async function reactBuild(requiredVersion: string) {
+    const build = await rspackBuild()
+    root = build.root
+    const path = join(build.dir, 'client', 'mf-manifest.json')
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...(await readJson(path)),
+        shared: [...reactShares(requiredVersion), shared[1]],
+      })
+    )
+    return build
+  }
+
+  test('React shares at the default ^19.0.0 (hostProvided): the descriptor and digest of before', async () => {
+    const build = await reactBuild('^19.0.0')
+    const { file } = await describeComponentsBuild({
+      dir: build.dir,
+      ssrEntry: 'server/remoteEntry.js',
+      env: {},
+      now: 1_700_000_000_000,
+    })
+    expect(file.shared).toEqual({
+      '@acme/ctx': { requiredVersion: '^1.0.0', fallback: false },
+    })
+    // Recorded before React ranges reached the descriptor.
+    expect(file.digest).toBe(
+      'sha384-MSQRjau5MhkoSt7Gk7m1P/+s9VJFgYfCzcNxLg3+4ac3+JM9vIcEINe845KU41e7'
+    )
+  })
+
+  test('a custom React range (hostProvided) is listed for the host to check', async () => {
+    const range = '^18.3.0 || ^19.0.0'
+    const build = await reactBuild(range)
+    const { file } = await describeComponentsBuild({
+      dir: build.dir,
+      ssrEntry: 'server/remoteEntry.js',
+      env: {},
+    })
+    expect(file.shared).toEqual({
+      react: { requiredVersion: range, fallback: false },
+      'react-dom': { requiredVersion: range, fallback: false },
+      'react-dom/client': { requiredVersion: range, fallback: false },
+      'react/jsx-runtime': { requiredVersion: range, fallback: false },
+      '@acme/ctx': { requiredVersion: '^1.0.0', fallback: false },
+    })
+    expect(parseComponentDescriptorFile(file)?.shared).toEqual(file.shared)
+  })
+
+  test('React shares without a range hosts can read: listed nowhere, and nf-describe warns (hosts assume ^19.0.0)', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    const build = await rspackBuild()
+    root = build.root
+    const path = join(build.dir, 'client', 'mf-manifest.json')
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...(await readJson(path)),
+        shared: [
+          { name: 'react', singleton: true, requiredVersion: false },
+          {
+            name: 'react-dom',
+            singleton: true,
+            requiredVersion: 'workspace:*',
+          },
+          { name: 'react-dom/client', singleton: true },
+          shared[1],
+        ],
+      })
+    )
+    const { file } = await describeComponentsBuild({
+      dir: build.dir,
+      ssrEntry: 'server/remoteEntry.js',
+      env: {},
+    })
+    expect(file.shared).toEqual({
+      '@acme/ctx': { requiredVersion: '^1.0.0', fallback: false },
+    })
+    const lines = warn.mock.calls.map((args) => args.join(' '))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('NF-036')
+    expect(lines[0]).toContain('"react", "react-dom", "react-dom/client"')
+    expect(lines[0]).toContain('^19.0.0')
+    warn.mockRestore()
+  })
+
+  test('valid React ranges (default or custom): no warning', async () => {
+    const warn = rs.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const range of ['^19.0.0', '^18.3.0 || ^19.0.0']) {
+      const build = await reactBuild(range)
+      await describeComponentsBuild({
+        dir: build.dir,
+        ssrEntry: 'server/remoteEntry.js',
+        env: {},
+      })
+      await rm(build.root, { recursive: true, force: true })
+    }
+    root = undefined
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   test('verify: tampered shared requirements (recomputed digest) fail (NF-027)', async () => {
     const build = await sharedBuild()
     await describeComponentsBuild({

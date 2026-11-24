@@ -1,3 +1,4 @@
+export { installedVersion } from './installed-version.ts'
 export { toNodeListener } from './listener.ts'
 export { DEFAULT_RETENTION, planRetention } from './retention.ts'
 export type { BuildInfo, Retention } from './retention.ts'

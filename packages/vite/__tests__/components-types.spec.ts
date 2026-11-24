@@ -119,7 +119,11 @@ test('loadTypeScript resolves the remote project’s own typescript, or null', (
 })
 
 test('the `types` option: off by default (0.x), `true` opts in', () => {
-  const ctx = { command: 'build' as const, env: {}, now: 1_700_000_000_000 }
+  const ctx = {
+    command: 'build' as const,
+    env: {},
+    now: 1_700_000_000_000,
+  }
   const options = {
     name: 'components',
     base: 'https://remote.example',

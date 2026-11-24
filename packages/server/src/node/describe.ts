@@ -17,6 +17,7 @@ import {
   BUILD_ID_PATTERN,
   COMPONENTS_DESCRIPTOR_FILE,
   COMPONENTS_JWS_TYPE,
+  DEFAULT_REACT_RANGE,
   assertSecureUrl,
   canonicalJson,
   componentDescriptorBytes,
@@ -43,6 +44,7 @@ import {
   writeTypesIndex,
   createDescriptorFile,
   readSharedUsage,
+  reactSharesWithoutRange,
   sharedFromManifest,
 } from './components-descriptor.ts'
 import type { ComponentsBuildInfo } from './components-descriptor.ts'
@@ -386,6 +388,13 @@ export async function describeComponentsBuild(
   // per expose only with the Vite plugin's usage file.
   const shared = sharedFromManifest(manifest, await readSharedUsage(dir))
   if (shared) payload.shared = shared
+  const unranged = reactSharesWithoutRange(manifest)
+  if (unranged.length > 0) {
+    logger.warn(
+      'NF-036',
+      `mf-manifest.json shares ${unranged.map((n) => JSON.stringify(n)).join(', ')} without a requiredVersion hosts can read (a semver range), so the descriptor does not list it: hosts require React ${JSON.stringify(DEFAULT_REACT_RANGE)}. Set the range on the React shares (e.g. "^18.3.0 || ^19.0.0").`
+    )
+  }
   // The exposed modules' declarations index: opt-in, as the Vite plugin's
   // `types` (an `@mf-types/` folder alone publishes nothing).
   if (opts.types === true) {

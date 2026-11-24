@@ -1,6 +1,7 @@
 # @next-federation/next
 
-Next.js adapter for `next-federation` (Next `>=15.5.28 <17`, React 19; `cacheComponents` needs Next 16).
+Next.js adapter for `next-federation` (Next `>=15.5.28 <17`, React 19 or, for a Pages Router host, React 18.3;
+`cacheComponents` needs Next 16).
 It embeds remote islands and remote components in an App Router or Pages Router host, caches
 them with Next's own caching, and serves the host's identity routes.
 
@@ -57,6 +58,9 @@ chosen at build time because `'use cache'` only compiles with `cacheComponents`:
   `NF-021`) are never served stale.
 
 ## `RemoteIsland`, `preloadIsland`, `revalidateIsland` (App Router)
+
+`@next-federation/next/server` is App Router only: it uses React's `cache`, so do not import it in a
+Pages Router host or any React 18 code outside the App Router (use `@next-federation/next/pages/server`).
 
 ```ts
 // lib/federation.ts (server-only)
@@ -253,10 +257,20 @@ These two `'use client'` entries are `@next-federation/react/components` (same e
 every remote component in the layer that imports them: `next/link` and `next/navigation` in the
 App Router, `next/link` and `next/router` in the Pages Router. A remote that lists them in its
 `shared` then renders the host's `<Link>` and reads the host's router, so links navigate on the
-client and keep the host's `basePath` and locale. A remote component that imports a module the host
+client and keep the host's `basePath` and locale. They carry the guards of every remote link: a link
+off the page's origin is a plain anchor (a `javascript:`, `vbscript:` or `data:` href renders no
+`href`), and `push` or `replace` off it is dropped. A remote component that imports a module the host
 does not provide (for example `next/router` in an App Router host) renders its fallback
 (`NF-036`). The version they report is the host's Next.js version, which `withNextFederation`
 records in `env.NF_NEXT_VERSION` (`NF-017` without the wrapper).
+
+Both entries also give the host's router to remote links that the remote's build rewired (its
+`next/link`, `next/navigation` and React Router imports, through the internal
+`@next-federation/router`), so they navigate on the client in either router: links render
+`next/link`; navigation calls `push` or `replace` with `{ scroll }`. In the App
+Router, `usePathname` and `useSearchParams` are `next/navigation`'s own. In the Pages Router they
+read `asPath` (no `basePath` or locale); before `router.isReady`, on a dynamic route or a fallback
+page, `asPath` can still be the route pattern (`/item/[id]`) with no query.
 
 ## Remote component prop types: `nf-types`
 
@@ -302,7 +316,8 @@ loses its previous ones and its `index.d.ts` entry. Guide: [Types](https://githu
 
 ## Constraints
 
-- Next.js `>=15.5.28 <17` (16 or 15), React 19, Turbopack or webpack, Node 20.9 or newer. On Next 15
+- Next.js `>=15.5.28 <17` (16 or 15), React 19 (an App Router host runs Next's own React; a Pages Router
+  host can run React 18.3), Turbopack or webpack, Node 20.9 or newer. On Next 15
   the island cache is the legacy one; `cacheComponents` is Next 16 only (`NF-002` on Next 15).
   Next 14 is not supported.
 - Private islands make an App Router route dynamic without `cacheComponents`; with `blocking` they make it dynamic (`ƒ`) with `cacheComponents` too, and the page needs `export const instant = false`. Pages Router private islands are `getServerSideProps` only (`NF-002`).

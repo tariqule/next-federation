@@ -5,8 +5,9 @@ different approach.
 
 ## Supported
 
-React 19 (required). Next.js 16 or 15 (`>=15.5.28 <17`) App Router and Pages Router, with Turbopack
-or webpack, on Node 20.9 or newer (server rendering of remote components needs Node 20.16 or newer).
+React 19 for an App Router host, which runs Next's own React. A Pages Router host (Next 15) and a
+client-side React (Vite SPA) host can run React 18.3 or 19 (tested on 18.3.1). Next.js 16 or 15 (`>=15.5.28 <17`) App Router and Pages Router, with
+Turbopack or webpack, on Node 20.9 or newer (server rendering of remote components needs Node 20.16 or newer).
 React Router hosts are planned after 1.0. Remotes build with Vite 8, which needs Node
 `^20.19.0 || >=22.12.0`. An island remote uses `@vitejs/plugin-rsc` 0.5.39 (pinned; any other version
 fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1` is set), and `react-server-dom-webpack` 19.0.9,
@@ -29,7 +30,24 @@ Router, Turbopack (`--turbopack`) or webpack (Next 15's default). What is Next 1
 - **Next 15's `experimental.useCache`** is not checked: an island rendered inside your own
   `'use cache'` scope is cached with that scope, failures included.
 
-Next 14 (React 18) is not supported: islands and remote components need React 19.
+Next 14 is not supported, whatever React it runs.
+
+### React 18
+
+- **Hosts:** a Next 15 Pages Router host and a React 18 SPA embed islands and remote components.
+  An App Router host keeps Next's own React (19), so it is never a React 18 host.
+- **Islands** keep React 19 on the remote and boot as their own React root in the host page, so a
+  React 18 host needs no change to its island remotes.
+- **Remote components** run on the host's React. A remote accepts React 19 only unless it sets the
+  `react` range ([React versions](remote-components.md#react-versions)). On a host outside that
+  range, NF-036 refuses every component of that remote build, even one that never imports React,
+  and each renders its fallback; other remotes are unaffected
+  ([NF-036](../errors/component-shared-unavailable.md)). Upgrade App Router hosts before you widen
+  a remote's React range.
+- **`@next-federation/next/server`** is App Router only: it uses React's `cache`, which React 18
+  does not have. A Pages Router host imports `@next-federation/next/pages/server`.
+- A remote must avoid React 19-only APIs (`use`, `useActionState`, `useOptimistic`, `ref` as a prop)
+  to run on a React 18 host.
 
 ## What an island cannot do
 

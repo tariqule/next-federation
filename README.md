@@ -14,8 +14,8 @@ to try)
 Runtime UI federation for Next.js. A remote app, deployed on its own, provides UI that your host app
 renders at runtime, with no rebuild of the host when the remote deploys. It supports the Next.js App
 Router and Pages Router (Turbopack or webpack) and client-side React hosts, and remotes built with
-Vite. It calls only public Next.js APIs, never Next.js internals, which lowers the risk that a
-Next.js upgrade breaks it. See [Status and compatibility](#status-and-compatibility) for the
+Vite. A Next 15 Pages Router or client-side host can run React 18 or 19. It calls only public
+Next.js APIs, never Next.js internals, which lowers the risk that a Next.js upgrade breaks it. See [Status and compatibility](#status-and-compatibility) for the
 versions that are tested.
 
 There are two ways to embed a remote's UI:
@@ -34,7 +34,7 @@ needs to show UI that the host's team does not build: a checkout owned by anothe
 panel with its own data, a widget that must feel like part of the app.
 
 It is not a fit if you need route-level splitting (use multi-zones or `@vercel/microfrontends`), CSS
-isolation (there is no Shadow DOM), Next.js 14 or React 18, non-React frameworks, or the Edge runtime
+isolation (there is no Shadow DOM), Next.js 14, an App Router host on React 18, non-React frameworks, or the Edge runtime
 in the host. [Limits](docs/guides/limits.md) lists what islands cannot do and what they cost.
 [Architecture](docs/architecture.md) explains how it works.
 
@@ -155,28 +155,29 @@ The [docs index](docs/README.md) lists every guide. A few places to start:
 
 ## Packages
 
-| Package                                          | Purpose                                                                               |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [`@next-federation/sdk`](packages/sdk)           | Error codes and the category logger                                                   |
-| [`@next-federation/protocol`](packages/protocol) | Island protocol v1: envelope, request codec, bootstrap types                          |
-| [`@next-federation/core`](packages/core)         | `defineFederation`, `fetchIsland`, identity tokens, remote component descriptors      |
-| [`@next-federation/react`](packages/react)       | `IslandMount`, `FederationErrorBoundary`, remote components (`createRemoteComponent`) |
-| [`@next-federation/server`](packages/server)     | Island request handler, identity verifier, `nf-serve`                                 |
-| [`@next-federation/island`](packages/island)     | Remote-side runtime: `Link`, `Form`, `getIdentity`, browser bootstrap                 |
-| [`@next-federation/vite`](packages/vite)         | Vite 8 plugins that build an island remote or a components remote                     |
-| [`@next-federation/next`](packages/next)         | Next.js adapter: `withNextFederation`, `RemoteIsland`, JWKS and token routes          |
+| Package                                          | Purpose                                                                                  |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| [`@next-federation/sdk`](packages/sdk)           | Error codes and the category logger                                                      |
+| [`@next-federation/protocol`](packages/protocol) | Island protocol v1: envelope, request codec, bootstrap types                             |
+| [`@next-federation/core`](packages/core)         | `defineFederation`, `fetchIsland`, identity tokens, remote component descriptors         |
+| [`@next-federation/react`](packages/react)       | `IslandMount`, `FederationErrorBoundary`, remote components (`createRemoteComponent`)    |
+| [`@next-federation/server`](packages/server)     | Island request handler, identity verifier, `nf-serve`                                    |
+| [`@next-federation/island`](packages/island)     | Remote-side runtime: `Link`, `Form`, `getIdentity`, browser bootstrap                    |
+| [`@next-federation/router`](packages/router)     | Internal: what a remote's rewired router imports run on; Rspack build helpers (`/build`) |
+| [`@next-federation/vite`](packages/vite)         | Vite 8 plugins that build an island remote or a components remote                        |
+| [`@next-federation/next`](packages/next)         | Next.js adapter: `withNextFederation`, `RemoteIsland`, JWKS and token routes             |
 
 ## Status and compatibility
 
 `next-federation` is at 0.x, so the API can still change between minor versions. Pin the version and
 read the changelogs. All packages are versioned together.
 
-|         | Supported                                                                                                                                                                                                  |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React   | 19 (required). An island remote's `react-server-dom-webpack` must be 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), `NF-041`) |
-| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only                                                                                                                                          |
-| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer (older Node renders them in the browser only). A Vite remote needs 20.19 or newer, or 22.12 or newer                             |
-| Remotes | Vite 8. Remote components can also come from Rspack (tested) or webpack (documented, untested) with Module Federation 2.0                                                                                  |
+|         | Supported                                                                                                                                                                                                                                                                                                                                                                |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| React   | Host: 19 for an App Router host (it runs Next's own React); 18.3 or 19 for a Next 15 Pages Router host or a client-side React (Vite SPA) host. An island remote keeps its own React 19, and its `react-server-dom-webpack` must be 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), `NF-041`) |
+| Next.js | 16 and 15 (`>=15.5.28 <17`); `cacheComponents` is Next.js 16 only. Next.js 14 is not supported                                                                                                                                                                                                                                                                           |
+| Node.js | 20.9 or newer. Server rendering of remote components needs 20.16 or newer (older Node renders them in the browser only). A Vite remote needs 20.19 or newer, or 22.12 or newer                                                                                                                                                                                           |
+| Remotes | Vite 8. Remote components can also come from Rspack (tested) or webpack (documented, untested) with Module Federation 2.0                                                                                                                                                                                                                                                |
 
 The tests run on React and React DOM 19.3.1 (`react-server-dom-webpack` 19.3.1 in island remotes),
 plus one island remote on 19.2.9 to cover mixed versions. Other React 19 versions are not covered.
@@ -186,6 +187,14 @@ and in each remote (`"react": "19.3.1"`, no `^`), and pin `react-server-dom-webp
 an island remote. `pnpm add --save-exact react@19.3.1` does not remove a caret that is already in
 `package.json`, so open `package.json` after you scaffold a project and after you pin, and edit the
 range by hand if it still has a `^`.
+
+React 18 hosts are tested on 18.3.1 (a Next 15 Pages Router host and a Vite SPA); other React 18
+versions are not covered. The App Router keeps Next's own React, so an App Router host is never on
+React 18. A remote components build accepts React 19 only unless it opts in with the `react` range
+(`nextFederationComponents({ react: '^18.3.0 || ^19.0.0' })`, see
+[React versions](docs/guides/remote-components.md#react-versions)); a host outside that range
+renders the component's fallback (`NF-036`). Upgrade App Router hosts before you widen a remote's
+React range. Islands are unchanged: the island remote runs its own React 19 in every host.
 
 ## Contributing
 

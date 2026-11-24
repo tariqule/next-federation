@@ -54,7 +54,9 @@ components remote does not need. Make these edits:
    The scaffold's `tsc -b && vite build` still works as a type check when every file in `src`
    compiles. `vite preview` does not serve a remote: use `nf-serve`.
 5. **Dependencies:** `@next-federation/vite` and `@next-federation/server` as dev dependencies. If an
-   exposed module imports `next/link`, add `next` as a dev dependency too and list it with `shared: { 'next/link': {} }`. Pin `react` and `react-dom` to one exact version
+   exposed module imports `next/link` or `next/navigation`, add `next` as a dev dependency too, for
+   its types: the build rewires both imports ([Links that work in every
+   host](#links-that-work-in-every-host)). Pin `react` and `react-dom` to one exact version
    ([React versions](../../README.md#status-and-compatibility)).
 6. **oxlint** (the `lint` script and `.oxlintrc.json`) is independent of the build; keep it or
    delete it. Its `react/only-export-components` rule exists for Fast Refresh, which exposed modules
@@ -172,6 +174,48 @@ folder.
 
 `@module-federation/vite` is pinned to exactly **1.24.0** (`NF-026` otherwise; `NF_ALLOW_MF_VITE=1`
 for a canary job only).
+
+## React versions
+
+A components remote renders on the host's React, so it declares which versions it accepts. The
+default is React 19 only (`'^19.0.0'`). To run on React 18 hosts as well, set `react`:
+
+```ts
+nextFederationComponents({
+  name: 'shop',
+  base: 'https://shop.example.com/',
+  exposes: { './Cart': './src/Cart.tsx' },
+  react: '^18.3.0 || ^19.0.0',
+})
+```
+
+The range is the `requiredVersion` of `react`, `react-dom`, `react-dom/client` and
+`react/jsx-runtime` in the build. It must be a semver range (`NF-002` otherwise). Hosts read it
+from the signed descriptor, which lists those four modules only for a range other than
+`'^19.0.0'`; a host checks its React against `'^19.0.0'` for any of them a descriptor does not
+list (so builds made before this option count as React 19 only), and counts a canary React by its
+release numbers.
+
+- **Upgrade App Router hosts first.** Hosts on next-federation 0.1.x compare a listed range with
+  their raw React version, and an App Router host runs Next's canary React, which no range such as
+  `'^18.3.0 || ^19.0.0'` matches: every such host renders that remote's components as the fallback
+  with `NF-036`. Upgrade App Router hosts to this release before widening a remote's React range
+  (or before an `nf-describe` build declares a React range other than `'^19.0.0'`). Remotes on the
+  default range are unaffected.
+
+- **Avoid React 19-only APIs** in a remote that accepts React 18: `use`, `useActionState`,
+  `useOptimistic`, `ref` as a prop on a function component (use `forwardRef`), and
+  `<link precedence>` or `<style precedence>` (React 18 ignores `precedence`). The range is not a
+  check on your code: a component that calls one of them on a React 18 host fails when it renders.
+- **A remote built for React 19 only** (the default, or `react: '^19.0.0'`) on a React 18 host is
+  refused before anything is fetched: `NF-036` refuses every component of that build, even one that
+  never imports React, and each renders its fallback. Hosts assume `^19.0.0` for any React module a
+  descriptor does not list, and a React entry cannot be limited to some exposed modules.
+- **Rspack and webpack remotes** set the same range as `requiredVersion` on their four React
+  shares (`react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`), the `hostProvided`
+  entries in `test/fixtures/components-remote-rspack/rspack.config.ts`. They have no `react`
+  option: the range is whatever those shares say.
+- Islands are separate: an island remote keeps its own React 19 and is not affected by this option.
 
 ## Remotes built with Rspack or webpack
 
@@ -697,8 +741,11 @@ What a remote can get from the host, exactly:
   whose identity matters: a context module or a store must be the host's, or the remote reads a
   context nobody provides.
 - **`next/link`, `next/navigation` and `next/router`**: a remote can list them in `shared`. They
-  are always host-provided and never fall back. The Next.js entries provide the host's own copies,
-  the ones its router renders with:
+  are always host-provided and never fall back. Listing `next/link` or `next/navigation` turns off
+  its rewiring ([Links that work in every host](#links-that-work-in-every-host)), so the component
+  then renders only on a Next.js host. The Next.js entries provide the host's own copies, the ones
+  its router renders with, guarded like every remote link: a link off the page's origin is a plain
+  anchor (a script URL gets no `href`), and `push` or `replace` off it is dropped:
 
   | Host                                                                  | Provides                     |
   | --------------------------------------------------------------------- | ---------------------------- |
@@ -719,6 +766,221 @@ The check reads the build descriptor: its `shared` field lists each shared modul
 whether it has a fallback, and the exposed modules that import it. The field is signed with the
 rest of the descriptor. A remote dev server (`vite`) publishes no `shared` field, so the host does
 not check a dev remote; a missing module then fails when the remote's code asks for it (`NF-029`).
+
+## Links that work in every host
+
+Write a remote's links with the router it already uses: `next/link` and `next/navigation`, React
+Router's `Link` and hooks, or a plain `<a href>`. The remote build rewires those imports, so one
+build navigates through whatever router the host has:
+
+```tsx
+import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
+
+export default function Nav() {
+  const pathname = usePathname()
+  const q = useSearchParams().get('q')
+  return (
+    <Link href="/orders" aria-current={pathname === '/orders' ? 'page' : undefined}>
+      Orders {q}
+    </Link>
+  )
+}
+```
+
+The same works with React Router (`import { Link, useLocation } from 'react-router'`), with or
+without a router of the remote's own. Nothing in the remote's code names next-federation.
+
+### What the build rewires
+
+**Vite remotes** (`nextFederationComponents`): on by default.
+
+- `next/link` and `next/navigation` always; `react-router` and `react-router-dom` when the remote's
+  own `package.json` lists `react-router` or `react-router-dom` (`dependencies`,
+  `devDependencies` or `peerDependencies`) and `react-router` 7 resolves from the remote's root.
+  Otherwise (React Router 6, or `react-router-dom` alone where `react-router` is not in the root's
+  `node_modules`, as with pnpm) the build leaves both as they are and warns once (`NF-002`): add
+  `react-router` 7 as a direct dependency to rewire them, or set `links: false`. Only those exact
+  specifiers: `next/router` is not rewired (list it in `shared` for Pages Router hosts, see
+  [Sharing modules](#sharing-modules)).
+- Install `next` as a dev dependency for its types only: the rewired imports never load it.
+- A specifier listed in `shared` keeps that sharing and is not rewired (`react-router` and
+  `react-router-dom` count as one: listing either keeps both). So one build cannot have a
+  host-provided `next/link` (`shared: { 'next/link': {} }`, Next.js hosts only) and a rewired one.
+- The build also shares the plumbing the rewired imports use, `@next-federation/router`, with its
+  own bundled copy: `{ requiredVersion: '>=<major>.<minor>.0 <1.0.0', fallback: true }` (see
+  [The range rule](#the-range-rule)). That copy is the plugin's own dependency, never one found in
+  the remote's `node_modules`.
+- `links: false` turns the rewiring and that shared entry off.
+
+**Rspack and webpack remotes**: add the helpers from `@next-federation/router/build` (a dev
+dependency of the remote) to both builds, the browser one and the server one:
+
+```ts
+import { routerSharedEntry, routerShimAliases } from '@next-federation/router/build'
+
+const shared = {
+  // ...the host-provided React modules, as above
+  ...routerSharedEntry(),
+}
+
+export const browser = {
+  // ...
+  // next/link and next/navigation; add { reactRouter: true } when the remote uses React Router
+  resolve: { extensions: ['.tsx', '.ts', '.js'], alias: routerShimAliases() },
+  plugins: [
+    new ModuleFederationPlugin({ name: 'shop', exposes, shared, shareStrategy: 'loaded-first' }),
+  ],
+}
+```
+
+- `routerShimAliases()` maps `next/link` and `next/navigation` (exact matches) to the shims of the
+  installed package, and `@next-federation/router` to the installed package's own file, so a copy in
+  a parent folder's `node_modules` never gets into the build. `routerShimAliases({ reactRouter:
+  true })` adds `react-router` and `react-router-dom`. It reads the `react-router` the project
+  installed: the nearest `node_modules/react-router` of `root` (default: the working directory) or
+  a parent folder. It throws when there is none.
+- `routerSharedEntry()` is `{ '@next-federation/router': { singleton: false, version,
+  requiredVersion, import: '@next-federation/router' } }`. `import` is the package name, never a
+  path: Module Federation copies it into the published `remoteEntry.js`. Use the two helpers
+  together: the alias is what makes that name the installed package's file.
+- Keep `shareStrategy: 'loaded-first'`: it keeps Module Federation from initialising every remote
+  eagerly. It is not what makes the host's router win. The host registers its router as already
+  loaded, and its component runtime gives each remote the host's copy when the host's version
+  satisfies the remote's range. A bundled copy with a higher version (the e2e fixture labels its
+  copy `0.99.0`) still gets the host's router.
+
+**A plain `<a href>`** is never intercepted: it is a full page load in every host. Island links keep
+the island bridge.
+
+### What each host gives
+
+| Host                                                                                 | Remote links                                                        |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| App Router, `createRemoteComponent` from `@next-federation/next/components`          | the App Router: client navigation                                   |
+| Pages Router, `createRemoteComponent` from `@next-federation/next/pages/components`  | the Pages Router: client navigation, with its `basePath` and locale |
+| any React host that calls `provideNavigation(...)`, such as an SPA with React Router | its router: client navigation, with what its `useHref` adds         |
+| any other host                                                                       | full page loads (the remote's own copy, the document router)        |
+
+The Next.js entries provide the router themselves. Another host calls `provideNavigation` from
+`@next-federation/react/components` once, at module scope, before the first remote component
+loads, and renders remote components inside its router. React Router's own hooks fit as they are:
+
+```tsx
+import { provideNavigation } from '@next-federation/react/components'
+import { useHref, useLocation, useNavigate } from 'react-router'
+
+provideNavigation({ useNavigate, useHref, useLocation })
+```
+
+For another router, pass three hooks. They run inside remote components, under the host's router:
+
+- `useNavigate()` returns `(href, { replace?, scroll? }) => void`. React Router's `navigate`
+  ignores `scroll`.
+- `useHref(href)` (optional) returns the href to render, with the router's basename. Default: the
+  href unchanged.
+- `useLocation()` (optional) returns `{ pathname, search }` without the basename. Default: the
+  document's location.
+
+Use absolute paths (`/orders`). A relative href resolves against the host's route in a React Router
+host and against the document URL elsewhere.
+
+### Supported surface
+
+**`next/link`** (the default export):
+
+- `href`: a string or `{ pathname, query, hash }`. `as` is honoured: it is the href rendered and
+  navigated to (`href="/post/[pid]" as="/post/1"` links to `/post/1`).
+- `replace`, `scroll`, `prefetch`, children and anchor attributes pass through. The link always
+  renders a real `<a href>`.
+- `legacyBehavior` with a single element child renders one `<a>`: the child's props and children
+  move onto it, and the `Link`'s `href` wins. Limits: the child's `onClick` replaces an `onClick`
+  given to the `Link` (Next.js calls both), and a child that is not an `<a>` (a `<button>`) also
+  becomes the `<a>`.
+- `locale`, `passHref` (the anchor always has its href), `shallow` and `onNavigate` are ignored,
+  with one development warning each:
+  `[ next-federation ] next/link's "locale" is ignored in a remote component: the link navigates through the host's router.`
+- Refs: on React 19, a `ref` on the `Link`, or on its `legacyBehavior` child, reaches the rendered
+  `<a>` (`ref` is a prop there). On React 18 neither is forwarded: the ref stays `null`, and React
+  warns `Function components cannot be given refs` for a `ref` on the `Link`.
+
+**`next/navigation`**: `usePathname()`, `useSearchParams()` (read-only) and `useRouter()`
+(`push` and `replace` with `{ scroll }`, `back`, `forward`; `refresh` and `prefetch` do nothing).
+Nothing else is available: `redirect`, `permanentRedirect`, `notFound`, `useParams`,
+`useSelectedLayoutSegment(s)` and the rest are server or App Router features a remote component
+cannot have. Importing one fails the remote's build:
+
+- Vite: `[MISSING_EXPORT] "useParams" is not exported by "…/@next-federation/router/dist/shims/next-navigation.js".`
+- Rspack: `ESModulesLinkingError: export 'notFound' (imported as 'notFound') was not found in 'next/navigation' (possible exports: usePathname, useRouter, useSearchParams)`
+
+Read route parameters from props the host passes, or from `usePathname()`.
+
+**React Router** (`react-router` or `react-router-dom`, 7.x): every export is the real package's.
+`Link`, `NavLink`, `useNavigate`, `useLocation`, `useSearchParams` and `useHref` are replaced, and
+the replacement only acts **outside any router**. Only a router the remote renders itself counts:
+the host's own `<BrowserRouter>` does not, because the remote bundles its own React Router and
+cannot see the host's router context. Under a React Router host, a remote link with no router of
+its own goes through `provideNavigation`:
+
+- Inside a router the remote renders itself (its own `MemoryRouter` or `RouterProvider`), they are
+  the real ones. The remote's own routes keep working, and the host's URL does not change.
+- Outside a router they go through the host. `NavLink` sets `aria-current` (default `"page"`),
+  honours `end` and `caseSensitive`, and calls function `className`, `style` and children with
+  `{ isActive, isPending: false, isTransitioning: false }`. `reloadDocument` renders a plain `<a>`.
+  `useNavigate()(-1)` calls `history.go(-1)`.
+- Outside a router, `useLocation()` has `pathname` and `search` only (`hash` is `''`, `state` is
+  `null`), and `useSearchParams()` returns a copy whose setter navigates to `?<query>`; its
+  `defaultInit` argument is ignored. `useHref()` has no basename (the host's link adds its own when
+  it renders).
+- Everything else (`useParams`, `useMatch`, `<Routes>`, `<Navigate>`, ...) is React Router's own,
+  unchanged, and is meant for use inside a router.
+
+### Unsafe hrefs
+
+- A link navigates through the host's router only for a path, query or fragment on the page's own
+  origin (`/orders`, `?q=1`, `#top`).
+- An href with a scheme or `//` (`https://…`, `mailto:`, an absolute URL of the same site) is a
+  plain anchor: the browser navigates, never the host's router.
+- A `javascript:`, `vbscript:` or `data:` href renders the `<a>` without an `href`.
+- `push`, `replace` and React Router's `navigate` follow only an href that resolves to http(s) on
+  the page's own origin. Anything else is dropped, with a development warning:
+  `[ next-federation ] navigation to "https://evil.example" was dropped: a remote component navigates only within this page's origin (use a plain <a href> for another site).`
+
+### The range rule
+
+The default range comes from the router version the build bundles: `>=<major>.<minor>.0 <1.0.0`
+while it is 0.x (`0.2.3` gives `>=0.2.0 <1.0.0`; new exports come only in minor releases), and
+`^<version>` from 1.0 (`1.4.2` gives `^1.4.2`). The host's copy is used when its version is in the
+remote's range. Otherwise the remote uses its own bundled copy, the document router, and the host
+logs one warning per remote:
+`<remote> bundles its own "@next-federation/router" (host has 0.1.2, remote needs ">=0.2.0 <1.0.0")`
+(`NF-036`, as a warning: the component renders). Upgrade the host's `@next-federation/next` (or
+`@next-federation/react`) to fix it.
+
+Limits:
+
+- **Range miss:** a remote on its own copy does full page loads, to the right page. On a host with
+  a `basePath` or a locale, its `href` lacks the prefix (`/orders`, not `/base/fr/orders`), and its
+  `usePathname()` is `''` in the server HTML.
+- **Rspack and webpack remotes** (they bundle their own Module Federation runtime): that copy
+  never reaches another remote. Every other remote whose range the host satisfies keeps the
+  host's router, also after that copy loaded, for the life of the host process and of the page
+  (the host's component runtime resolves this shared module for them).
+- **Vite remotes, same version, first writer:** Vite remotes look a copy up by its bundled version.
+  Within one page the first build to cache `@next-federation/router@<version>` decides it for every
+  build that bundles that same version, in both directions: a build whose range excludes the
+  host's router can get the host's router, and a build whose range the host satisfies can get
+  another build's own copy (plain links). This needs two builds that bundle the same router
+  version with different ranges, so only explicit `shared` ranges reach it (the default range
+  follows the bundled version). On the server the runtime keeps them apart: it never renders a
+  build whose range excludes the host's router with the host's router (that build renders in the
+  browser only there), and a build the host satisfies gets a fresh scope with the host's router.
+- **Static pages and `useSearchParams`:** a remote that uses only links and `usePathname` keeps a
+  statically prerendered App Router page static, and the page's HTML contains the link.
+  `useSearchParams` follows Next.js: on a static page the search params are unknown at build time,
+  so the component renders its fallback in the static HTML and fills in after hydration. React
+  Router's `useLocation()` and `useSearchParams()` outside a router read the search params too, so
+  they do the same.
 
 ## Types
 
@@ -905,7 +1167,6 @@ nextFederationComponents({
   exposes: { './CartBadge': './src/CartBadge.tsx' },
   shared: {
     '@acme/app-state': { requiredVersion: '^1.0.0' }, // always the host's instance
-    'next/link': {},
   },
 })
 ```
@@ -929,10 +1190,10 @@ component under it reads the same state. Change the shared package in a backward
 When it breaks compatibility, raise its major version, so a remote built against the new version
 renders its fallback (`NF-036`) on hosts that have not upgraded, instead of failing at runtime.
 
-**Navigation**: remote components import `next/link` and `useRouter`/`usePathname` from the
-host's router module, listed in their `shared` (see above). The remote and the host then share
-one router. A component that must also render in an SPA or in both routers takes a link component
-or an `onNavigate` callback as a prop instead.
+**Navigation**: remote components keep `next/link` and `useRouter`/`usePathname` from
+`next/navigation`. The build rewires them to the host's router, so the remote and the host share
+one router, and the same component also navigates in a Pages Router host or an SPA ([Links that
+work in every host](#links-that-work-in-every-host)).
 
 ## Runtime behaviour
 

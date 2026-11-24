@@ -6,7 +6,12 @@ import type { ResolvedComponentsOptions } from './options.ts'
 
 type MfShareItem =
   | { singleton: true; requiredVersion: string | false; import: false }
-  | { singleton: false; requiredVersion: string | false }
+  | {
+      singleton: false
+      requiredVersion: string | false
+      import?: string
+      version?: string
+    }
 
 /**
  * Host-provided modules are `import: false` singletons (never bundled, always
@@ -14,17 +19,23 @@ type MfShareItem =
  * share proxy looks up `<name>@<bundled version>` in Module Federation's
  * module cache, where the host runtime puts its own copy when that copy
  * satisfies `requiredVersion` (the descriptor carries the bundled version),
- * and uses the bundled copy otherwise.
+ * and uses the bundled copy otherwise. A module this plugin picks the copy
+ * of (`@next-federation/router`) names that file and its version.
  */
 export function mfSharedConfig(
   resolved: Pick<ResolvedComponentsOptions, 'shared'>
 ): Record<string, MfShareItem> {
   return Object.fromEntries(
     Object.entries(resolved.shared).map(
-      ([name, { requiredVersion, fallback }]) => [
+      ([name, { requiredVersion, fallback, import: file, version }]) => [
         name,
         fallback
-          ? { singleton: false as const, requiredVersion }
+          ? {
+              singleton: false as const,
+              requiredVersion,
+              ...(file === undefined ? {} : { import: file }),
+              ...(version === undefined ? {} : { version }),
+            }
           : {
               singleton: true as const,
               requiredVersion,
