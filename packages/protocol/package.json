@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/protocol",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "The bundler-neutral wire contract of next-federation: island envelope, request codec, bootstrap types and the remote components descriptor.",
   "license": "MIT",
   "author": "tariqule",

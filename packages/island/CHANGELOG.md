@@ -1,5 +1,15 @@
 # @next-federation/island
 
+## 0.2.0
+
+### Patch Changes
+
+- Updated dependencies [2155c1b]
+- Updated dependencies [2155c1b]
+  - @next-federation/server@0.2.0
+  - @next-federation/protocol@0.2.0
+  - @next-federation/sdk@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes
