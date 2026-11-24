@@ -1782,3 +1782,45 @@ describe("a bundled copy never replaces the host's for another remote (fallback 
     ).toBe(hostRouter)
   })
 })
+
+test('a new MF instance while a load awaits its manifest check: the next load still registers its remote on the instance it uses', async () => {
+  // As MF: each instance knows only the remotes registered on it.
+  const instances: Fake[] = []
+  const create = () => {
+    const inst = fakeInstance()
+    const load = inst.loadRemote.bind(inst)
+    inst.loadRemote = async (id) => {
+      if (inst.registrations.length === 0) {
+        throw new Error(`Failed to locate remote: ${id}`)
+      }
+      return load(id)
+    }
+    instances.push(inst)
+    return inst
+  }
+  let release!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  let gated = true
+  const errors = rs.spyOn(console, 'error').mockImplementation(() => {})
+  const { runtime } = setup({
+    createInstance: create,
+    serverPlugin: () =>
+      ({
+        name: 'test-preflight',
+        async preflight() {
+          if (gated) await gate
+        },
+      }) as never,
+  })
+  const first = runtime.load(descriptor('c1'), './Counter')
+  await new Promise((r) => setTimeout(r, 0))
+  // A module registered late (a router host) while the manifest check awaits.
+  runtime.registerShared({ 'late-module': { version: '1.0.0', module: {} } })
+  gated = false
+  release()
+  await first
+  await expect(runtime.load(descriptor('c1'), './Boom')).resolves.toMatchObject(
+    { entry: descriptor('c1').manifest }
+  )
+  expect(errors).not.toHaveBeenCalled()
+})

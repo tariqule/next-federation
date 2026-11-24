@@ -33,7 +33,10 @@ fragment on the page's origin; `javascript:`, `vbscript:` and `data:` hrefs rend
   copy one remote loaded was given to every later remote for the life of the host process).
   Other Module Federation instances and names are left alone. A Vite build whose range excludes
   the host's copy, while the host's copy is cached under its bundled version, renders in the
-  browser only on the server. Ranges in `NF-036` messages are quoted.
+  browser only on the server. Ranges in `NF-036` messages are quoted. A build of a container
+  loaded after the runtime replaced its Module Federation instance (a module registered late, as
+  router hosts do, or a timed-out load) now loads that build; before, it could silently load the
+  build of that container name loaded before the replacement.
 - `@next-federation/router` (new, internal: imported by generated shims and host modules, not by
   application code): the shims and the document router. Its `./build` entry has the Rspack and
   webpack helpers `routerShimAliases()` and `routerSharedEntry()` (the shared entry names the

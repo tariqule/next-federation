@@ -611,6 +611,46 @@ const sameIntegrity = (
 }
 
 /**
+ * Points the host snapshot MF keeps for `instance` (process- or page-wide,
+ * keyed by the instance's name) at the build of container `name` just
+ * registered on it. MF records a host's remote there by container name, once
+ * (only while absent), and resolves every later load of that name through
+ * it: a replacement instance of the same name (after a timed-out load or a
+ * module registered late), whose first registration removes nothing, would
+ * otherwise load the build an earlier instance recorded, silently, with no
+ * error. Set after each registration, inside the per-name lock.
+ */
+export function pinRemoteSnapshot(
+  instance: FederationInstance,
+  name: string
+): void {
+  const options = (
+    instance as {
+      options?: {
+        name?: unknown
+        version?: unknown
+        remotes?: Array<{ name: string; entry?: string }>
+      }
+    }
+  ).options
+  const entry = options?.remotes?.find((r) => r.name === name)?.entry
+  if (typeof options?.name !== 'string' || typeof entry !== 'string') return
+  const fed = (
+    globalThis as {
+      __FEDERATION__?: { moduleInfo?: Record<string, unknown> }
+    }
+  ).__FEDERATION__
+  const info = fed?.moduleInfo
+  if (!info) return
+  const host = (info[options.name] ??= {
+    version: typeof options.version === 'string' ? options.version : '',
+    remoteEntry: '',
+    remotesInfo: {},
+  }) as { remotesInfo?: Record<string, unknown> }
+  host.remotesInfo = { ...host.remotesInfo, [name]: { matchedVersion: entry } }
+}
+
+/**
  * Drops an MF instance a runtime replaced from MF's page- or process-wide
  * registry: its entry in `__FEDERATION__.__INSTANCES__` and the share scopes
  * it registered in `__SHARE__`. MF registers those under an instance's id or
@@ -843,19 +883,25 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     expose: string,
     fresh: boolean
   ): Promise<RemoteModule> {
-    const mf = getInstance()
+    let mf = getInstance()
     const current = registered.get(d.name)
     if (current !== d.base || fresh) {
       // Server: the loader checks the manifest first, so its refusal
       // (NF-028) or a failed fetch is thrown here, never inside the MF
       // runtime (which logs what its hooks throw, with a stack).
       await loaderPlugin?.preflight?.(d.manifest)
+      // The instance may have been replaced meanwhile (a module registered
+      // late, a timed-out load), which cleared `registered`: register on
+      // the current one, or the next load of this build would skip its
+      // registration and find no remote on it.
+      mf = getInstance()
       mf.registerRemotes([{ name: d.name, entry: d.manifest }], {
         // Always: MF keeps remote state by name process-wide, and an earlier
         // copy of this runtime (a dev server reload) may have registered
         // another build of this container.
         force: true,
       })
+      pinRemoteSnapshot(mf, d.name)
       registered.set(d.name, d.base)
     }
     const mod = await mf.loadRemote<RemoteModule>(
