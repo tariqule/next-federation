@@ -10,6 +10,15 @@ export function findDocProblems(codes, files) {
   )
   const slugs = new Set(Object.values(codes).map((c) => c.slug))
   const problems = []
+  // The library links to docs/errors/<slug>.md (DOCS_BASE in the sdk), so an
+  // error page written as .mdx would be a dead link. index.mdx is the section
+  // index, not an error page.
+  for (const f of files) {
+    if (f.endsWith('.mdx') && f !== 'index.mdx')
+      problems.push(
+        `docs/errors/${f}: error pages must stay .md until DOCS_BASE changes`
+      )
+  }
   for (const [code, { slug }] of Object.entries(codes)) {
     if (!pages.has(slug))
       problems.push(`${code}: missing docs/errors/${slug}.md`)

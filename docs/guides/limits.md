@@ -238,6 +238,15 @@ for these types, or these numbers do not hold ([Deployment](deployment.md#compre
   public island costs no hop until its entry is revalidated. Use caching, `preloadIsland` and
   co-locate the regions of host and remote.
 
+## Timeouts and retries
+
+Each island fetch has a total budget of `timeoutMs` (default `3000`), which covers every attempt. A
+network error or a `502`, `503` or `504` is retried `retries` times (default `1`) after a short
+pause, while the budget lasts. A timeout (`NF-008`), another status or an invalid envelope is not
+retried. Set them for all remotes or per remote (`islands.timeoutMs`, `islands.retries`, or the same
+keys on a remote). A failed island renders `errorFallback` (default: `fallback`) and the page still
+answers `200`.
+
 ## Cache and retention
 
 A host cache that outlives the remote's build retention leads to `410 NF-023` and inert islands. See

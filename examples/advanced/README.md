@@ -123,7 +123,7 @@ starts and checks everything over HTTP, then stops (CI runs it). App logs go to 
    `AccountBadge` (Account remote) now streams in per request. **Profile** and **Orders** are
    `blocking` private islands: view the page source and they are there, in place, with no loading
    state, and no token. Guides: [Identity](../../docs/guides/identity.md),
-   [blocking](../../docs/guides/getting-started-app-router.md#private-content-in-the-first-html-blocking).
+   [blocking](../../docs/guides/getting-started-app-router.mdx#put-private-content-in-the-first-html).
 7. **Change your display name, then cancel an order.** These are Server Actions of the Account
    remote, posted from the browser straight to that remote with the island's own token. The name
    shows at once (optimistic) while the button says _Saving…_; the order shows _cancelling…_ until

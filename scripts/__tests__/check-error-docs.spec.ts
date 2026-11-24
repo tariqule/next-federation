@@ -12,3 +12,11 @@ test('reports a missing page and an orphaned page', () => {
     'orphaned docs/errors/c.md',
   ])
 })
+
+test('rejects an .mdx error page but allows the section index', () => {
+  expect(findDocProblems(codes, ['a.md', 'b.md', 'index.mdx'])).toEqual([])
+  expect(findDocProblems(codes, ['a.md', 'b.mdx'])).toEqual([
+    'docs/errors/b.mdx: error pages must stay .md until DOCS_BASE changes',
+    'NF-002: missing docs/errors/b.md',
+  ])
+})

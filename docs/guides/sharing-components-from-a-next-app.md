@@ -12,7 +12,7 @@ To share UI from a team that builds with Next.js, publish an island remote inste
    client components.
 3. Deploy it as its own app ([Deployment](deployment.md)).
 4. In the Next app, and in every other host, add it to `remotes` and render it with `RemoteIsland`
-   ([App Router](getting-started-app-router.md) or [Pages Router](getting-started-pages-router.md)).
+   ([App Router](getting-started-app-router.mdx) or [Pages Router](getting-started-pages-router.md)).
 
 What carries over:
 

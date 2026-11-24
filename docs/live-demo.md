@@ -110,7 +110,7 @@ Each app is a folder of [`examples/`](../examples/README.md), small enough to co
 
 | App                 | Source                                                      | Guide                                                          |
 | ------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `next-app-router`   | [examples/next-app-router](../examples/next-app-router)     | [App Router host](guides/getting-started-app-router.md)        |
+| `next-app-router`   | [examples/next-app-router](../examples/next-app-router)     | [App Router host](guides/getting-started-app-router.mdx)        |
 | `next-pages-router` | [examples/next-pages-router](../examples/next-pages-router) | [Pages Router host](guides/getting-started-pages-router.md)    |
 | `react-spa`         | [examples/react-spa](../examples/react-spa)                 | [SPA host](guides/getting-started-spa.md)                      |
 | `vite-remote`       | [examples/vite-remote](../examples/vite-remote)             | [Writing an island remote](guides/writing-an-island-remote.md) |

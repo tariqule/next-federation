@@ -15,7 +15,7 @@ const RULES = [
   { rule: 'connection-call', pattern: /(?<![\w.])connection\s*\(/ },
 ]
 
-const SKIPPED_FILE = /(^|\/)(AGENTS\.md|next-env\.d\.ts)$|\.md$/
+const SKIPPED_FILE = /(^|\/)(AGENTS\.md|next-env\.d\.ts)$|\.mdx?$/
 const SKIPPED_DIR = /^test\/e2e\//
 
 /**

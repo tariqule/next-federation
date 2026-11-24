@@ -12,4 +12,4 @@ Envelope URLs are checked against the remote's declared origins so a compromised
 
 Add the origin to the remote's `assetOrigins` list in `defineFederation` if it is legitimate (for example a CDN). The remote's own `origin` is always allowed. Otherwise investigate why the remote emitted it.
 
-See [Getting started: App Router](../guides/getting-started-app-router.md#3-define-the-federation).
+See [Getting started: App Router](../guides/getting-started-app-router.mdx#define-the-federation).

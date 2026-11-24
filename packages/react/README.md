@@ -140,7 +140,7 @@ cross into an island.
 
 ## Learn more
 
-- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md)
+- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.mdx)
 - [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.md)
 - [SPA guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-spa.md)
 - [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)

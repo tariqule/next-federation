@@ -12,4 +12,4 @@ Remotes are resolved by name from the federation config. A typo, a missing entry
 
 Check the remote name against the `remotes` map passed to `defineFederation()`, and make sure the config module is the one the host actually imports.
 
-See [Getting started: App Router](../guides/getting-started-app-router.md#3-define-the-federation).
+See [Getting started: App Router](../guides/getting-started-app-router.mdx#define-the-federation).

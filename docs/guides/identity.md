@@ -25,7 +25,7 @@ remotes, an admin-only island).
 ## Host setup (App Router)
 
 The federation config is its own file with no Next.js imports (`nf-types` loads it with plain Node;
-see [Getting started](getting-started-app-router.md#3-define-the-federation)). Read the secrets from
+see [Getting started](getting-started-app-router.mdx#define-the-federation)). Read the secrets from
 the environment:
 
 ```ts

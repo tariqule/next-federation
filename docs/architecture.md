@@ -3,7 +3,7 @@
 How `next-federation` works, for people who use it and people who change it. It covers the two
 features (islands and remote components), what a host trusts, and the design choices behind both.
 For the wire format see the [island protocol](protocol/v1.md); for task-oriented docs see the
-[docs index](README.md).
+[docs index](index.mdx).
 
 ## The idea
 

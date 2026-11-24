@@ -10,4 +10,4 @@ The wrapper sets `env.NF_CACHE_MODEL`, `env.NF_BASE_PATH` and `env.NF_NEXT_VERSI
 
 ## How to fix
 
-Wrap your config: `export default withNextFederation(nextConfig)` (imported from `@next-federation/next/config`) and restart the build. See [Getting started: App Router](../guides/getting-started-app-router.md#2-wrap-nextconfigts).
+Wrap your config: `export default withNextFederation(nextConfig)` (imported from `@next-federation/next/config`) and restart the build. See [Getting started: App Router](../guides/getting-started-app-router.mdx#wrap-your-next-config).

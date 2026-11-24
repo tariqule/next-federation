@@ -8,7 +8,7 @@ export const GUIDES = {
     label: 'Server Actions in islands',
   },
   blocking: {
-    href: `${DOCS}/getting-started-app-router.md#private-content-in-the-first-html-blocking`,
+    href: `${DOCS}/getting-started-app-router.mdx#put-private-content-in-the-first-html`,
     label: 'Private content in the first HTML (blocking)',
   },
   components: {

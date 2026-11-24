@@ -59,6 +59,27 @@ export default function Page() {
 }
 ```
 
+## The Next 16 scaffold defaults
+
+A project from `create-next-app` 16.4.6 has `cacheComponents: true` and `partialPrefetching: true` in
+`next.config.ts`. For islands that means:
+
+- Public islands are cached with `'use cache'`, and a page with only public islands stays static
+  (`○` in the build output), also when a remote fails: the island keeps its last good envelope (or
+  shows its fallback) and the page is regenerated within seconds.
+- A private island is a dynamic hole inside the island's own `<Suspense>`, unless you render it
+  with [`blocking`](#blocking-the-island-in-the-first-html). Put your own `'use cache'`
+  components around a `RemoteIsland` only inside `<Suspense>`.
+- Next 16 keeps routes you visited mounted but hidden, so an island on a route you navigated away
+  from can stay mounted in the background.
+- `partialPrefetching: true` works with private islands: a signed-in private island renders with no
+  "unstable value `Date.now()`" log in `next dev` or `next start`.
+
+On Next 15 the adapter uses the legacy cache. Next 15's experimental equivalents,
+`experimental.cacheComponents` and `experimental.dynamicIO`, are not supported: `withNextFederation`
+throws [`NF-002`](../errors/invalid-config.md) on Next 15 when either of them, or
+`cacheComponents`, is set.
+
 ## Stale-if-error
 
 A cached public island whose fetch fails (`NF-003`, `NF-004`, `NF-005`, `NF-007`, `NF-008`) renders the
@@ -88,7 +109,7 @@ RSC payload ([Identity](identity.md)).
 
 `<RemoteIsland private blocking … />` renders without the island's own `<Suspense>`, so its HTML is
 in the first flush, in place, with no streamed `fallback` and no swap
-([Getting started](getting-started-app-router.md#private-content-in-the-first-html-blocking)). The
+([Getting started](getting-started-app-router.mdx#put-private-content-in-the-first-html)). The
 caching consequences:
 
 | Host | Route config | `next build` marker | First byte |
@@ -114,6 +135,20 @@ caching consequences:
   error reaches the route's `error.tsx` (no `200`), where without `blocking` the island would be
   rendered in the browser under its own `<Suspense>`. Return `null` from `getIdentity` instead of
   throwing.
+- Use `blocking` for private content that must be in the first HTML: clients without JavaScript,
+  crawlers that read the first HTML only, or a page whose layout must not shift when the island
+  arrives.
+- A Suspense boundary above the island streams it again. That includes a `loading.tsx` in the route
+  or a `<Suspense>` in a layout: React holds the island behind that boundary's fallback instead.
+- The island's own boundary also isolated it from hydration errors elsewhere on the page. Without
+  it, a hydration error in another part of the page can make React re-render the island on the
+  client, up to the nearest boundary above it.
+- Put `instant = false` in the page file, not only in a layout: with it in the layout alone the build
+  passes (the route is still `ƒ`), but `next dev` still logs Next's instant-navigation check for the
+  page.
+- A remote that is down, slow or returns an invalid envelope renders `errorFallback` in place with
+  the same `NF-007`, `NF-008` or `NF-004` log. The token never enters the HTML or the RSC payload,
+  and the envelope is fetched with `cache: 'no-store'`.
 - Public islands on the same page are still cached (their envelopes), but they render within the
   per-request page. `blocking` on a public island throws `NF-002`.
 

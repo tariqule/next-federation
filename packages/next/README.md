@@ -91,7 +91,7 @@ export const { RemoteIsland, preloadIsland, revalidateIsland } = createIslands(f
   and the page answers `200`. The route has no static shell: `next build` shows it as `ƒ`. With `cacheComponents` the
   page must export `instant = false`, or `next build` fails with Next's "runtime data during prerendering" error;
   without `cacheComponents` it needs nothing (Next refuses `instant` there). A `loading.tsx` or `<Suspense>` above the
-  island streams it again. Guide: [App Router](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md#private-content-in-the-first-html-blocking).
+  island streams it again. Guide: [App Router](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.mdx#put-private-content-in-the-first-html).
 - `errorFallback` (default: `fallback`) is shown when the remote fails, times out or returns an invalid
   envelope, for an anonymous visitor on a private island, and after an uncaught island error. When the
   island's code cannot load in the browser (`NF-011`: remote down, build retired), an `errorFallback`
@@ -326,7 +326,7 @@ loses its previous ones and its `index.d.ts` entry. Guide: [Types](https://githu
 
 ## Learn more
 
-- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md)
+- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.mdx)
 - [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.md)
 - [Caching](https://github.com/tariqule/next-federation/blob/main/docs/guides/caching.md)
 - [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md)

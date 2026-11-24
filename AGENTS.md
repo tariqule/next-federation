@@ -14,17 +14,17 @@ rstest.config.ts  .alexrc  .changeset/config.json  AGENTS.md  README.md
 .github/workflows/ci.yml
 scripts/
   check-guardrails.mjs          grep guardrail (see Hard rules), with __tests__/check-guardrails.spec.ts
-  check-error-docs.mjs          every NF code has docs/errors/<slug>.md
+  check-error-docs.mjs          every NF code has docs/errors/<slug>.md (error pages stay .md)
   check-pack.mjs                every package packs its README, LICENSE and CHANGELOG
   publish-wait.mjs              publish workflow step: `pnpm release`, waiting out npm staged versions
 docs/
-  README.md                     docs index
+  index.mdx                     docs home (guides are .mdx, see maintainers/docs-style.md)
   architecture.md               how islands and remote components work
   protocol/v1.md                published island protocol spec
   errors/<slug>.md              one page per NF code
   guides/                       task guides (getting started, remotes, operations)
-  maintainers/                  notes for maintainers (dependency bump checks, live demo on Vercel)
-docs-site/                      the documentation site (syncs Markdown from docs/ and packages/)
+  maintainers/                  notes for maintainers (docs style, dependency bump checks, live demo on Vercel)
+docs-site/                      the documentation site (syncs Markdown and MDX from docs/ and packages/)
 packages/
   sdk/        logger.ts, error-codes.ts, nf-error.ts, index.ts
   protocol/   constants.ts, envelope.ts, request.ts, props.ts, id-prefix.ts, bootstrap.ts (types),

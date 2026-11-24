@@ -61,7 +61,7 @@ The remote must list your app's origin in its `hosts` option, or the browser req
 ### Timeout and retries
 
 `timeoutMs` and `retries` work as in the App Router host
-([Timeout and retries](getting-started-app-router.md#timeout-and-retries)). When the budget runs
+([Timeouts and retries](limits.md#timeouts-and-retries)). When the budget runs
 out, `fetchIsland` resolves with `{ ok: false, code }` (`NF-007`, `NF-008`) instead of throwing, and
 your page renders its fallback.
 

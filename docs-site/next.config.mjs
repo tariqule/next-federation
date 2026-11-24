@@ -7,11 +7,6 @@ const config = {
   reactStrictMode: true,
   async redirects() {
     return [
-      {
-        source: '/docs',
-        destination: '/docs/getting-started/app-router',
-        permanent: false,
-      },
       // The guide was "Client components" before; old links keep working.
       {
         source: '/docs/client-components/:path*',

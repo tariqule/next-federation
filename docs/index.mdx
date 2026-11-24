@@ -1,0 +1,105 @@
+---
+title: Welcome to next-federation
+description: Runtime UI federation for Next.js. A remote app provides UI that your host app renders at runtime.
+---
+
+Welcome to the `next-federation` docs. Use them to embed UI that another team builds and deploys on its own into your Next.js app, without rebuilding the host.
+
+A remote app, deployed separately, provides UI that your host renders at runtime. Embed server-rendered islands, or load client components through Module Federation 2.0 into your host's own React tree. `next-federation` calls only public Next.js APIs, never Next.js internals.
+
+## Get started
+
+Pick the host you are building. Each guide ends with a working page that embeds a remote.
+
+<Cards>
+  <Card title="Next.js App Router" href="guides/getting-started-app-router.mdx">
+    Embed islands with `RemoteIsland` in Server Components.
+  </Card>
+  <Card
+    title="Next.js Pages Router"
+    href="guides/getting-started-pages-router.md"
+  >
+    Use `getIslandProps` and `RemoteIsland` in pages.
+  </Card>
+  <Card title="Client-side React (SPA)" href="guides/getting-started-spa.md">
+    A Vite app with no server.
+  </Card>
+</Cards>
+
+## Build a remote
+
+<Cards>
+  <Card
+    title="Writing an island remote"
+    href="guides/writing-an-island-remote.md"
+  >
+    A Vite app that serves server-rendered islands.
+  </Card>
+  <Card title="Remote components" href="guides/remote-components.md">
+    Client components that run in the host's React tree.
+  </Card>
+  <Card
+    title="Sharing components from a Next.js app"
+    href="guides/sharing-components-from-a-next-app.md"
+  >
+    Add an island build next to an existing Next.js app.
+  </Card>
+</Cards>
+
+## Main features
+
+<Cards>
+  <Card title="Identity" href="guides/identity.md">
+    Private islands, signing keys and key rotation.
+  </Card>
+  <Card title="Server Actions in islands" href="guides/server-actions.md">
+    `'use server'` functions that run on the remote.
+  </Card>
+  <Card title="Caching" href="guides/caching.md">
+    Islands with static pages, ISR and `cacheComponents`.
+  </Card>
+  <Card title="Content Security Policy" href="guides/csp.md">
+    The directives a host needs for remote origins.
+  </Card>
+  <Card
+    title="Migrating from nextjs-mf"
+    href="guides/migrating-from-nextjs-mf.md"
+  >
+    A concept map for apps that use `@module-federation/nextjs-mf`.
+  </Card>
+  <Card title="Deployment" href="guides/deployment.md">
+    Serving remotes, compression and CORS.
+  </Card>
+</Cards>
+
+## Reference
+
+<Cards>
+  <Card title="Architecture" href="architecture.md">
+    How islands and remote components work and what a host trusts.
+  </Card>
+  <Card title="Limits" href="guides/limits.md">
+    What islands and remote components cannot do, and what they cost.
+  </Card>
+  <Card title="Island protocol v1" href="protocol/v1.md">
+    The wire contract between a host and a remote.
+  </Card>
+  <Card title="Error codes" href="errors/index.mdx">
+    Every `NF-001` and up code, with how to fix it.
+  </Card>
+  <Card title="Live demo" href="live-demo.md">
+    Three hosts and two remotes, and what to try in each.
+  </Card>
+  <Card title="Examples" href="../examples/README.md">
+    Runnable remotes and hosts, and a larger multi-remote setup.
+  </Card>
+</Cards>
+
+## For contributors
+
+- [CONTRIBUTING.md](../CONTRIBUTING.md): setup and the pull request process.
+- [AGENTS.md](../AGENTS.md): repo map, commands and the rules every change keeps.
+- [Code conventions](conventions.md), [Documentation style](maintainers/docs-style.md) and
+  [Releasing](releasing.md).
+- [Maintainer notes](maintainers/mf-vite-init-keys.md) and
+  [Live demo setup](maintainers/live-demo.md).

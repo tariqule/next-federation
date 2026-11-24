@@ -20,7 +20,7 @@ own React, so this applies to Pages Router hosts only.
 ## Remote components or islands
 
 This guide sets up islands. A remote can also ship remote components, and a host can use both. The
-[App Router guide](getting-started-app-router.md#choosing-between-remote-components-and-islands)
+[Islands or remote components?](remote-components.md#islands-or-remote-components)
 compares them, and [Remote components](remote-components.md) covers the setup.
 
 ## 1. Install
@@ -84,7 +84,7 @@ but not under plain Node: see [Remote components](remote-components.md#types) fo
 ### Timeout and retries
 
 `timeoutMs` and `retries` work as in the App Router host
-([Timeout and retries](getting-started-app-router.md#timeout-and-retries)). A failed island renders
+([Timeouts and retries](limits.md#timeouts-and-retries)). A failed island renders
 `errorFallback` (default: `fallback`) and the page still answers `200`.
 
 ## 4. Render an island

@@ -396,7 +396,7 @@ instead of verifying it), so check that the output says what you asked for.
 ## Host: configure the remote
 
 Put the federation in its own file with no Next.js imports, so `nf-types` can load it
-([Types](#types)); `lib/federation.ts` imports it ([Getting started](getting-started-app-router.md#3-define-the-federation)).
+([Types](#types)); `lib/federation.ts` imports it ([Getting started](getting-started-app-router.mdx#define-the-federation)).
 
 ```ts
 // lib/federation.config.ts

@@ -131,7 +131,7 @@ Pick the guide for what you are building:
 
 | You are building                        | Guide                                                               | Example                                         |
 | --------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------- |
-| A Next.js App Router host               | [App Router](docs/guides/getting-started-app-router.md)             | [next-app-router](examples/next-app-router)     |
+| A Next.js App Router host               | [App Router](docs/guides/getting-started-app-router.mdx)            | [next-app-router](examples/next-app-router)     |
 | A Next.js Pages Router host             | [Pages Router](docs/guides/getting-started-pages-router.md)         | [next-pages-router](examples/next-pages-router) |
 | A client-side React host (Vite SPA)     | [SPA](docs/guides/getting-started-spa.md)                           | [react-spa](examples/react-spa)                 |
 | A remote that serves islands            | [Writing an island remote](docs/guides/writing-an-island-remote.md) | [vite-remote](examples/vite-remote)             |
@@ -144,14 +144,14 @@ To run every example together, run `pnpm examples:dev` in a checkout of this rep
 
 ## Documentation
 
-The [docs index](docs/README.md) lists every guide. A few places to start:
+The [docs index](docs/index.mdx) lists every guide. A few places to start:
 
 - [Architecture](docs/architecture.md): how islands and remote components work, and what a host trusts
 - [Identity](docs/guides/identity.md): private islands and key rotation
 - [Caching](docs/guides/caching.md): islands with static pages, ISR and `cacheComponents`
 - [Deployment](docs/guides/deployment.md): serving remotes, skew and build retention
 - [Island protocol v1](docs/protocol/v1.md): the wire contract
-- [Error codes](docs/README.md#errors): every `NF-0xx` code has a page that says what to do
+- [Error codes](docs/errors/index.mdx): every `NF-0xx` code has a page that says what to do
 
 ## Packages
 
