@@ -11,7 +11,7 @@
     "@next-federation/router": "workspace:*",
     "@next-federation/server": "workspace:*",
     "@rspack/core": "2.3.0",
-    "@types/node": "24.10.1",
+    "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "example-cart-context": "workspace:*",
     "example-design-system": "workspace:*",
