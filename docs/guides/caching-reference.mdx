@@ -1,0 +1,99 @@
+---
+title: Caching reference
+description: How islands are cached in each host mode, what stale-if-error keeps, and what blocking costs.
+---
+
+Public islands are cached. Private islands never are. For the task flow, see [Caching](caching.mdx).
+
+## App Router, legacy mode (no `cacheComponents`)
+
+The adapter fetches the envelope with Next's fetch cache (`next: { revalidate, tags }`). `revalidate` defaults to `islands.revalidate` (60 seconds). Tags are `nf:<remote>` and `nf:<remote>:<island>`.
+
+- The page can be static (ISR).
+- A failed regeneration keeps the last good envelope ([Stale-if-error](#stale-if-error)). Without one, the fallback stays until the next regeneration.
+- A `200` with an invalid envelope (`NF-004`) is cached for `revalidate` seconds. Non-2xx responses, timeouts and network errors are not cached.
+- `dynamic` fetches on every request (`cache: 'no-store'`) and makes the route dynamic.
+
+## App Router, `cacheComponents`
+
+The envelope comes from a `'use cache'` function with the same tags.
+
+- A failed fetch is cached with the profile `{ stale: 30, revalidate: 5, expire: 600 }`. The page stays static (`○`) and regenerates within about 5 seconds.
+- The island shows its last good envelope, or `errorFallback` without one.
+- A working island stays cached for its `revalidate`.
+- `RemoteIsland` renders its own `<Suspense>`. A private island with `blocking` does not.
+- Your own `'use cache'` component around a `RemoteIsland` gets the same failure profile when the island fails. Keep it inside `<Suspense>`.
+
+Next 16 leaves an entry with `expire` under 5 minutes out of a static prerender. A dynamic hole would then make Next stop regenerating the page. That is why failures stay in the static shell.
+
+## The Next 16 scaffold defaults
+
+`create-next-app` 16.4.6 sets `cacheComponents: true` and `partialPrefetching: true`.
+
+- A page with only public islands stays static, also when a remote fails.
+- A private island is a dynamic hole in its own `<Suspense>`, unless it uses [`blocking`](#blocking-the-island-in-the-first-html).
+- Next 16 keeps visited routes mounted but hidden, so an island can stay mounted in the background.
+- `partialPrefetching` works with private islands.
+
+On Next 15, the adapter uses the legacy cache. `withNextFederation` throws [`NF-002`](../errors/invalid-config.md) if `cacheComponents`, `experimental.cacheComponents` or `experimental.dynamicIO` is set.
+
+## Stale-if-error
+
+A cached public island whose fetch fails (`NF-003`, `NF-004`, `NF-005`, `NF-007`, `NF-008`) renders the last good envelope for the same remote, island, props and host context. The failure is still logged and emitted as `island:error`.
+
+- The envelope is kept for at least an hour, or twice `revalidate`.
+- Envelopes live in the server process's memory: at most 500 and 50 MiB.
+- A fresh process, a new serverless instance or `next build` has none, so the fallback renders.
+- Private and `dynamic` islands are never served stale.
+- A `404` with `Content-Type: application/json` counts as a deliberate removal and renders the fallback at once. That includes a gateway's `{"message":"Not Found"}`.
+- A `404` with another content type, such as a proxy's HTML page, is served stale.
+- Redirects are refused, and a body over `islands.maxBytes` (5 MiB) stops the read with no retry (`NF-007`).
+- On an HTML or non-protocol `404`, the log asks whether the origin is an island remote. A Next.js app cannot be one.
+
+## Private islands
+
+The token never enters a cache key, the HTML or the RSC payload ([Identity](identity.mdx)). Without `cacheComponents`, a private island makes the route dynamic. With it, the island is a dynamic hole.
+
+### `blocking`: the island in the first HTML
+
+`blocking` renders the island without its own `<Suspense>`, so its HTML is in the first flush ([Getting Started](getting-started-app-router.mdx#put-private-content-in-the-first-html)).
+
+| Host                                 | Route config                               | `next build` marker   |
+| ------------------------------------ | ------------------------------------------ | --------------------- |
+| No `cacheComponents` (Next 16 or 15) | none (`instant` is refused)                | `ƒ` (already dynamic) |
+| `cacheComponents`                    | `export const instant = false` in the page | `ƒ`, not `◐`          |
+
+- The whole route becomes per-request. With `cacheComponents`, it loses its static shell.
+- Without `instant = false`, `next build` fails with "uncached or runtime data during prerendering". An ancestor layout with `instant = true` causes the same error.
+- Put `instant = false` in the page file. In a layout alone, `next dev` still logs the instant-navigation check.
+- Without `cacheComponents`, `next build` refuses `instant`.
+- The response waits for the remote, up to `timeoutMs` (3 seconds by default).
+- A failing remote renders `errorFallback` in place, and the page answers `200`.
+- If `getIdentity` or token minting throws, the error reaches `error.tsx`. Return `null` instead.
+- A `<Suspense>` above the island, such as `loading.tsx`, streams it again.
+- Without its own boundary, a hydration error elsewhere can re-render the island on the client.
+- Public islands on the page stay cached but render per request.
+- `blocking` on a public island throws `NF-002`.
+
+## Pages Router
+
+`getIslandProps` fetches on every call. In `getStaticProps`, the page's `revalidate` is the cache. A failed fetch returns the last good envelope with `stale: true`, or `envelope: null`.
+
+```ts
+return {
+  props: { banner },
+  revalidate: banner.envelope && !banner.stale ? 60 : 5,
+}
+```
+
+## Events for cached islands
+
+`island:fetch` and `island:error` describe the fetch that produced the envelope. A page served from cache emits no new events. Do not use event counts as page views.
+
+## Build cache and remote retention
+
+A cached envelope pins a remote build at `/b/<buildId>/…`. Your host cache (build cache, ISR pages, CDN) must not outlive the remote's retention.
+
+- Otherwise the remote answers `410` with [`NF-023`](../errors/build-retired.md), and the island stays inert.
+- `nf-serve` keeps the newest 3 builds or any under 24 hours old.
+- Keep retention at least as long as your longest host cache lifetime. See [Deployment](deployment.mdx).

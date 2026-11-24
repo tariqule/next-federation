@@ -30,4 +30,4 @@ Check it: <http://127.0.0.1:13400/_nf/health>. In the storefront, turn on **How 
 built?** to see each CDP island's build id, cache mode and tags.
 
 `vite.config.ts` lists the hosts that may embed it (`hosts`, the CORS allowlist) and the issuer
-whose tokens it accepts. Guide: [Writing an island remote](../../../docs/guides/writing-an-island-remote.md).
+whose tokens it accepts. Guide: [Writing an island remote](../../../docs/guides/writing-an-island-remote.mdx).

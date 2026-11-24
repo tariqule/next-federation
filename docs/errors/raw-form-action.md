@@ -1,21 +1,25 @@
 # NF-035: Island form uses a raw `action` instead of `<Form>`
 
-## What happened
+## Why This Error Occurred
 
-The island build or dev server warned that a component passes a Server Action to a plain `<form
-action={...}>`, or to a `formAction` that is not written inside a `<Form>` element.
+A component passes a Server Action to a plain `<form action={...}>`, or to a `formAction` outside a `<Form>`. Islands have no progressive enhancement, so a plain form can submit before hydration, and the submission goes to the host page instead of the remote.
 
-## Why
+## Possible Ways to Fix It
 
-Islands have no progressive enhancement: a plain form can submit before the island hydrates, and the
-submission would go to the host page instead of the remote. `<Form>` from `@next-federation/island`
-keeps the form disabled until the island has hydrated.
+- Replace `<form action={...}>` with `<Form action={...}>` from `@next-federation/island`. It stays disabled until the island has hydrated:
 
-## How to fix
+  ```tsx
+  import { Form } from '@next-federation/island'
 
-Replace `<form action={...}>` with `<Form action={...}>` imported from `@next-federation/island`.
-A `formAction` button written inside `<Form>` in the same component is not reported. One rendered by
-another component cannot be checked: the warning is then a false alarm if that component always
-renders inside `<Form>`.
+  export function AddToCart({ action }: { action: (data: FormData) => void }) {
+    return (
+      <Form action={action}>
+        <button type="submit">Add</button>
+      </Form>
+    )
+  }
+  ```
 
-See [Server Actions: forms](../guides/server-actions.md#forms-no-progressive-enhancement).
+## Useful Links
+
+- [Server Actions: forms](../guides/server-actions-reference.mdx#forms-no-progressive-enhancement)

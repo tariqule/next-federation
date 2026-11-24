@@ -42,5 +42,5 @@ the island remote lists), `NF_SIGNING_KEY` (private, this project only) and
 fails the build. `vercel.json` builds production deployments only. On Vercel, the header shows a
 live demo banner (`NEXT_PUBLIC_VERCEL_ENV` is set at build time).
 
-Guides: [App Router host](../../docs/guides/getting-started-app-router.md),
-[Identity](../../docs/guides/identity.md), [Remote components](../../docs/guides/remote-components.md).
+Guides: [App Router host](../../docs/guides/getting-started-app-router.mdx),
+[Identity](../../docs/guides/identity.mdx), [Remote components](../../docs/guides/remote-components/overview.mdx).

@@ -1,7 +1,12 @@
-// Build-time sync: copies the repo's Markdown (docs/ and package READMEs) into
-// docs-site/content/docs (git-ignored), adding the frontmatter Fumadocs needs
-// (title and description, derived from the file itself) and rewriting relative
-// links to site URLs. The source Markdown is never edited.
+// Build-time sync: copies the repo's Markdown and MDX (docs/ and package
+// READMEs) into docs-site/content/docs (git-ignored), adding the frontmatter
+// Fumadocs needs and rewriting relative links to site URLs. The source files
+// are never edited.
+//
+// .mdx sources carry their own frontmatter (title, description), which is kept;
+// one without it falls back to the first "# " heading. .md sources (package
+// READMEs, the protocol spec, error pages) have no frontmatter: title and
+// description are derived from the file itself.
 //
 // A sync script is used instead of pointing Fumadocs at ../docs directly
 // because the content comes from several unrelated folders and needs links
@@ -34,41 +39,62 @@ if (!existsSync(path.join(repoRoot, 'docs', 'guides'))) {
 const entries = []
 const add = (src, slug) => entries.push({ src, slug })
 
-add('docs/README.md', 'index')
-add('docs/live-demo.md', 'live-demo')
-add('docs/architecture.md', 'architecture')
-add('docs/guides/getting-started-app-router.md', 'getting-started/app-router')
+add('docs/index.mdx', 'index')
+add('docs/live-demo.mdx', 'live-demo')
+add('docs/architecture.mdx', 'architecture')
+// Limits sits under the Architecture group in the sidebar but keeps its
+// guides/limits URL (see the meta.json written below).
+add('docs/guides/limits.mdx', 'guides/limits')
+add('docs/guides/getting-started-app-router.mdx', 'getting-started/app-router')
 add(
-  'docs/guides/getting-started-pages-router.md',
+  'docs/guides/getting-started-pages-router.mdx',
   'getting-started/pages-router'
 )
-add('docs/guides/getting-started-spa.md', 'getting-started/spa')
+add('docs/guides/getting-started-spa.mdx', 'getting-started/spa')
 add(
-  'docs/guides/writing-an-island-remote.md',
+  'docs/guides/writing-an-island-remote.mdx',
   'guides/writing-an-island-remote'
 )
-add('docs/guides/caching.md', 'guides/caching')
-add('docs/guides/identity.md', 'guides/identity')
-add('docs/guides/server-actions.md', 'guides/server-actions')
-add('docs/guides/csp.md', 'guides/csp')
-add('docs/guides/limits.md', 'guides/limits')
+add('docs/guides/server-actions.mdx', 'guides/server-actions')
 add(
-  'docs/guides/migrating-from-nextjs-mf.md',
+  'docs/guides/server-actions-reference.mdx',
+  'guides/server-actions-reference'
+)
+add('docs/guides/caching.mdx', 'guides/caching')
+add('docs/guides/caching-reference.mdx', 'guides/caching-reference')
+add('docs/guides/identity.mdx', 'guides/identity')
+add('docs/guides/identity-reference.mdx', 'guides/identity-reference')
+add('docs/guides/csp.mdx', 'guides/csp')
+add(
+  'docs/guides/migrating-from-nextjs-mf.mdx',
   'guides/migrating-from-nextjs-mf'
 )
-add('docs/guides/remote-components.md', 'remote-components/overview')
+for (const page of [
+  'overview',
+  'vite-remote',
+  'rspack-remote',
+  'host-configuration',
+  'stylesheets',
+  'sharing-modules',
+  'links',
+  'reference',
+  'security',
+  'types',
+  'sharing-from-a-next-app',
+]) {
+  add(`docs/guides/remote-components/${page}.mdx`, `remote-components/${page}`)
+}
+add('docs/guides/deployment.mdx', 'deployment/overview')
+add('docs/guides/self-hosted-skew.mdx', 'deployment/self-hosted-skew')
 add(
-  'docs/guides/sharing-components-from-a-next-app.md',
-  'remote-components/sharing-from-a-next-app'
-)
-add('docs/guides/deployment.md', 'deployment/overview')
-add('docs/guides/self-hosted-skew.md', 'deployment/self-hosted-skew')
-add(
-  'docs/guides/deploying-a-remote-on-vercel.md',
+  'docs/guides/deploying-a-remote-on-vercel.mdx',
   'deployment/deploying-a-remote-on-vercel'
 )
 add('docs/protocol/v1.md', 'protocol/v1')
 
+// The error pages stay .md: the library links to docs/errors/<slug>.md on
+// GitHub (DOCS_BASE in @next-federation/sdk). Only the index is .mdx.
+add('docs/errors/index.mdx', 'errors/index')
 const errorFiles = readdirSync(path.join(repoRoot, 'docs/errors'))
   .filter((f) => f.endsWith('.md'))
   .sort()
@@ -91,7 +117,9 @@ for (const p of packageDirs) add(`packages/${p}/README.md`, `api/${p}`)
 // source (absolute path) -> site URL
 const urlBySource = new Map()
 for (const { src, slug } of entries) {
-  urlBySource.set(path.join(repoRoot, src), `/docs/${slug}`)
+  // A folder's index page is served at the folder URL (errors/index -> /docs/errors).
+  const route = slug.replace(/(^|\/)index$/, '')
+  urlBySource.set(path.join(repoRoot, src), route ? `/docs/${route}` : '/docs')
 }
 for (const p of packageDirs) {
   // A link to the package directory lands on its README page.
@@ -124,7 +152,8 @@ function rewriteTarget(target, srcAbs) {
   return toGithub(abs) + hash
 }
 
-// Rewrites `[text](target)` outside fenced code blocks and inline code spans.
+// Rewrites `[text](target)` and JSX `href="target"` outside fenced code blocks
+// and inline code spans.
 function rewriteLinks(body, srcAbs) {
   let fence = null
   return body
@@ -142,10 +171,15 @@ function rewriteLinks(body, srcAbs) {
         .map((part) =>
           part.startsWith('`')
             ? part
-            : part.replace(
-                /(\]\()([^)\s]+)(\))/g,
-                (_, a, target, c) => a + rewriteTarget(target, srcAbs) + c
-              )
+            : part
+                .replace(
+                  /(\]\()([^)\s]+)(\))/g,
+                  (_, a, target, c) => a + rewriteTarget(target, srcAbs) + c
+                )
+                .replace(
+                  /(\shref=")([^"]+)(")/g,
+                  (_, a, target, c) => a + rewriteTarget(target, srcAbs) + c
+                )
         )
         .join('')
     })
@@ -191,28 +225,46 @@ let count = 0
 const errorOrder = []
 for (const { src, slug } of entries) {
   const srcAbs = path.join(repoRoot, src)
-  const lines = readFileSync(srcAbs, 'utf8').split('\n')
-  const h1 = lines.findIndex((l) => /^# \S/.test(l))
-  if (h1 === -1) throw new Error(`${src}: no "# " heading to use as title`)
-  const title = plain(lines[h1].slice(2))
-  const rest = lines.slice(h1 + 1)
-  const description = firstParagraph(rest)
+  const isMdx = src.endsWith('.mdx')
+  const text = readFileSync(srcAbs, 'utf8')
+  const own = isMdx ? text.match(/^---\n([\s\S]*?)\n---\n/) : null
+  let title
+  let description
+  let rest
+  if (own) {
+    // Frontmatter written in the source: keep it verbatim, read the title.
+    const t = own[1].match(/^title:\s*(.+)$/m)
+    if (!t) throw new Error(`${src}: frontmatter has no title`)
+    title = plain(t[1].replace(/^["']|["']$/g, ''))
+    rest = text.slice(own[0].length).split('\n')
+    if (!/^description:/m.test(own[1]))
+      throw new Error(`${src}: frontmatter has no description`)
+  } else {
+    const lines = text.split('\n')
+    const h1 = lines.findIndex((l) => /^# \S/.test(l))
+    if (h1 === -1) throw new Error(`${src}: no "# " heading to use as title`)
+    title = plain(lines[h1].slice(2))
+    rest = lines.slice(h1 + 1)
+    description = firstParagraph(rest)
+  }
   const body = rewriteLinks(rest.join('\n').replace(/^\n+/, ''), srcAbs)
-  const front = [
-    '---',
-    `title: ${JSON.stringify(title)}`,
-    description ? `description: ${JSON.stringify(description)}` : null,
-    '---',
-    '',
-  ]
-    .filter((l) => l !== null)
-    .join('\n')
-  const dest = path.join(outRoot, `${slug}.md`)
+  const front = own
+    ? `---\n${own[1]}\n---\n`
+    : [
+        '---',
+        `title: ${JSON.stringify(title)}`,
+        description ? `description: ${JSON.stringify(description)}` : null,
+        '---',
+        '',
+      ]
+        .filter((l) => l !== null)
+        .join('\n')
+  const dest = path.join(outRoot, `${slug}${isMdx ? '.mdx' : '.md'}`)
   mkdirSync(path.dirname(dest), { recursive: true })
   writeFileSync(dest, `${front}\n${body}`)
   count++
   const code = title.match(/^NF-(\d+)/)
-  if (slug.startsWith('errors/')) {
+  if (slug.startsWith('errors/') && slug !== 'errors/index') {
     if (!code)
       throw new Error(`${src}: error page title must start with NF-nnn`)
     errorOrder.push({ slug: slug.slice('errors/'.length), n: Number(code[1]) })
@@ -227,6 +279,9 @@ const meta = (dir, title, pages) => {
     JSON.stringify({ title, pages }, null, 2) + '\n'
   )
 }
+// Sidebar order, as in the Next.js docs: Getting Started, Guides, Remote
+// Components, Deployment, API Reference, Errors, then Architecture. The page
+// map in docs/maintainers/docs-style.md says where later phases split pages.
 writeFileSync(
   path.join(outRoot, 'meta.json'),
   JSON.stringify(
@@ -234,21 +289,23 @@ writeFileSync(
       pages: [
         'index',
         'live-demo',
-        'architecture',
         'getting-started',
         'guides',
         'remote-components',
         'deployment',
-        'errors',
-        'protocol',
         'api',
+        'errors',
+        '---Architecture---',
+        'architecture',
+        'protocol',
+        'guides/limits',
       ],
     },
     null,
     2
   ) + '\n'
 )
-meta('getting-started', 'Getting started', [
+meta('getting-started', 'Getting Started', [
   'app-router',
   'pages-router',
   'spa',
@@ -256,14 +313,25 @@ meta('getting-started', 'Getting started', [
 meta('guides', 'Guides', [
   'writing-an-island-remote',
   'server-actions',
+  'server-actions-reference',
   'caching',
+  'caching-reference',
   'identity',
+  'identity-reference',
   'csp',
-  'limits',
   'migrating-from-nextjs-mf',
 ])
-meta('remote-components', 'Remote components', [
+meta('remote-components', 'Remote Components', [
   'overview',
+  'vite-remote',
+  'rspack-remote',
+  'host-configuration',
+  'stylesheets',
+  'sharing-modules',
+  'links',
+  'reference',
+  'security',
+  'types',
   'sharing-from-a-next-app',
 ])
 meta('deployment', 'Deployment', [
@@ -271,12 +339,8 @@ meta('deployment', 'Deployment', [
   'self-hosted-skew',
   'deploying-a-remote-on-vercel',
 ])
-meta(
-  'errors',
-  'Error codes',
-  errorOrder.map((e) => e.slug)
-)
+meta('errors', 'Errors', ['index', ...errorOrder.map((e) => e.slug)])
 meta('protocol', 'Protocol', ['v1'])
-meta('api', 'API (packages)', packageDirs)
+meta('api', 'API Reference', packageDirs)
 
 console.log(`docs-site: synced ${count} pages into content/docs`)

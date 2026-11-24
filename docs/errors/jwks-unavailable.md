@@ -1,15 +1,14 @@
 # NF-015: Issuer JWKS could not be fetched
 
-## What happened
+## Why This Error Occurred
 
-The remote could not download the issuer's JSON Web Key Set.
+The remote could not download the issuer's JSON Web Key Set, so it cannot verify tokens. Verification fails closed: private islands answer `503` until the JWKS is back.
 
-## Why
+## Possible Ways to Fix It
 
-The JWKS endpoint was unreachable or returned an invalid document, so tokens cannot be verified.
+- Check the issuer's JWKS URL from the remote's network.
+- Make sure it answers within 2 seconds and returns a valid JWKS.
 
-## How to fix
+## Useful Links
 
-Check the issuer's JWKS URL from the remote's network. The remote waits 2 seconds for the JWKS. Verification fails closed, so private islands stay unavailable (the remote answers `503`) until it recovers.
-
-See [Identity](../guides/identity.md).
+- [Identity](../guides/identity.mdx)

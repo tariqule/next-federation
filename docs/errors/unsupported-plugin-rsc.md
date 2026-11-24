@@ -1,20 +1,17 @@
 # NF-025: Unsupported `@vitejs/plugin-rsc` version
 
-## What happened
+## Why This Error Occurred
 
-The `@vitejs/plugin-rsc` that `@next-federation/vite` resolved is not the version it supports.
+The `@vitejs/plugin-rsc` that `@next-federation/vite` resolved is not the version it supports, **0.5.39**. The plugin is still 0.x and the Vite adapter depends on its internals, which can change in any release.
 
-## Why
+## Possible Ways to Fix It
 
-`@vitejs/plugin-rsc` is still 0.x. The Vite adapter depends on its internals (how it patches the
-flight client, how `loadCss` is wired), which can change in any release, so it is pinned to exactly
-one version: **0.5.39**.
+- Remove any override or resolution that replaces `@vitejs/plugin-rsc`, and let `@next-federation/vite` install its pinned copy:
 
-## How to fix
+  ```json
+  { "overrides": { "@vitejs/plugin-rsc": "0.6.0" } }
+  ```
 
-Remove any override or resolution that replaces `@vitejs/plugin-rsc`, and let
-`@next-federation/vite` install its own pinned copy. A CI canary job testing a newer plugin-rsc can
-set `NF_ALLOW_PLUGIN_RSC=1` to log this as a warning instead of failing; do not use it for
-releases.
+## Useful Links
 
-See [Writing an island remote](../guides/writing-an-island-remote.md).
+- [Writing an island remote](../guides/writing-an-island-remote.mdx)

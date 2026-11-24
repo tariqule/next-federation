@@ -1,0 +1,118 @@
+---
+title: 'Links That Work in Every Host'
+description: Write links in a remote component with next/link or React Router and navigate through the host's router.
+---
+
+Write a remote component's links with the router it already uses, and the build rewires them to the host's router.
+
+## Write links with your own router
+
+Use `next/link` and `next/navigation`, React Router's `Link` and hooks, or a plain `<a href>`. Nothing in the remote's code names next-federation.
+
+```tsx title="Nav.tsx"
+import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
+
+export default function Nav() {
+  const pathname = usePathname()
+  const q = useSearchParams().get('q')
+  return (
+    <Link
+      href="/orders"
+      aria-current={pathname === '/orders' ? 'page' : undefined}
+    >
+      Orders {q}
+    </Link>
+  )
+}
+```
+
+A plain `<a href>` is never intercepted: it is a full page load in every host.
+
+## Rewire links in a Vite remote
+
+Rewiring is on by default. It covers `next/link` and `next/navigation`, plus `react-router` and `react-router-dom` when the remote's `package.json` lists either and `react-router` 7 resolves from its root.
+
+- **Otherwise** (React Router 6, or no `react-router` in the root, as with pnpm) the build leaves them as they are and warns once (`NF-002`). Add `react-router` 7 as a direct dependency, or set `links: false`.
+- **`next/router`** is not rewired. Share it instead ([Sharing modules](sharing-modules.mdx)).
+- **A specifier in `shared`** keeps that sharing and is not rewired.
+- **`links: false`** turns rewiring off.
+
+Add `next` as a dev dependency, for types only.
+
+## Rewire links in a Rspack or webpack remote
+
+Add the helpers from `@next-federation/router/build` (a dev dependency) to both builds.
+
+```ts title="rspack.config.ts"
+import {
+  routerSharedEntry,
+  routerShimAliases,
+} from '@next-federation/router/build'
+
+const shared = {
+  // ...the host-provided React modules
+  ...routerSharedEntry(),
+}
+
+export const browser = {
+  // Add { reactRouter: true } when the remote uses React Router
+  resolve: { extensions: ['.tsx', '.ts', '.js'], alias: routerShimAliases() },
+  plugins: [
+    new ModuleFederationPlugin({
+      name: 'shop',
+      exposes,
+      shared,
+      shareStrategy: 'loaded-first',
+    }),
+  ],
+}
+```
+
+Use the two helpers together: the alias makes the shared name resolve to the installed package. Keep `shareStrategy: 'loaded-first'`, so Module Federation does not initialise every remote eagerly. `routerShimAliases({ reactRouter: true })` throws when the project has no `react-router`.
+
+## Choose what each host gives
+
+| Host                                                    | Remote links                                  |
+| ------------------------------------------------------- | --------------------------------------------- |
+| App Router (`@next-federation/next/components`)         | App Router client navigation                  |
+| Pages Router (`@next-federation/next/pages/components`) | Client navigation, with `basePath` and locale |
+| Any React host that calls `provideNavigation`           | Its router's client navigation                |
+| Any other host                                          | Full page loads                               |
+
+The Next.js entries provide the router. Another host calls `provideNavigation` once, at module scope, before the first remote component loads, and renders remote components inside its router.
+
+```tsx title="main.tsx"
+import { provideNavigation } from '@next-federation/react/components'
+import { useHref, useLocation, useNavigate } from 'react-router'
+
+provideNavigation({ useNavigate, useHref, useLocation })
+```
+
+For another router, pass these hooks. They run inside remote components, under the host's router.
+
+- `useNavigate()` returns `(href, { replace?, scroll? }) => void`.
+- `useHref(href)` (optional) returns the href to render, with the basename.
+- `useLocation()` (optional) returns `{ pathname, search }` without the basename.
+
+Use absolute paths (`/orders`).
+
+<Callout>
+  **Good to know:** Only same-origin hrefs navigate through the host's router.
+  See the [links reference](reference.mdx#links-reference) for the supported
+  surface, refused hrefs and the version range rule.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Sharing modules" href="sharing-modules.mdx">
+    Share next/link or next/router from a Next.js host instead.
+  </Card>
+  <Card title="Host configuration" href="host-configuration.mdx">
+    Render the remote's components in a Next.js app or an SPA.
+  </Card>
+  <Card title="Links reference" href="reference.mdx#links-reference">
+    Supported surface, unsafe hrefs and the range rule.
+  </Card>
+</Cards>

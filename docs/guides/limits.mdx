@@ -1,0 +1,168 @@
+---
+title: Limits
+description: Supported versions, what islands and remote components cannot do, and what they cost.
+---
+
+What islands and remote components do not do, and what they cost.
+
+## Supported versions
+
+| Part                       | Supported                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next.js host               | 16 or 15 (`>=15.5.28 <17`), App Router and Pages Router, Turbopack or webpack. Next 14 is not supported.                                                                  |
+| React, App Router          | React 19, Next's own React                                                                                                                                                |
+| React, other hosts         | A Pages Router host (Next 15) and a Vite SPA host can run React 18.3 or 19 (tested on 18.3.1)                                                                             |
+| Node, host                 | 20.9 or newer. Server rendering of remote components needs 20.16 or newer.                                                                                                |
+| Node, remote               | Vite 8: `^20.19.0 \|\| >=22.12.0`                                                                                                                                         |
+| `@vitejs/plugin-rsc`       | 0.5.39 for an island remote. Another version fails with `NF-025` unless `NF_ALLOW_PLUGIN_RSC=1`.                                                                          |
+| `react-server-dom-webpack` | 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch. Older versions fail the build with `NF-041` ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3)). |
+| `@module-federation/vite`  | 1.24.0 for a components remote. Another version fails with `NF-026` unless `NF_ALLOW_MF_VITE=1`.                                                                          |
+
+The two `NF_ALLOW_*` flags are for a CI canary job, never for a release. React Router hosts are planned after 1.0. `create-next-app --use-pnpm` writes a `pnpm-workspace.yaml` that pnpm 9 rejects: use pnpm 10 or newer, or npm.
+
+### Next.js 15
+
+Islands and remote components work on Next 15 (React 19) with Turbopack or webpack. Three things differ:
+
+- **`cacheComponents` needs Next 16.** On Next 15 the adapter uses the legacy model ([Caching](caching-reference.mdx#app-router-legacy-mode-no-cachecomponents)). `withNextFederation` fails with `NF-002` if `cacheComponents`, `experimental.cacheComponents` or `experimental.dynamicIO` is on.
+- **`revalidateIsland`** expires at once through Next 15's one-argument `revalidateTag`.
+- **`experimental.useCache`** is not checked. An island inside your own `'use cache'` scope is cached with that scope, failures included.
+
+### React 18
+
+- **Hosts:** a Next 15 Pages Router host and a React 18 SPA embed islands and remote components. An App Router host always runs React 19.
+- **Islands** run their own React 19, so a React 18 host needs no change to island remotes.
+- **Remote components** run on the host's React. A remote accepts React 19 only unless it sets the `react` range ([React versions](remote-components/reference.mdx#react-versions)). On a host outside that range, `NF-036` renders the fallback for every component of that build ([NF-036](../errors/component-shared-unavailable.md)).
+- **`@next-federation/next/server`** is App Router only. A Pages Router host imports `@next-federation/next/pages/server`.
+- **React 19-only APIs** (`use`, `useActionState`, `useOptimistic`, `ref` as a prop) must not run in a remote on a React 18 host.
+
+## What an island cannot do
+
+- **Props are plain JSON.** No functions, `Date`, `Map`, class instances or cycles. `NF-009` names the path: `at .props.when` (App Router) or `at .when` (Pages Router).
+- **React context does not cross in.** Pass what the island needs as props.
+- **No CSS isolation.** Remotes scope their own class names.
+- **Metadata never reaches the host `<head>`.** `<title>`, `<meta>`, `<link>` and scripts are stripped.
+- **No Fast Refresh inside a host.** Edits reload the page.
+- **Server Actions have no progressive enhancement.** `<Form>` stays disabled until hydration, and actions reach client components only as props (`NF-034`).
+- **A click before hydration is lost.** Nothing records or replays it, for any button. A script that clicks after navigation must wait for hydration.
+
+### Nested islands
+
+An island's server code can render another remote's island, but this is unsupported and gives no warning. The inner island:
+
+- gets no identity: a private one is refused with `401`, and a public one renders anonymously;
+- sits outside the host's cache, tags and skew handling;
+- adds a second server hop to every render.
+
+Embed each island from the host instead, and pass data as props.
+
+### Island CSS
+
+- **App Router:** island stylesheets sort after Next's CSS (`data-precedence="next-federation"`), so on equal specificity the island wins.
+- **Pages Router and SPA:** the host's own `<link>` tags are not managed by React, so order between host and island rules is not reliable. Scope class names.
+- **Server-rendered islands** never paint unstyled. An island first mounted in the browser can show unstyled until its CSS arrives.
+
+## What a remote component cannot do
+
+- **Only three `next/*` modules.** `next/link`, `next/navigation` (App Router) and `next/router` (Pages Router) come from the host's router through `@next-federation/next/components` or `@next-federation/next/pages/components`. An SPA provides none. `next/image`, `next/head` and the rest fail at build time (`NF-002`): pass props.
+- **No checks against a remote dev server.** A missing module fails only when the code asks for it (`NF-029`).
+- **No server rendering for unverified builds.** They render in the browser ([Remote components](remote-components/security.mdx#integrity-server-rendering)).
+- **No CSS isolation.** Stylesheet order follows the island rules.
+- **Rspack and webpack remotes get coarser checks.** Every exposed module is checked against every host-provided module the build shares. Rspack is tested, webpack is untested ([Remote components](remote-components/rspack-remote.mdx)).
+- **No top-level `let` or `const` named `document`, `window` or `self` in server chunks.** Such a chunk is a `SyntaxError`, and the build renders in the browser only (`NF-029`). `var` and functions are fine.
+
+### Shared modules
+
+- **`react`, `react-dom`, `react-dom/client` and `react/jsx-runtime` always come from the host.** Every other `shared` module does too, unless the remote sets `fallback: true`.
+- **A missing or out-of-range module renders the fallback** for that component (`NF-036`). Other components still load.
+- **Do not use `fallback` for a module whose identity matters**, such as a context module. `react`, `react-dom`, `next` and their subpaths never fall back.
+- **Register shared modules at module scope** in a module every page imports (root layout or `_app`). A late registration makes later loads start a new Module Federation instance that does not share module state with earlier ones.
+- **Fallback copies are page-wide in the browser.** Another `@module-federation/vite` app that bundles the same version reads the host's copy, and two remotes with different ranges share whichever loaded first.
+- **On the server, a cache holding the wrong object** moves the layer to a new scope, at most 4 times. After that the build renders in the browser only (`NF-028`).
+
+### Mixed-router hosts
+
+A host with App Router and Pages Router routes runs two Reacts in one server process. Each router layer loads its own copy of a remote build, so the server keeps up to twice `maxBuilds` builds per remote.
+
+- **Only some builds server-render in both layers:** `@module-federation/vite` 1.24.0 and `@module-federation/enhanced` 2.9.2 and 2.9.3. Others render on the server in one layer per process.
+- **A layer waits at most 10 s** for the other to initialise, then retries after the cooldown.
+- **A build never server-renders** when its manifest lists its own `remotes` or has no checkable manifest (`NF-028` once).
+- **Layers are kept apart, not sandboxed.** A verified remote runs with the host process's rights ([Remote components](remote-components/security.mdx#mixed-router-hosts)).
+
+## `next dev` and linked installs
+
+In development, Next sends the values Server Components await to the browser as debug info. Next 15 inlines it in the HTML. Next 16 sends it over the HMR websocket (`/_next/hmr`). Next leaves code under `node_modules` out of it.
+
+| Setup                                          | What reaches the browser in `next dev`                                                                                                                                                              |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Installed from npm, default source maps        | Nothing. A private island renders as in production (`test/e2e/installed-dev.spec.ts`).                                                                                                              |
+| Linked (workspace package, `npm link`)         | Cookies (HttpOnly included), headers (`Authorization` too), what `getIdentity` returns and the island token. Turbopack shows all of these. Webpack on Next 16 showed the token only. `NF-037` once. |
+| Source maps disabled (`--disable-source-maps`) | Nothing in our tests, but Next may not recognise the library. The host logs `NF-037`.                                                                                                               |
+| Production build                               | Never.                                                                                                                                                                                              |
+
+- **Your own code is always "your code" to Next.** If `getIdentity` awaits a session lookup, Next sends that value to the browser in development.
+- **Start the dev server with `next dev -H 127.0.0.1`.** It listens on all interfaces by default. See [NF-037](../errors/dev-debug-info.md).
+
+## Trust
+
+The host trusts the remote's HTML and scripts. Configure only remotes you trust.
+
+- Envelopes come only from the remote's origin and `assetOrigins`. Other bootstrap and CSS URLs are refused (`NF-005`).
+- Redirects count as a failed fetch.
+- Stripping scripts from island HTML is cleanup, not a security boundary.
+- `aud` in an identity token scopes it to one remote's server, not to one island in the browser ([Identity](identity.mdx)).
+
+## Cost
+
+Measured on 2026-11-16 in production builds with two remotes on React 19.3.1, remotes on localhost. Data is in `test/e2e/data/measurements.json`.
+
+Sizes are **gzip on the wire**. Uncompressed, the same JavaScript is about three times larger (253 KB raw against 81 KB gzip). Turn on compression, or these numbers do not hold ([Deployment](deployment.mdx#turn-on-compression)).
+
+| Setup                                                       | JavaScript cost                                                 |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| One remote, no sharing (`share: false`)                     | About 75 KB per remote. Islands from one remote share it.       |
+| Remotes on the identical React, shared (production default) | 78 KB for the first remote, about 12 KB for each further remote |
+| Host provides its React (`provideHostReact()`)              | About 12 KB per remote. No remote downloads React.              |
+
+- **Sharing is exact-version and production-only.** It never includes the flight client. It works on every host, App Router included.
+- **`provideHostReact()`** comes from `@next-federation/react/share`, for a SPA or Pages Router host on the same stable React. App Router hosts never provide theirs.
+
+### Page weight
+
+Island HTML appears about three times in a host page: the DOM, the envelope and the RSC payload. Keep islands small.
+
+- The host warns in development above 100 KB per envelope (`NF-024`).
+- It refuses a body above 5 MiB (`islands.maxBytes`, or a remote's `maxBytes`) with `NF-007` and renders the fallback.
+- Without `cacheComponents`, Next's fetch cache buffers a public island's whole body before the limit applies. Cap response sizes at the remote or a proxy.
+
+### Server hop
+
+Each island costs a host-to-remote server hop: about 2 to 15 ms at the median and 9 to 22 ms at p95 for a co-located remote. A remote in another region adds its round trip.
+
+A cached public island costs no hop until its entry is revalidated. Use caching, `preloadIsland` and co-locate host and remote.
+
+## Timeouts and retries
+
+Each island fetch has a total budget of `timeoutMs` (default `3000`) across every attempt. A network error or a `502`, `503` or `504` is retried `retries` times (default `1`) while the budget lasts. A timeout (`NF-008`), another status or an invalid envelope is not retried.
+
+Set `islands.timeoutMs` and `islands.retries` for all remotes, or the same keys per remote. A failed island renders `errorFallback` (default: `fallback`) and the page answers `200`.
+
+## Other
+
+- A remote must run its server in the same React mode as its client bundle.
+- Remote assets need CORS headers. `nf-serve` and the island handler add them for the listed `hosts`.
+- A host cache that outlives a remote's build retention leads to `410 NF-023` and inert islands ([Caching](caching.mdx), [Deployment](deployment.mdx)).
+
+## Next steps
+
+<Cards>
+  <Card title="Architecture" href="../architecture.mdx">
+    How islands and remote components work.
+  </Card>
+  <Card title="Caching" href="caching.mdx">
+    Static pages, ISR and cacheComponents with islands.
+  </Card>
+  <Card title="Deployment" href="deployment.mdx">
+    Keep old builds online and turn on compression.
+  </Card>
+</Cards>

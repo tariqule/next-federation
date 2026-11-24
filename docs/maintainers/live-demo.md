@@ -2,7 +2,7 @@
 
 Maintainer note. Read it when you set up, change or rotate the keys of the live demo: the five apps
 in `examples/`, deployed to Vercel from `main`. The public page that lists them is
-[docs/live-demo.md](../live-demo.md) (`/docs/live-demo` on the docs site), linked from the README,
+[docs/live-demo.mdx](../live-demo.mdx) (`/docs/live-demo` on the docs site), linked from the README,
 the docs site home and [examples/README.md](../../examples/README.md#live-demo).
 
 The other projects' environment variables name each project's URL, so each project's domain must
@@ -120,7 +120,7 @@ when Vercel's `NEXT_PUBLIC_VERCEL_ENV` / `VITE_VERCEL_ENV` is set at build time,
 
 After that, every push to `main` redeploys all five. Order no longer matters much: a host keeps
 cached envelopes and descriptors for 60 s, and an island of the previous remote build goes inert
-until then ([Deploying an island remote on Vercel](../guides/deploying-a-remote-on-vercel.md#skew-choose-one)).
+until then ([Deploying an island remote on Vercel](../guides/deploying-a-remote-on-vercel.mdx#handle-skew-after-a-deploy)).
 
 ## Rotating keys
 

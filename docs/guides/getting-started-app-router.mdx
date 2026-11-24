@@ -1,0 +1,183 @@
+---
+title: 'Getting Started: App Router'
+description: Embed a remote app's UI in a Next.js App Router page with RemoteIsland.
+---
+
+Embed an island from a remote app in a Next.js App Router page. To build the remote, see [Writing an island remote](writing-an-island-remote.mdx).
+
+<Callout>
+  **Good to know:** Requires Next.js 16 or 15 (`>=15.5.28 <17`), React 19 and Node 20.9 or newer.
+  `cacheComponents` needs Next 16 ([Limits](limits.mdx#nextjs-15)). To share client components
+  instead, see [remote components](remote-components/overview.mdx#islands-or-remote-components).
+</Callout>
+
+## Add an island to a page
+
+<Steps>
+<Step>
+
+### Install the packages
+
+```npm
+npm install @next-federation/core @next-federation/next @next-federation/react server-only
+npm install --save-exact react@19.3.1 react-dom@19.3.1
+```
+
+Pin React to this exact version. Remove any caret that `create-next-app` left in `package.json`.
+
+</Step>
+<Step>
+
+### Wrap your Next config
+
+Without the wrapper, the adapter fails with [`NF-017`](../errors/next-config-wrapper-missing.md).
+
+```ts title="next.config.ts"
+import { withNextFederation } from '@next-federation/next/config'
+
+export default withNextFederation({
+  // your Next config, e.g. cacheComponents: true
+})
+```
+
+</Step>
+<Step>
+
+### Define the federation
+
+The config file imports nothing from Next.js, so `nf-types` can load it with plain Node.
+
+```ts title="lib/federation.config.ts"
+import { defineFederation } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: {
+    shop: { origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com' },
+  },
+})
+```
+
+The second file creates the island components.
+
+```ts title="lib/federation.ts"
+import 'server-only'
+import { createIslands } from '@next-federation/next/server'
+import { federation } from './federation.config'
+
+export { federation }
+export const { RemoteIsland, preloadIsland, revalidateIsland } =
+  createIslands(federation)
+```
+
+A remote is an origin, not a path. The host refuses redirects and fetches only from this origin.
+
+</Step>
+<Step>
+
+### Render the island
+
+```tsx title="app/page.tsx"
+import { RemoteIsland } from '../lib/federation'
+
+export default function Home() {
+  return (
+    <main>
+      <RemoteIsland
+        remote="shop"
+        island="ProductPanel"
+        props={{ sku: 'A1' }}
+        fallback={<p>loading product…</p>}
+        errorFallback={<p>product unavailable</p>}
+      />
+    </main>
+  )
+}
+```
+
+`props` must be plain JSON, or the island throws [`NF-009`](../errors/props-not-json.md). `errorFallback` shows when the remote fails, and the page still answers `200`.
+
+</Step>
+<Step>
+
+### Open the CSP
+
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.mdx) for a complete policy.
+
+</Step>
+</Steps>
+
+<Callout>
+  **Good to know:** Public islands are cached for `islands.revalidate` seconds.
+  Set `revalidate` on `RemoteIsland` to override it, or `dynamic` to fetch on
+  every request ([Caching](caching.mdx)).
+</Callout>
+
+## Show per-user content
+
+A private island renders for the signed-in user. After the [Identity](identity.mdx) setup, mark the island `private`.
+
+```tsx title="app/orders/page.tsx"
+<RemoteIsland
+  remote="shop"
+  island="MyOrders"
+  private
+  fallback={<p>loading orders…</p>}
+  errorFallback={<p>sign in to see your orders</p>}
+/>
+```
+
+Always set `errorFallback`. A visitor who is not signed in sees it. Without one, they see the loading text for good.
+
+## Put private content in the first HTML
+
+A private island streams: the first HTML holds `fallback`. Add `blocking` to render the island in the first HTML instead, for crawlers or layouts that must not shift.
+
+```tsx title="app/orders/page.tsx"
+// With cacheComponents only: Next refuses `instant` without it.
+export const instant = false
+```
+
+<Callout type="warn">
+  **Good to know:** `blocking` makes the whole route per-request and delays the
+  first byte until the remote answers. See [the
+  costs](caching-reference.mdx#blocking-the-island-in-the-first-html).
+</Callout>
+
+## Tune timeouts and retries
+
+Each fetch has a `timeoutMs` budget (default `3000`) and retries once. Set both for all remotes or per remote:
+
+```ts title="lib/federation.config.ts"
+export const federation = defineFederation({
+  islands: { timeoutMs: 5000, retries: 2 },
+  remotes: {
+    shop: { origin: 'https://shop.example.com' },
+    reports: {
+      origin: 'https://reports.example.com',
+      timeoutMs: 8000,
+      retries: 0,
+    },
+  },
+})
+```
+
+See [Timeouts and retries](limits.mdx#timeouts-and-retries).
+
+## Next steps
+
+<Cards>
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
+    Build the Vite remote that serves the island.
+  </Card>
+  <Card title="Identity" href="identity.mdx">
+    Private islands, signing keys and key rotation.
+  </Card>
+  <Card title="Caching" href="caching.mdx">
+    Static pages, ISR and cacheComponents with islands.
+  </Card>
+  <Card title="Limits" href="limits.mdx">
+    What islands cannot do and what they cost.
+  </Card>
+</Cards>
+
+Runnable example: [examples/next-app-router](../../examples/next-app-router).

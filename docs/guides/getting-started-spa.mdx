@@ -1,0 +1,142 @@
+---
+title: 'Getting Started: SPA'
+description: Embed a remote app's UI in a client-side React app (Vite) with fetchIsland and IslandMount.
+---
+
+Embed an island from a remote app in a client-side React app. The browser fetches envelopes (CORS) and mounts them with `IslandMount`. To build the remote, see [Writing an island remote](writing-an-island-remote.mdx).
+
+<Callout>
+  **Good to know:** Requires React 19 or 18.3, and Node 20.9 or newer. An island
+  boots as its own React root, so a React 18 host needs no other change. To
+  share client components instead, see [remote
+  components](remote-components/overview.mdx#islands-or-remote-components).
+</Callout>
+
+## Add an island to a page
+
+<Steps>
+<Step>
+
+### Install the packages
+
+```npm
+npm install @next-federation/core @next-federation/react react react-dom
+```
+
+</Step>
+<Step>
+
+### Define the federation
+
+```ts title="src/lib/islands.ts"
+import { defineFederation, fetchIsland } from '@next-federation/core'
+import type { IslandResult, IslandTarget } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: { shop: { origin: 'https://shop.example.com' } },
+})
+
+export function loadIsland(
+  target: IslandTarget,
+  island: string,
+  props?: unknown
+): Promise<IslandResult> {
+  return fetchIsland(target, { island, props, init: { cache: 'no-store' } })
+}
+```
+
+The remote must list your app's origin in `hosts`, or the browser request fails with [`NF-022`](../errors/origin-not-allowed.md).
+
+</Step>
+<Step>
+
+### Render the island
+
+```tsx title="src/Shop.tsx"
+import type { IslandEnvelope } from '@next-federation/protocol'
+import { IslandMount } from '@next-federation/react'
+import { useEffect, useState } from 'react'
+import { federation, loadIsland } from './lib/islands'
+
+export function Shop() {
+  const [envelope, setEnvelope] = useState<IslandEnvelope>()
+  useEffect(() => {
+    void loadIsland(federation.target('shop'), 'ProductPanel', {
+      sku: 'A1',
+    }).then((result) => result.ok && setEnvelope(result.envelope))
+  }, [])
+  return envelope ? <IslandMount envelope={envelope} /> : <p>loading…</p>
+}
+```
+
+`fetchIsland` returns `{ ok: true, envelope, meta }` or `{ ok: false, code, status?, meta }`. Render your own fallback on failure. Wrap islands in `FederationErrorBoundary` to catch render errors.
+
+</Step>
+<Step>
+
+### Open the CSP
+
+Add each remote origin to `script-src`, `connect-src` and `style-src`. See [CSP](csp.mdx) for a complete policy. `IslandMount` loads stylesheets itself.
+
+</Step>
+</Steps>
+
+<Callout>
+  **Good to know:** The island's HTML shows once the envelope arrives. Props are
+  plain JSON, and React context does not cross into an island
+  ([Limits](limits.mdx)). Per-user islands need a server to mint tokens.
+</Callout>
+
+## Tune timeouts and retries
+
+`timeoutMs` and `retries` work as in the [App Router](getting-started-app-router.mdx#tune-timeouts-and-retries). When the budget runs out, `fetchIsland` resolves with `{ ok: false, code }` ([`NF-007`](../errors/island-fetch-failed.md) or [`NF-008`](../errors/island-fetch-timeout.md)) instead of throwing.
+
+## Share the host's React
+
+Call `provideHostReact()` at module scope, before the first island loads:
+
+```tsx title="src/main.tsx"
+import { provideHostReact } from '@next-federation/react/share'
+
+provideHostReact()
+```
+
+Islands on the host's exact React version then use its copy. It does nothing in development, on a pre-release React, or on a React 18 host.
+
+## Route remote component links through your router
+
+Remote components use their own links. Pass your router's hooks once, at module scope, before the first remote component loads. React Router 7's hooks fit as they are:
+
+```tsx title="src/main.tsx"
+import { provideNavigation } from '@next-federation/react/components'
+import { useHref, useLocation, useNavigate } from 'react-router'
+
+provideNavigation({ useNavigate, useHref, useLocation })
+```
+
+Render remote components inside your router. A remote `<Link href="/orders">` then renders `href="/app/orders"` under `basename="/app"` and navigates on the client. Without `provideNavigation`, links do full page loads.
+
+<Callout>
+  **Good to know:** For another router, `useNavigate()` returns `(href, { replace?, scroll? }) => void`.
+  `useHref(href)` and `useLocation()` (`{ pathname, search }`) are optional. See
+  [Links that work in every host](remote-components/links.mdx).
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
+    Build the Vite remote that serves the island.
+  </Card>
+  <Card title="Remote components" href="remote-components/overview.mdx">
+    Share client components that run in your React tree.
+  </Card>
+  <Card title="CSP" href="csp.mdx">
+    A complete policy for the host.
+  </Card>
+  <Card title="Limits" href="limits.mdx">
+    What islands cannot do and what they cost.
+  </Card>
+</Cards>
+
+Runnable example: [examples/react-spa](../../examples/react-spa).

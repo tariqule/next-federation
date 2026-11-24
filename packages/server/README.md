@@ -1,51 +1,20 @@
 # @next-federation/server
 
-Server-side runtime for `next-federation` island remotes. It provides the framework-free island
-handler, the identity verifier, HTML cleanup, and `nf-serve`, a self-hosted server that keeps
-retired builds online. `nf-describe` describes a Module Federation remote as a remote components build.
+Server-side runtime for island remotes: the island handler, the identity verifier and HTML cleanup. It ships two CLIs: `nf-serve` (self-hosted server) and `nf-describe` (describes a Module Federation remote as a components build).
 
 ## Install
 
-```sh
-pnpm add @next-federation/server
+```npm
+npm install @next-federation/server
 ```
 
-## `stripIslandHtml(html)`
+## Usage
 
-Removes elements React would hoist or run from island SSR HTML, so the host's React never sees
-them: `<script>` (whole element), `<link>`, `<meta>`, `<base>`, `<title>` (outside `<svg>`) and
-`<style>` that has a `precedence` or `href` attribute. Everything else is returned byte for byte.
-
-```ts
-import { stripIslandHtml } from '@next-federation/server'
-
-const { html, removed } = stripIslandHtml(islandHtml)
-// removed: [{ tag: 'link', attrs: ' rel="modulepreload" href="/a.js"/' }]
-```
-
-React's form-replay script (emitted before a `<form>` whose `action` is a function) is removed too,
-and reported as `{ tag: 'script', attrs: '', known: 'react-form-replay' }`: only an exact copy of a
-React release's script, with no attributes, gets `known`.
-
-It is built on the parse5 HTML tokenizer (quoted attributes, comments, CDATA, raw-text elements), not a
-regular expression, so `<SCRIPT>`, a `>` inside an attribute value, `</script >` and scripts inside
-`<svg>` are handled. Escaped text such as `&lt;script&gt;` is never touched.
-
-This is cleanup of framework output, **not a security boundary**. Hosts only accept envelopes from
-allowlisted remotes. Do not use it to sanitize untrusted HTML.
-
-## `createIslandHandler(options)`
-
-A framework-free `(req: Request) => Promise<Response>` that serves island envelopes at
-`GET|POST <prefix>/_nf/island/<name>` and `GET <prefix>/_nf/health`. It works with any server that
-speaks the Web `Request`/`Response` API. The wire contract is in
-[docs/protocol/v1.md](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md); that document owns the status table.
-
-```ts
+```ts title="server.ts"
 import { createIslandHandler } from '@next-federation/server'
 
 export const handler = createIslandHandler({
-  name: 'shop', // this remote's name; also the token audience
+  name: 'shop',
   buildId: 'v1',
   mode: 'production',
   reactVersion: '19.2.0',
@@ -61,165 +30,149 @@ export const handler = createIslandHandler({
 })
 ```
 
-Options:
+## Entry points
 
-- `hosts` (required): the browser origins allowed to call this remote. Each entry must equal the
-  `Origin` header a browser sends: `http` or `https`, lowercase, no path, no trailing slash, no
-  credentials. `'*'` and any entry that could never match throw `NF-002` at creation (so a typo
-  cannot silently turn into 403s). A request whose `Origin` is not listed gets `403 NF-022` without
-  CORS headers.
-- `islands` (required): the islands this remote exposes. `private: true` requires a verified token.
-  Lookup is by own property, so `constructor` is just an unknown island (`404 NF-021`).
-- `issuers`: exact `iss` value to JWKS URL, passed to the identity verifier (see below) with
-  `audience: name`. Without it, any token is `401 NF-016` and private islands are unreachable.
-- `render(island, props, ctx)`: returns `{ html, rscPayload, css }`. `props` and `ctx.host`
-  (`{ basePath, locale }`) are decoded and validated for you; `ctx.idPlaceholder` is a stable token
-  (`nfid-<8 hex>-`, from name, island and buildId, not props) that must appear in `html` and
-  `rscPayload`. It runs inside `runWithIdentity`, so `getIdentity()` works. Throwing gives a bare
-  `500`; the error is logged, never sent. `css` URLs and `bootstrapUrl()` must be absolute (else 500).
-- `bootstrapUrl`: absolute URL of the island bootstrap module.
-- `maxAge` (default 60): `max-age` of public responses.
-- `maxBodyBytes` (default 65536): POST body limit, enforced on `Content-Length` and on bytes read
-  (`413`).
-- `dev`: logs `NF-018` for each tag `stripIslandHtml` removed from your HTML (except
-  `link[rel=modulepreload]` and React's own form-replay script). The HTML is always stripped, in
-  every mode.
-- `actions`: an `ActionRuntime` (`loadAction`, `decodeReply`, `encodeResult`) that serves Server
-  Actions on `<base>/_nf/action`, following the protocol's Server Actions table. The Vite plugin
-  supplies it; without it that path is a bare `404`. An export runs only if it is a server reference
-  whose `$$id` equals the `X-NF-Action` id (else `404 NF-031`). Actions run inside
-  `runWithIdentity`; `Cookie` is never read. A throwing action answers `200` with a rejected
-  `returnValue` (message redacted when `mode` is production) and logs `NF-033`.
-- `maxActionBodyBytes` (default 1048576): Server Action body limit (`413`).
-- `actionsRequireIdentity` (default false): every action needs a verified token (`401 NF-014`).
-  For one action, wrap it: `export const placeOrder = requireIdentity(async () => ...)`
-  (`requireIdentity` is exported here and from `@next-federation/island`). Both are checked before
-  the arguments are decoded.
+| Entry                          | Exports                                                                                                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@next-federation/server`      | `createIslandHandler`, `corsHeaders`, `stripIslandHtml`, `createIdentityVerifier`, `getIdentity`, `runWithIdentity`, `requireIdentity`, `REQUIRES_IDENTITY` |
+| `@next-federation/server/node` | `serveBuilds`, `planRetention`, `DEFAULT_RETENTION`, `toNodeListener`, `installedVersion`, components build helpers                                         |
 
-Order of evaluation: health, `OPTIONS` (always `204`), `Origin` check, then path, method, size,
-decoding (`400 NF-004` for malformed `p`/`h`/body), island lookup, identity (`401`/`503`), render.
+## API
 
-Caching and CORS: every response carries `Vary: Origin, Authorization`, and every response to an
-allowed `Origin` carries the CORS headers, errors included (allow-headers
-`Authorization, Content-Type, X-NF-Action`, max-age 600; never `*`). Success without a token is
-`Cache-Control: public, max-age=<maxAge>`; any request that presented a token gets
-`private, no-store`; all errors are `no-store`.
+### createIslandHandler(options)
 
-`corsHeaders(req, hosts)` is the same CORS logic as a plain function, for servers that need to
-add the headers to their own responses.
+Returns a `(req: Request) => Promise<Response>` serving `GET|POST <prefix>/_nf/island/<name>` and `GET <prefix>/_nf/health`. The [island protocol v1](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md) owns the wire contract and the status table.
 
-## Identity verification (remote side of per-user islands)
+| Option                   | Type                                                         | Default   | Description                                                                     |
+| ------------------------ | ------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------- |
+| `name`                   | `string`                                                     | required  | Remote name and token audience.                                                 |
+| `buildId`                | `string`                                                     | required  | The build id.                                                                   |
+| `mode`                   | `'development' \| 'production'`                              | required  | The React mode of the build.                                                    |
+| `reactVersion`           | `string`                                                     | required  | The island build's React version.                                               |
+| `hosts`                  | `string[]`                                                   | required  | Allowed origins. `'*'` throws `NF-002`; others `403 NF-022`.                    |
+| `islands`                | `Record<string, { private?: boolean }>`                      | required  | Exposed islands. `private: true` needs a verified token. Unknown: `404 NF-021`. |
+| `render`                 | `(island, props, ctx) => Promise<{ html, rscPayload, css }>` | required  | Renders one island (below).                                                     |
+| `bootstrapUrl`           | `() => string \| Promise<string>`                            | required  | Absolute URL of the island bootstrap module.                                    |
+| `issuers`                | `Record<string, string>`                                     | none      | Issuer to JWKS URL map. Without it, any token is `401 NF-016`.                  |
+| `allowInsecureHttp`      | `boolean`                                                    | `false`   | Accept plain-`http` issuers outside loopback and development.                   |
+| `maxAge`                 | `number`                                                     | `60`      | `max-age` of public responses, in seconds.                                      |
+| `maxBodyBytes`           | `number`                                                     | `65536`   | `POST` body limit (`413`).                                                      |
+| `dev`                    | `boolean`                                                    | none      | Log `NF-018` per stripped tag.                                                  |
+| `actions`                | `ActionRuntime`                                              | none      | Serves Server Actions. The Vite plugin supplies it.                             |
+| `maxActionBodyBytes`     | `number`                                                     | `1048576` | Server Action body limit (`413`).                                               |
+| `actionsRequireIdentity` | `boolean`                                                    | `false`   | Every action needs a verified token (`401 NF-014`).                             |
+
+`render` gets `ctx` with `idPlaceholder` (must appear in `html` and `rscPayload`) and `host` (`{ basePath, locale }`). `css` URLs must be absolute. A throw is a bare `500`.
+
+Every response carries `Vary: Origin, Authorization`. A success without a token is `public, max-age=<maxAge>`, one with a token is `private, no-store`, and every error is `no-store`.
+
+### corsHeaders(req, hosts)
+
+The handler's CORS logic as a plain function.
+
+### stripIslandHtml(html)
+
+Removes what React would hoist or run from island SSR HTML (`<script>`, `<link>`, `<meta>`, `<base>`, `<title>`, hoistable `<style>`). Returns `{ html, removed }`. It is not a sanitizer.
 
 ```ts
-import { createIdentityVerifier, getIdentity, runWithIdentity } from '@next-federation/server'
+const { html, removed } = stripIslandHtml(islandHtml)
+```
 
+### createIdentityVerifier(options)
+
+Returns `(req: Request) => Promise<IdentityOutcome>`. Throws `NF-002` for an invalid issuer or JWKS URL.
+
+| Option              | Type                     | Default  | Description                                                   |
+| ------------------- | ------------------------ | -------- | ------------------------------------------------------------- |
+| `audience`          | `string`                 | required | This remote's name.                                           |
+| `issuers`           | `Record<string, string>` | required | Exact `iss` to JWKS URL. From configuration only.             |
+| `maxAgeSeconds`     | `number`                 | `900`    | Reject tokens whose `iat` is older than this.                 |
+| `allowInsecureHttp` | `boolean`                | `false`  | Accept plain-`http` issuers outside loopback and development. |
+
+```ts
 const verify = createIdentityVerifier({
-  audience: 'shop', // this remote's name, as the host configured it
+  audience: 'shop',
   issuers: { 'https://host.example.com': 'https://host.example.com/.well-known/jwks.json' },
 })
 
 const outcome = await verify(request)
 // { kind: 'anonymous' } | { kind: 'verified', identity } | { kind: 'invalid', code } | { kind: 'unavailable' }
 if (outcome.kind === 'verified') {
-  await runWithIdentity(outcome.identity, () => render()) // getIdentity() inside returns it
+  await runWithIdentity(outcome.identity, () => render())
 }
 ```
 
-- **Issuer map.** `issuers` maps the exact `iss` value to its JWKS URL and comes from your
-  configuration only. The token's unverified `iss` is just a lookup key; no URL is ever built from
-  token content. Every issuer and JWKS URL is validated at creation (absolute `https`, else
-  `NF-002` is thrown; plain `http` only for `localhost`, `127.0.0.0/8` and `[::1]`, when `NODE_ENV`
-  is `development` or `test`, or with `allowInsecureHttp: true`, which warns once). Tokens are ES256 only and must carry `exp`, `iat` and `sub`. `iat` may not be
-  more than 30 s in the future or older than `maxAgeSeconds` (default 900, versus the 300 s default
-  token lifetime; the host's `ttlSeconds` is capped at 900). Clock skew tolerance is 30 s.
-- **Outcomes.** No `Authorization` header: `anonymous`. Malformed, expired, badly signed or
-  wrong-audience token: `invalid` with `NF-014` (respond 401). Issuer not in the map: `invalid` with
-  `NF-016` (401, no network request is made). JWKS unreachable, timed out (2 s) or answering badly:
-  `unavailable` (`NF-015`, respond 503: an outage is not an invalid token). Outcomes never contain
-  the token.
-- **`getIdentity()`** returns the identity set by `runWithIdentity`, or `null` outside one or when
-  anonymous. The store lives in a single `Symbol.for('next-federation.identity')` slot on
-  `globalThis` so duplicate copies of this package in one server bundle share it.
+| Outcome       | When                                                      | Respond |
+| ------------- | --------------------------------------------------------- | ------- |
+| `anonymous`   | No `Authorization` header.                                | render  |
+| `verified`    | A valid token.                                            | render  |
+| `invalid`     | Bad token (`NF-014`) or issuer not in the map (`NF-016`). | `401`   |
+| `unavailable` | JWKS unreachable, timed out (2 s) or bad (`NF-015`).      | `503`   |
 
-### Key rotation
+Tokens are ES256 and need `exp`, `iat` and `sub`. Skew tolerance is 30 s; JWKS is cached up to 10 minutes. See [Rotate a signing key](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.mdx#rotate-a-signing-key) for key rotation.
 
-JWKS responses are cached for up to 10 minutes (jose default), and an unknown `kid` triggers at most
-one refetch per 30 s (cooldown); during that cooldown tokens signed with a new key are rejected
-(`NF-014`). If the JWKS endpoint is down, the cached key set keeps being used, so already-published
-keys keep verifying (and a revoked key keeps verifying until the cache expires). To rotate:
+### getIdentity() and runWithIdentity(identity, fn)
 
-1. Add the new key as a **non-first** entry of the host's `identity.signingKeys` so it is published
-   but not yet used for signing.
-2. Wait at least the JWKS cache max age (10 minutes).
-3. Move the new key first, so it signs; keep the old key published until its last token expired.
+`runWithIdentity` exposes `identity` to `fn`. `getIdentity()` returns it, or `null` when outside one or anonymous.
 
-## `@next-federation/server/node` and `nf-serve`
+### requireIdentity(fn)
 
-A self-hosted production server that keeps every retained build of a remote online, so pages and
-island responses cached before a deploy still find their build-pinned assets and actions.
+Wraps a Server Action so a call without a verified token is refused (`401 NF-014`). Also exported from `@next-federation/island`.
+
+```ts
+export const placeOrder = requireIdentity(async () => {
+  // ...
+})
+```
+
+### serveBuilds(options)
+
+From `@next-federation/server/node`. A self-hosted production server that keeps retained builds of a remote online. It returns `{ live, retired, current, port, close() }`. Operator rules: [Self-hosted skew](https://github.com/tariqule/next-federation/blob/main/docs/guides/self-hosted-skew.mdx).
+
+```ts
+import { serveBuilds } from '@next-federation/server/node'
+
+const served = await serveBuilds({ dir: './builds', port: 4100 })
+```
+
+| Option                  | Type                                  | Default              | Description                                           |
+| ----------------------- | ------------------------------------- | -------------------- | ----------------------------------------------------- |
+| `dir`                   | `string`                              | required             | Builds folder: `<dir>/<buildId>/{client,rsc,ssr}`.    |
+| `port`                  | `number`                              | required             | Port to bind. `0` picks a free one.                   |
+| `host`                  | `string`                              | none                 | Host to bind. `nf-serve` defaults to `127.0.0.1`.     |
+| `current`               | `string`                              | the newest build     | The current build id.                                 |
+| `retention`             | `{ maxBuilds?, minAgeMs? }`           | `3` builds, 24 hours | Which builds stay live.                               |
+| `maxBodyBytes`          | `number`                              | the protocol limit   | Request body cap while proxying.                      |
+| `maxActionBodyBytes`    | `number`                              | 8 MiB                | Body cap for `/_nf/action`.                           |
+| `upstreamTimeoutMs`     | `number`                              | `30000`              | Wait for a build's response headers. Exceeded: `504`. |
+| `compressionCacheBytes` | `number`                              | 64 MiB               | In-memory cache cap for brotli and gzip files.        |
+| `onExit`                | `({ buildId, code, signal }) => void` | none                 | On build process death. That build answers `502`.     |
+
+- Retired builds answer `410 {"error":"NF-023"}`.
+- An affected `react-server-dom-webpack` build is refused (`NF-041`).
+- A `kind: "components"` build is static and serves `/_nf/components.json`.
+- Text files of at least 1 KB are sent brotli or gzip encoded.
+
+### planRetention(builds, now, retention, current?)
+
+Returns `{ current, live, retired }` for `{ buildId, builtAt }` entries. Throws `NF-002` for no builds. `DEFAULT_RETENTION` is `{ maxBuilds: 3, minAgeMs: 86400000 }`.
+
+### toNodeListener(handler)
+
+Adapts a Web handler to a Node listener.
+
+### nf-serve
+
+The CLI for `serveBuilds`. Exits non-zero when a build dies, so use a supervisor.
 
 ```bash
 nf-serve --dir ./builds --port 4100 [--host 127.0.0.1] [--current <buildId>] \
   [--max-builds 3] [--min-age-hours 24]
 ```
 
-```ts
-import { serveBuilds, planRetention, toNodeListener } from '@next-federation/server/node'
+### nf-describe
 
-const served = await serveBuilds({ dir: './builds', port: 4100 })
-// served.live, served.retired, served.current, served.port; await served.close()
-```
-
-- Layout: `<dir>/<buildId>/{client,rsc,ssr}` plus `nf-build.json` (`{ buildId, builtAt }`, and `reactServerDomWebpack` for an island build).
-- Routes: `/b/<build>/assets/*` (immutable, CORS `*`, traversal-safe), `/b/<build>/_nf/*` (that build's
-  handler), `/_nf/*` (the current build).
-- One child process per live build, each with `NODE_ENV=production`; the router streams request
-  bodies (capped at the protocol body limit; `/_nf/action` bodies at `maxActionBodyBytes`, default
-  8 MiB, above the build's own 1 MiB action limit so the build's `413` is what callers normally see)
-  and never forwards hop-by-hop headers. A build that does not send response headers within
-  `upstreamTimeoutMs` (default 30000) answers `504`. The router's own `413`, `502` and `504` carry
-  `Access-Control-Allow-Origin: *` and empty bodies. Above the router's ceiling the upload is cut
-  off, and a browser may report a network error instead of the `413`; keep the build limit below
-  the ceiling.
-- `toNodeListener` reads the request body only as the handler reads it. Whatever the handler
-  leaves unread (an early `413`, a cancelled read) is drained once the response is sent, as Node does
-  for a body no one reads, so the connection stays usable for the next request.
-- Retention: the current build (`--current`, or the newest) is always live; so are the newest
-  `--max-builds` (3) and any build younger than `--min-age-hours` (24). Others are retired and answer
-  `410 {"error":"NF-023"}` (with `Access-Control-Allow-Origin: *`).
-- Security advisories: `nf-build.json` records the `react-server-dom-webpack` versions an island
-  build used (`reactServerDomWebpack`, written by `@next-federation/vite`). A build whose versions are
-  affected by GHSA-xqc2-xf4c-x3h3, or experimental, is refused (`NF-041`): the current build stops
-  `serveBuilds` from starting, an older one is retired (`410 NF-023`). A malformed or empty field is
-  refused the same way. Builds without the field are served and logged once as an `NF-041` error.
-  After upgrading, remove every build made with an affected version
-  ([NF-041](../../docs/errors/vulnerable-react-server-dom.md)).
-- Compression: text files of at least 1 KB (`.js`, `.mjs`, `.cjs`, `.css`, `.json`, `.svg`, `.html`,
-  `.map`, `.txt`), descriptors and public JSON envelopes are sent brotli- or gzip-encoded per
-  `Accept-Encoding` (q-values honoured), with `Vary: Accept-Encoding`; cache and CORS headers are
-  unchanged. Compressed files are cached in memory per path, mtime and size (`compressionCacheBytes`,
-  default 64 MiB). Range and `HEAD` requests, images and fonts, bodies the build encoded itself,
-  Server Action results and envelopes of requests that carried a token are sent as they are.
-- Fail fast: if a build process dies after startup, the failure is logged (NF-012) and `serveBuilds`
-  calls its `onExit({ buildId, code, signal })` option. The `nf-serve` CLI then exits non-zero, so run
-  it under a supervisor (Docker, systemd, Kubernetes) that restarts it.
-
-- Remote components builds (`nf-build.json` with `kind: "components"`, written by
-  `nextFederationComponents`) are static: no process; `/b/<build>/*` serves the files of the
-  build's `client/` folder (browser and server chunks, immutable, CORS `*`), except build
-  bookkeeping: dot folders and files (`.vite/manifest.json`, `.vite/mf-preload.json`) and
-  `mf-stats.json` answer `404`;
-  `/b/<build>/nf-components.json` its descriptor, `/_nf/components.json` the current build's
-  descriptor (`no-store`), and `/_nf/health` answers itself. Retention and `410` apply unchanged.
-
-See [docs/guides/self-hosted-skew.md](https://github.com/tariqule/next-federation/blob/main/docs/guides/self-hosted-skew.md) for the operator rule.
-
-## `nf-describe`
-
-Turns any built Module Federation 2.0 remote (Rspack, webpack, Vite) into a remote components build
-in nf-serve's layout: it records the server entry, hashes the server graph and writes
-`nf-components.json` (signed when `NF_COMPONENTS_SIGNING_KEY` holds a private EC P-256 JWK) and
-`nf-build.json`.
+Writes `nf-components.json` and `nf-build.json` for a built Module Federation 2.0 remote. See [Rspack or webpack remote](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/rspack-remote.mdx).
 
 ```bash
 nf-describe --dir dist/<buildId> [--ssr-entry server/remoteEntry.js | --no-ssr] \
@@ -227,54 +180,21 @@ nf-describe --dir dist/<buildId> [--ssr-entry server/remoteEntry.js | --no-ssr] 
 nf-describe --dir dist/<buildId> --verify [--public-key <JWK JSON | JWK file>]...
 ```
 
-- `--ssr-entry` or `--no-ssr` is needed only when the build's `client/mf-manifest.json` names no
-  server entry (`metaData.ssrRemoteEntry`), as an Rspack or webpack build does not. A Vite build
-  made with `@next-federation/vite` already names one, so `--dir` alone re-describes it. Without
-  either flag on a manifest that names none, the command fails (`NF-002`).
-- **Describing again without `NF_COMPONENTS_SIGNING_KEY` drops an existing signature.** The command
-  prints `described (unsigned; ...)` and exits 0. It warns only when `NODE_ENV=production`. Set the
-  key every time you describe a build you mean to ship, and run `--verify --public-key` afterwards:
-  hosts render an unsigned build in the browser only (`NF-028`).
-- Run the installed binary (`node_modules/.bin/nf-describe`, or a `package.json` script). In one
-  test, `npx nf-describe --dir ... --verify --public-key ...` lost its flags to npm, so the command
-  re-described the build unsigned instead of verifying it. Which npm version caused it is not
-  known. Check the output: a verify run prints `the descriptor and every server file match`, a
-  describe run prints `described`.
+| Flag                       | Description                                                                 |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `--dir`                    | The build folder. Its Module Federation output is in `client/`.             |
+| `--ssr-entry`, `--no-ssr`  | Needed when `client/mf-manifest.json` names no `ssrRemoteEntry` (`NF-002`). |
+| `--types`                  | Index and sign `client/@mf-types/`. Fails without the folder (`NF-002`).    |
+| `--verify`, `--public-key` | Check a described build (`NF-027` otherwise).                               |
 
-- `--types` (off by default) indexes and signs the declarations in `client/@mf-types/` for hosts'
-  `nf-types`; without it the folder is never signed. `--types` on a build without the folder fails
-  (`NF-002`).
-- `--verify` checks a described build before it ships (`NF-027` otherwise). It checks a types
-  index only when the descriptor signs one, so an older build with an unsigned `@mf-types/` folder
-  still verifies.
+The descriptor is signed when `NF_COMPONENTS_SIGNING_KEY` holds a private EC P-256 JWK. Describing without it drops an existing signature and still exits 0, and hosts render an unsigned build in the browser only (`NF-028`). Run the installed binary, not `npx`.
 
-See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md) for the full workflow.
-
-## API
-
-| Export                                                    | Entry                          | Purpose                                                    |
-| --------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------- |
-| `createIslandHandler(options)`, `corsHeaders(req, hosts)` | `@next-federation/server`      | Framework-free island endpoint and its CORS logic.         |
-| `stripIslandHtml(html)`                                   | `@next-federation/server`      | Remove hoistable and script tags from island HTML.         |
-| `createIdentityVerifier(options)`                         | `@next-federation/server`      | Verify host tokens against an issuer map (`NF-014/15/16`). |
-| `getIdentity()`, `runWithIdentity(identity, fn)`          | `@next-federation/server`      | Read or set the verified identity for one render.          |
-| `requireIdentity(fn)`                                     | `@next-federation/server`      | Refuse a Server Action call without a verified token.      |
-| `serveBuilds`, `planRetention`, `toNodeListener`          | `@next-federation/server/node` | Self-hosted multi-build server (also the `nf-serve` CLI).  |
-
-## Constraints
-
-- `hosts` entries are exact origins; `'*'` throws `NF-002`. Retired builds answer `410 NF-023` with CORS `*`.
-- `nf-serve` keeps the newest 3 builds or any younger than 24 hours.
-- The token `aud` is this remote's `name`; tokens are ES256 only.
-- Stripping island HTML is cleanup, not a security boundary.
+`describeComponentsBuild`, `verifyComponentsBuild`, `runDescribeCli` and the descriptor helpers (`createDescriptorFile`, `collectServerIntegrity`, `collectBrowserAssets`, `collectTypesIndex`, `writeTypesIndex`) are exported from `@next-federation/server/node`.
 
 ## Learn more
 
-- [Writing an island remote](https://github.com/tariqule/next-federation/blob/main/docs/guides/writing-an-island-remote.md)
-- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.md)
-- [Deployment](https://github.com/tariqule/next-federation/blob/main/docs/guides/deployment.md)
-- [Self-hosted skew](https://github.com/tariqule/next-federation/blob/main/docs/guides/self-hosted-skew.md)
-- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
+- [Writing an island remote](https://github.com/tariqule/next-federation/blob/main/docs/guides/writing-an-island-remote.mdx)
+- [Identity](https://github.com/tariqule/next-federation/blob/main/docs/guides/identity.mdx)
 - [Island protocol v1](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md)
 
 License: MIT

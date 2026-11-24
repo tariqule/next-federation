@@ -1,0 +1,54 @@
+---
+title: Error codes
+description: Every next-federation error carries a code, NF-001 and up, and links to a page that says what happened, why and how to fix it.
+---
+
+Every error message from `next-federation` carries a code and links to a page for it. Each page says
+what happened, why, and how to fix it.
+
+<Callout>
+  **Good to know:** The code is also on the error object: `error.code` is
+  `NF-001` and `error.docs` is the page URL.
+</Callout>
+
+- [NF-001](unknown-remote.md): Unknown remote
+- [NF-002](invalid-config.md): Invalid federation configuration
+- [NF-003](unsupported-protocol-version.md): Unsupported island protocol version
+- [NF-004](invalid-envelope.md): Invalid island envelope
+- [NF-005](envelope-url-not-allowed.md): Envelope URL is outside the remote's origins
+- [NF-006](react-mode-mismatch.md): Island server and client bundle run different React modes
+- [NF-007](island-fetch-failed.md): Island fetch failed
+- [NF-008](island-fetch-timeout.md): Island fetch timed out
+- [NF-009](props-not-json.md): Island props are not plain JSON
+- [NF-010](build-mismatch.md): Envelope was rendered by a different build than this bootstrap
+- [NF-011](bootstrap-load-failed.md): Island bootstrap failed to load
+- [NF-012](island-runtime-error.md): Uncaught error inside an island
+- [NF-013](identity-not-configured.md): Private island used without identity configuration
+- [NF-014](invalid-token.md): Identity token rejected
+- [NF-015](jwks-unavailable.md): Issuer JWKS could not be fetched
+- [NF-016](issuer-not-allowed.md): Token issuer is not in the remote's issuer map
+- [NF-017](next-config-wrapper-missing.md): `withNextFederation` is missing from next.config
+- [NF-018](island-html-stripped.md): Island rendered a script or hoistable element
+- [NF-019](server-actions-unsupported.md): This remote build does not support island Server Actions
+- [NF-020](relative-base.md): Remote `base` must be an absolute URL
+- [NF-021](unknown-island.md): Unknown island
+- [NF-022](origin-not-allowed.md): Request origin is not an allowed host
+- [NF-023](build-retired.md): Remote build has been retired
+- [NF-024](envelope-too-large.md): Island envelope exceeds the size warning threshold
+- [NF-025](unsupported-plugin-rsc.md): Unsupported `@vitejs/plugin-rsc` version
+- [NF-026](unsupported-module-federation-vite.md): Unsupported `@module-federation/vite` version
+- [NF-027](component-integrity-failed.md): Remote component server code failed its integrity check
+- [NF-028](component-browser-only.md): Remote component rendered in the browser only
+- [NF-029](component-load-failed.md): Remote component failed to load
+- [NF-030](component-require-refused.md): Remote component server code required a module the host does not provide
+- [NF-031](action-not-found.md): Server Action not found
+- [NF-032](action-request-invalid.md): Server Action request is invalid
+- [NF-033](action-failed.md): Server Action threw an error
+- [NF-034](server-action-imported-by-client.md): A client module imports a 'use server' file
+- [NF-035](raw-form-action.md): Island form uses a raw `action` instead of `<Form>`
+- [NF-036](component-shared-unavailable.md): Host does not provide a shared module version the remote component accepts
+- [NF-037](dev-debug-info.md): Under `next dev`, private island values may reach the browser
+- [NF-038](action-request-failed.md): Server Action request failed
+- [NF-039](component-deferred.md): Remote component deferred to request time
+- [NF-040](component-render-failed.md): Remote component threw while rendering
+- [NF-041](vulnerable-react-server-dom.md): Installed `react-server-dom-webpack` has a known security advisory

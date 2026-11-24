@@ -13,7 +13,7 @@ import { devDebugInfoCause } from './dev-debug-info.ts'
 import type { DevDebugInfoCause } from './dev-debug-info.ts'
 
 const LIMITS =
-  'https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md#next-dev-and-linked-installs'
+  'https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.mdx#next-dev-and-linked-installs'
 
 const VALUES =
   "the request's cookies and headers, your getIdentity result, the island token"

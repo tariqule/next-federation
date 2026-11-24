@@ -1,0 +1,165 @@
+---
+title: 'Configure the Host for Remote Components'
+description: Add a remote to a Next.js or SPA host and render its components with createRemoteComponent.
+---
+
+Render a remote's components in your app: configure the remote, bind each exposed component and pass its descriptor.
+
+## Configure the remote
+
+Put the federation in a file with no Next.js imports, so `nf-types` can load it. `lib/federation.ts` re-exports it ([Getting started](../getting-started-app-router.mdx#define-the-federation)).
+
+```ts title="lib/federation.config.ts"
+import { defineFederation } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: {
+    shop: {
+      origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com',
+      components: {
+        // The public JWK from "Generate a signing key":
+        ssr: {
+          publicKeys: [JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)],
+        },
+        // descriptor: 'https://shop.example.com/_nf/components.json' (default)
+        // revalidate: 60   seconds the descriptor is cached
+        // maxBuilds: 5     builds kept loaded per router layer
+      },
+    },
+  },
+})
+```
+
+Bind the exposed component in a `'use client'` module. Import `createRemoteComponent` from the entry for your router: `@next-federation/next/components` (App Router), `@next-federation/next/pages/components` (Pages Router) or `@next-federation/react/components` (SPA).
+
+```tsx title="lib/cart.tsx"
+'use client'
+import * as HostContext from '@acme/host-context'
+import { createRemoteComponent } from '@next-federation/next/components'
+
+export const Cart = createRemoteComponent<{ items: number }>({
+  expose: './Cart',
+  // Modules this host provides to the remote:
+  shared: { '@acme/host-context': { version: '1.0.0', module: HostContext } },
+  fallback: <p>Loading the cart…</p>,
+  errorFallback: <p>Cart unavailable</p>,
+})
+```
+
+`fallback` shows while the component loads, and in the server HTML of a component the browser renders. `errorFallback` shows when the remote is unreachable, its module fails to load, a shared module is missing (`NF-036`) or it throws (`NF-040`). Without `errorFallback`, `fallback` covers both. Both can also be props.
+
+## Render in the App Router
+
+```tsx title="app/page.tsx"
+import { getComponentDescriptor } from '@next-federation/next/server'
+import { federation } from '@/lib/federation'
+import { Cart } from '@/lib/cart'
+
+export default async function Page() {
+  const descriptor = await getComponentDescriptor(federation, 'shop')
+  return <Cart descriptor={descriptor} items={3} />
+}
+```
+
+The descriptor pins the build for this render, so the browser loads that exact build even if a deploy lands in between. Pass only the value of `getComponentDescriptor`.
+
+With `cacheComponents`, you choose between two shapes:
+
+- **Cached** (default): the descriptor is read through `'use cache'`, so the page can prerender static with the remote's markup. Wrap the component in `<Suspense>`.
+- **Per request:** `getComponentDescriptor(federation, 'shop', { dynamic: true })` inside `<Suspense>` gives a partial prerender. The shell is static and the component streams in.
+
+Without `cacheComponents`, the descriptor is fetched with `next: { revalidate }`. `dynamic: true` uses `no-store`.
+
+## Render in the Pages Router
+
+```tsx title="pages/cart.tsx"
+import type { GetServerSideProps } from 'next'
+import { getComponentDescriptor } from '@next-federation/next/pages/server'
+import type { RemoteComponentDescriptor } from '@next-federation/next/pages/server'
+import { federation } from '../lib/federation.config'
+import { Cart } from '../lib/cart'
+
+type Props = { descriptor: RemoteComponentDescriptor | null }
+
+export const getServerSideProps: GetServerSideProps<Props> = async () => ({
+  props: { descriptor: await getComponentDescriptor(federation, 'shop') },
+})
+
+export default function Page({ descriptor }: Props) {
+  return <Cart descriptor={descriptor} items={3} />
+}
+```
+
+`getStaticProps` works the same way. `getServerSideProps` fetches the descriptor on every request. Call `Cart.preload(descriptor)` to load the module ahead of rendering.
+
+<Callout>
+  **Good to know:** A host with both `app/` and `pages/` routes uses each
+  router's own entry on its own routes. Links between the routers reload the
+  page ([Mixed-router hosts](security.mdx#mixed-router-hosts)).
+</Callout>
+
+## Render in an SPA
+
+```tsx title="main.tsx"
+import { fetchDescriptorInBrowser } from '@next-federation/react/components'
+
+const descriptor = await fetchDescriptorInBrowser(
+  'https://shop.example.com/_nf/components.json'
+)
+root.render(<Cart descriptor={descriptor} items={3} />)
+```
+
+An SPA never runs remote server code, so the descriptor always has `ssr: null`.
+
+## Type the props with nf-types
+
+Turn on `types: true` in the remote (Rspack and webpack: `nf-describe --types`), then download its declarations into the host. Read [what types make public](types.mdx#what-becomes-public) first.
+
+```sh
+node --env-file=.env.local node_modules/@next-federation/next/dist/types/cli.js \
+  --config lib/federation.config.ts
+```
+
+This is `nf-types --config lib/federation.config.ts` with the environment loaded. Add `--remote shop` (repeatable) to limit remotes and `--out` to change the folder. Add it to `package.json` as `"types"`, and run it before `tsc` and `next build`.
+
+- **Plain Node loads the config.** It must not import `next/*`, `server-only` or `@/` aliases.
+- **`nf-types` does not read `.env.local`.** Load it with `--env-file`, or `JSON.parse(process.env.NF_COMPONENTS_PUBLIC_KEY!)` fails.
+- **A `.mjs` config avoids the type-stripping requirement** and the `MODULE_TYPELESS_PACKAGE_JSON` warning for `.ts` files.
+
+Then use `RemoteProps`:
+
+```tsx
+'use client'
+import { createRemoteComponent } from '@next-federation/next/components'
+import type { RemoteProps } from '@next-federation/next/components'
+
+export const Cart = createRemoteComponent<RemoteProps<'shop', './Cart'>>({
+  expose: './Cart',
+})
+
+// <Cart descriptor={descriptor} items="3" /> is now a type error.
+```
+
+Without a `next-federation-types/index.d.ts`, `RemoteProps` is `never` and `tsc` reports `TS2344` ("does not satisfy the constraint 'never'"). Run `nf-types` to fix it. On Next 16, run `next typegen` before `tsc` too. `RemoteProps` is optional: `createRemoteComponent<{ items: number }>` types the props by hand.
+
+## Share app state with a remote
+
+Put the context the host and its remotes both use in a small shared package, for example `@acme/app-state`. The host owns the provider. The remote lists the package in `shared` without a fallback, so it reads the host's instance ([Sharing modules](sharing-modules.mdx)).
+
+Raise the package's major version for a breaking change. Remotes built against it then render their fallback (`NF-036`) on hosts that have not upgraded.
+
+Remote components keep `next/link` and `next/navigation`. The build rewires them to the host's router ([Links](links.mdx)).
+
+## Next steps
+
+<Cards>
+  <Card title="Sharing modules" href="sharing-modules.mdx">
+    What the host provides to the remote.
+  </Card>
+  <Card title="Links that work in every host" href="links.mdx">
+    Navigate through the host's router.
+  </Card>
+  <Card title="Integrity" href="security.mdx#integrity-server-rendering">
+    How the host decides to server-render a build.
+  </Card>
+</Cards>

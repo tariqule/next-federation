@@ -1,17 +1,15 @@
 # NF-012: Uncaught error inside an island
 
-## What happened
+## Why This Error Occurred
 
-Code running inside an island threw an error that nothing caught.
+An island's own code threw during render or in an effect and nothing caught it. The island is a separate React root, so the host's error boundaries do not see it. The host stays up and shows the island's `errorFallback`.
 
-## Why
+## Possible Ways to Fix It
 
-The island's own component code failed during render or in an effect. The host stays up; only the island is affected. The island is a separate React root, so the host's error boundaries do not see the error: the mount reports it and shows `errorFallback`.
+- Fix the error in the remote.
+- Pass `errorFallback` to the island in the host to choose what shows while it is broken.
 
-`nf-serve` logs `NF-012` too when the process of a live island build exits after startup. See [Deployment](../guides/deployment.md#self-hosted-nf-serve).
+## Useful Links
 
-## How to fix
-
-Fix the error in the remote. Pass `errorFallback` to the island in the host if you want a specific fallback while it is broken.
-
-See [Limits](../guides/limits.md).
+- [Limits](../guides/limits.mdx)
+- [Deployment: self-hosted nf-serve](../guides/deployment.mdx#self-hosted-with-nf-serve)

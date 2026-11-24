@@ -31,5 +31,5 @@ The islands need the storefront's public keys (its JWKS route), so run the store
 sign in on <http://localhost:13410/store/en/account>, change your name and cancel an order. Turn on
 **How is this page built?**: `Profile` and `Orders` are `blocking`, in the first HTML.
 
-Guides: [Server Actions in islands](../../../docs/guides/server-actions.md),
-[Identity](../../../docs/guides/identity.md).
+Guides: [Server Actions in islands](../../../docs/guides/server-actions.mdx),
+[Identity](../../../docs/guides/identity.mdx).

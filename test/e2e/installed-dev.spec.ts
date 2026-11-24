@@ -9,7 +9,7 @@
 // private island put no identity token, cookie or request header into it or
 // into any HTTP response. Next's dev tooling leaves code under node_modules
 // out of React's debug info, as long as Node's source maps are on; a
-// workspace-linked library is not left out (NF-037, docs/guides/limits.md),
+// workspace-linked library is not left out (NF-037, docs/guides/limits.mdx),
 // which is why the linked fixtures in next15.spec.ts skip this check under
 // `next dev`. Run with NF_SUITE=installed NF_MODE=dev.
 import { randomBytes } from 'node:crypto'

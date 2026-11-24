@@ -1,15 +1,18 @@
 # NF-023: Remote build has been retired
 
-## What happened
+## Why This Error Occurred
 
-The envelope refers to a remote build that has been removed.
+The envelope refers to a remote build that has been removed. Builds are kept for a retention window and then retired; a page cached longer than that points at a build that no longer exists.
 
-## Why
+## Possible Ways to Fix It
 
-Builds are kept for a retention window and then retired; a page cached longer than that points at a build that no longer exists.
+- Reload the page so it picks up the current build.
+- If this happens often, lengthen the remote's build retention. `nf-serve` keeps the newest 3 builds and any build younger than 24 hours:
 
-## How to fix
+  ```sh
+  nf-serve --max-builds 5 --min-age-hours 48
+  ```
 
-Reload the page so it picks up the current build. If this happens often, lengthen the remote's build retention. `nf-serve` keeps the newest 3 builds and any build younger than 24 hours (`--max-builds`, `--min-age-hours`).
+## Useful Links
 
-See [Self-hosted build retention](../guides/self-hosted-skew.md).
+- [Self-hosted build retention](../guides/self-hosted-skew.mdx)

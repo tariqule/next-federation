@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { HOST_APP } from './servers.ts'
 
 // The island remote deployed on Vercel (test/fixtures/island-remote, guide:
-// docs/guides/deploying-a-remote-on-vercel.md), embedded by a local host-app
+// docs/guides/deploying-a-remote-on-vercel.mdx), embedded by a local host-app
 // whose remote `a` is the Vercel production domain. Run after two production
 // deploys, with:
 //   NF_VERCEL_PROD_URL            the production domain, https://<project>.vercel.app

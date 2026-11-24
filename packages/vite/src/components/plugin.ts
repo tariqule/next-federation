@@ -383,7 +383,7 @@ export function nextFederationComponents(
           logger.warnOnce(
             'NF-002',
             'components-dev-page',
-            `${req.url ?? '/'} is a page of this Vite project, served by a components remote's dev server. nextFederationComponents makes react, react-dom and every \`shared\` module host-provided for the whole project, so no page of it runs on its own ("createContext is not a function", "module is not defined"). Keep a standalone app in its own Vite config, next to the remote's (vite.remote.config.ts): see docs/guides/remote-components.md#keeping-a-standalone-app.`
+            `${req.url ?? '/'} is a page of this Vite project, served by a components remote's dev server. nextFederationComponents makes react, react-dom and every \`shared\` module host-provided for the whole project, so no page of it runs on its own ("createContext is not a function", "module is not defined"). Keep a standalone app in its own Vite config, next to the remote's (vite.remote.config.ts): see docs/guides/remote-components/vite-remote.mdx#keep-a-standalone-app.`
           )
         }
         next()

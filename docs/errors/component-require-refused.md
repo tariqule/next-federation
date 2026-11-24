@@ -1,29 +1,20 @@
 # NF-030: Remote component server code required a module the host does not provide
 
-## What happened
+## Why This Error Occurred
 
-While evaluating a remote build's server code, the code called `require()` for a module the host
-does not hand out. The host's loader resolves only the remote's own relative files and
-`@module-federation/runtime`; everything else is refused, and the component renders in the browser
-only.
+A remote build's server code called `require()` for a module the host does not hand out. The host resolves only the remote's own files and `@module-federation/runtime`, so the component renders in the browser only. Remote components run on the host's React, and a second copy would fail with "Invalid hook call".
 
-## Why
+## Possible Ways to Fix It
 
-Remote components run on the host's React. A remote that bundles or requires its own copy of
-React (or any package the host should provide) would run a second React in the host process and
-fail with "Invalid hook call", or pick up arbitrary packages from the host's `node_modules`.
+- Build the remote with `nextFederationComponents`, which treats React, `react-dom` and `react/jsx-runtime` as host-provided.
+- List every other package the host owns in the remote's `shared` option and in the host's `createRemoteComponent({ shared })`:
 
-This is **not a sandbox**. Remote server code that passed the integrity check runs with the host
-process's full authority: `process`, `globalThis` and dynamic `import()` are reachable from it. The
-allow-list only keeps a remote from silently loading a second React or arbitrary host packages; the
-integrity check (signed or pinned builds, `NF-027`) is the security boundary.
+  ```ts
+  shared: { '@acme/ui': { version: '2.4.0', module: AcmeUi } }
+  ```
 
-## How to fix
+- Leave packages only the remote uses out of `shared`. They are bundled into its chunks.
 
-Build the remote with `nextFederationComponents`: React, `react-dom` and `react/jsx-runtime` are
-host-provided. List every other package the host owns (a context module, a design system) in the
-remote's `shared` option and in the host's `createRemoteComponent({ shared })` (or
-`registerSharedModules`). A shared package with `fallback: true` is bundled into the remote's chunks
-as well. Packages the remote uses only itself are bundled into its chunks and never required.
+## Useful Links
 
-See [Remote components: sharing modules](../guides/remote-components.md#sharing-modules).
+- [Remote components: sharing modules](../guides/remote-components/sharing-modules.mdx)

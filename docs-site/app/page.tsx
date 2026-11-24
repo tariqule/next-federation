@@ -14,7 +14,7 @@ const jsonLd = {
   license: 'https://opensource.org/licenses/MIT',
 }
 
-// Every app of the live demo, its role and what to try (docs/live-demo.md).
+// Every app of the live demo, its role and what to try (docs/live-demo.mdx).
 const DEMO_URL = '/docs/live-demo'
 
 const links = [

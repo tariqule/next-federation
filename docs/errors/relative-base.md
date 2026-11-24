@@ -1,18 +1,18 @@
 # NF-020: Remote `base` must be an absolute URL
 
-## What happened
+## Why This Error Occurred
 
-A remote was configured with a `base` that is not an absolute `http:` or `https:` URL (or that has
-a query string or hash).
+A remote's `base` is not an absolute `http:` or `https:` URL, or it has a query string or hash. The host fetches islands from another origin, so a relative path has nothing to resolve against.
 
-## Why
+## Possible Ways to Fix It
 
-The host fetches islands from another origin, so a relative path has nothing to resolve against.
-`@vitejs/plugin-rsc` also rejects a relative base, and the base is the key of the remote's
-flight-client scope.
+- Use a full URL:
 
-## How to fix
+  ```ts
+  // vite.config.ts
+  export default defineConfig({ base: 'https://shop.example.com/' })
+  ```
 
-Use a full URL, for example `https://shop.example.com/`.
+## Useful Links
 
-See [Writing an island remote](../guides/writing-an-island-remote.md#2-configure-vite).
+- [Writing an island remote: configure Vite](../guides/writing-an-island-remote.mdx#configure-vite)

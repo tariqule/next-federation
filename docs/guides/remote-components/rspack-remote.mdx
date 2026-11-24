@@ -1,0 +1,168 @@
+---
+title: 'Build a Components Remote with Rspack or Webpack'
+description: Expose client components from a Rspack or webpack build and describe it with nf-describe.
+---
+
+Build a remote with Rspack or webpack and `@module-federation/enhanced`, then describe it with `nf-describe`. Any Module Federation 2.0 remote that emits `mf-manifest.json` works.
+
+Runnable example: [examples/advanced/header-remote-rspack](../../../examples/advanced/header-remote-rspack).
+
+<Callout type="warn">
+  **Good to know:** Only the Rspack setup is tested (Rspack 2.3.0,
+  `@module-federation/enhanced` 2.9.3). For webpack, use
+  `@module-federation/enhanced/webpack` and webpack's `LimitChunkCountPlugin`.
+</Callout>
+
+## Configure both builds
+
+You make two builds: a browser copy, and a CommonJS server copy for host rendering.
+
+```ts title="rspack.config.ts"
+import { ModuleFederationPlugin } from '@module-federation/enhanced/rspack'
+import { rspack } from '@rspack/core'
+import type { Configuration } from '@rspack/core'
+import { join } from 'node:path'
+
+const buildId = process.env.NF_BUILD_ID ?? Date.now().toString(36)
+const client = join(import.meta.dirname, 'dist', buildId, 'client')
+// Absolute and immutable per build: nf-serve serves client/ under /b/<buildId>/.
+const publicPath = `https://shop.example.com/b/${buildId}/`
+
+// Host-provided, never bundled: the four React modules, plus any module
+// whose instance the host owns (a context module).
+const host = (requiredVersion: string | false) => ({
+  singleton: true,
+  import: false as const,
+  requiredVersion,
+})
+const shared = {
+  react: host('^19.0.0'),
+  'react-dom': host('^19.0.0'),
+  'react-dom/client': host('^19.0.0'),
+  'react/jsx-runtime': host('^19.0.0'),
+  '@acme/host-context': host(false),
+}
+const exposes = { './Cart': './src/Cart.tsx' }
+const common: Configuration = {
+  mode: 'production',
+  entry: {},
+  resolve: { extensions: ['.tsx', '.ts', '.js'] },
+  module: {
+    rules: [
+      {
+        test: /\.tsx?$/,
+        loader: 'builtin:swc-loader',
+        options: {
+          jsc: {
+            parser: { syntax: 'typescript', tsx: true },
+            transform: { react: { runtime: 'automatic' } },
+          },
+        },
+      },
+    ],
+  },
+}
+
+export default [
+  {
+    ...common,
+    name: 'browser',
+    target: 'web',
+    output: {
+      path: client,
+      publicPath,
+      uniqueName: 'shop', // the host page may run other webpack runtimes
+      clean: true,
+      module: true,
+      chunkFormat: 'module',
+      chunkLoading: 'import',
+    },
+    plugins: [
+      new ModuleFederationPlugin({
+        name: 'shop', // the container name (a JS identifier)
+        filename: 'remoteEntry.js',
+        library: { type: 'module' },
+        exposes,
+        shared,
+        manifest: true,
+        dts: false,
+      }),
+    ],
+  },
+  {
+    ...common,
+    name: 'server',
+    // Built after the browser copy (its `clean` empties client/).
+    dependencies: ['browser'],
+    target: 'async-node',
+    output: {
+      path: join(client, 'server'),
+      publicPath: `${publicPath}server/`,
+      uniqueName: 'shop',
+      clean: true,
+      // One file: hosts resolve no Node modules (fs, vm) for remote code.
+      asyncChunks: false,
+    },
+    optimization: { splitChunks: false },
+    plugins: [
+      new rspack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
+      new ModuleFederationPlugin({
+        name: 'shop',
+        filename: 'remoteEntry.js',
+        library: { type: 'commonjs-module' },
+        exposes,
+        shared,
+        manifest: true,
+        dts: false,
+      }),
+    ],
+  },
+] satisfies Configuration[]
+```
+
+To accept React 18 hosts, set the range as `requiredVersion` on the four React shares ([React versions](reference.mdx#react-versions)). To use `next/link` or React Router, see [Links](links.mdx#rewire-links-in-a-rspack-or-webpack-remote).
+
+## Describe the build and serve it
+
+Set `NF_COMPONENTS_SIGNING_KEY` for this step too. Without it the descriptor is unsigned.
+
+```sh
+NF_BUILD_ID=v1 rspack build
+nf-describe --dir dist/v1 --ssr-entry server/remoteEntry.js
+nf-serve --dir dist --port 4110
+```
+
+`nf-describe` records the server entry, hashes every server file and writes the descriptor ([details](reference.mdx#nf-describe)).
+
+<Callout type="warn">
+  **Good to know:** Run `nf-describe` before you upload the build to a CDN. It
+  rewrites `client/mf-manifest.json`, so an earlier upload fails the digest
+  check ([`NF-027`](../../errors/component-integrity-failed.md)).
+</Callout>
+
+## Verify a described build
+
+Check the build before you ship it. Add `--public-key <public JWK or file>` to verify the signature as hosts do.
+
+```sh
+node_modules/.bin/nf-describe --dir dist/v1 --verify --public-key public.jwk
+```
+
+Run the installed binary, because `npx` can lose the flags.
+
+## Next steps
+
+<Cards>
+  <Card title="Host configuration" href="host-configuration.mdx">
+    Render the remote's components in a Next.js app or an SPA.
+  </Card>
+  <Card
+    title="Generate a signing key"
+    href="vite-remote.mdx#generate-a-signing-key"
+  >
+    Sign the descriptor so hosts can server-render.
+  </Card>
+  <Card title="Reference" href="reference.mdx">
+    nf-describe options, runtime behaviour and limits.
+  </Card>
+</Cards>

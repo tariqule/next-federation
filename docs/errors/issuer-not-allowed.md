@@ -1,15 +1,15 @@
 # NF-016: Token issuer is not in the remote's issuer map
 
-## What happened
+## Why This Error Occurred
 
-A token named an issuer the remote does not trust.
+A token named an issuer the remote does not trust. The remote only accepts issuers listed in its `issuers` map.
 
-## Why
+## Possible Ways to Fix It
 
-The remote only accepts tokens from issuers listed in its issuer map.
+- Add the issuer to the remote's `issuers` if it should be trusted.
+- Or fix the host so it signs with the right issuer.
+- Make the token's `iss` equal a map key exactly. A trailing slash makes a different issuer.
 
-## How to fix
+## Useful Links
 
-Add the issuer to the remote's issuer map (`issuers`) if it should be trusted, or fix the host so it signs with the right issuer. The token's `iss` must equal a key of the map exactly: a trailing slash makes a different issuer.
-
-See [Identity](../guides/identity.md).
+- [Identity](../guides/identity.mdx)

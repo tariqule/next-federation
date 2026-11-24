@@ -1,0 +1,78 @@
+---
+title: Deployment
+description: Deploy a Next.js host and a remote, serve builds with nf-serve and turn on compression.
+---
+
+Deploy a host and a remote independently, and keep a remote's old builds online for cached pages.
+
+## Deploy the host
+
+Deploy a Next.js host as you do today. It needs `withNextFederation` and, for private islands, the JWKS and token routes ([Identity](identity.mdx)).
+
+- List each remote origin in the host's CSP ([CSP](csp.mdx)).
+- Use the same remote origins in every environment. A host that cannot reach a remote shows the island's fallback.
+
+## Deploy a remote
+
+An island remote is a server. `vite build` writes `dist/<buildId>/{client,ssr,rsc}` and `nf-build.json`. Set `NF_BUILD_ID` to name the build, or the build uses a timestamp.
+
+A components remote is static files. `nf-serve` serves them without a process per build ([Remote components](remote-components/vite-remote.mdx#expose-a-component-and-build-it)).
+
+Set `base` to the absolute URL hosts reach the remote at. Keep the host's cache shorter than an old build stays reachable ([Caching](caching.mdx)).
+
+### On Vercel
+
+Serve the remote from the production domain: static assets plus one Function for `/_nf/*`. After a deploy, the previous build's assets answer `404`, so cached islands go inert until the host renders a fresh envelope. See [Deploying a remote on Vercel](deploying-a-remote-on-vercel.mdx).
+
+### Self-hosted with nf-serve
+
+`nf-serve` runs each live island build in its own process behind one router.
+
+```sh
+nf-serve --dir ./dist --port 4100 [--current <buildId>] [--max-builds 3] [--min-age-hours 24]
+```
+
+| Route                 | Served by                                    |
+| --------------------- | -------------------------------------------- |
+| `/b/<build>/assets/*` | static files of that build, immutable        |
+| `/b/<build>/_nf/*`    | that build's island handler                  |
+| `/_nf/*`              | the current build                            |
+| a retired build       | `410` with `{"error":"NF-023"}` and CORS `*` |
+
+The current build, the newest 3 and any build younger than 24 hours are live. Every other build answers `410 NF-023`.
+
+<Callout>
+  **Good to know:** Run `nf-serve` under Docker, systemd or Kubernetes. It exits
+  non-zero when a build process dies (`NF-012`), so something must restart it.
+</Callout>
+
+See [Self-hosted build retention](self-hosted-skew.mdx) for the retention rule. The [`@next-federation/server` README](../../packages/server/README.md) lists the options.
+
+## Turn on compression
+
+Island remotes are mostly JavaScript, and the sizes in [Limits](limits.mdx#cost) are gzip sizes. Uncompressed, the same code is about three times larger.
+
+`nf-serve` compresses with brotli or gzip, so you need no proxy for it. On any other host, enable gzip or brotli for JavaScript, CSS and JSON. Most CDNs do. A plain object store or a bare Node server does not.
+
+`nf-serve` skips already-compressed formats, range requests and any envelope for a request with an identity token, which avoids leaking per-user data through body length (BREACH).
+
+## Host a remote on another server
+
+`createIslandHandler` from `@next-federation/server` is a plain `(Request) => Promise<Response>`. Any server that speaks the Web `Request` and `Response` API can host a remote ([island protocol](../protocol/v1.md)).
+
+## Next steps
+
+<Cards>
+  <Card title="Self-hosted build retention" href="self-hosted-skew.mdx">
+    Keep old builds online with nf-serve.
+  </Card>
+  <Card
+    title="Deploying a remote on Vercel"
+    href="deploying-a-remote-on-vercel.mdx"
+  >
+    Static assets plus one Function, and the skew options.
+  </Card>
+  <Card title="Limits" href="limits.mdx">
+    What islands cost, in gzip bytes.
+  </Card>
+</Cards>

@@ -50,4 +50,4 @@ Static files only. `vercel.json` runs `scripts/vercel-build.ts` (production depl
 remote and what it exposes; locally `nf-serve` answers `/` with `404`). Set `NF_COMPONENTS_SIGNING_KEY` on this project only; the script fails
 without it, so a deployment is always signed. Hosts get the public key as `NF_COMPONENTS_PUBLIC_KEY`.
 
-Guide: [Remote components](../../docs/guides/remote-components.md) (integrity, rotation, limits).
+Guide: [Remote components](../../docs/guides/remote-components/overview.mdx) (integrity, rotation, limits).

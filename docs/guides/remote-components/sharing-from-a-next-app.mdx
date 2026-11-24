@@ -1,0 +1,55 @@
+---
+title: 'Sharing Components from a Next.js App'
+description: Share UI from a team that builds with Next.js by publishing a Vite remote of islands or remote components.
+---
+
+Share UI from a team that builds with Next.js. A Next.js app does not expose its `app/` folder or pages at runtime, so another app cannot import its components. Publish a separate remote instead.
+
+## Share components as islands
+
+<Steps>
+<Step>
+
+### Move the shared components into a Vite package
+
+Keep it small: a remote owns its data access and styles.
+
+</Step>
+<Step>
+
+### Build it with the Vite plugin
+
+Use `@next-federation/vite` ([Writing an island remote](../writing-an-island-remote.mdx)). Each shared component becomes an island entry that renders the existing client components.
+
+</Step>
+<Step>
+
+### Deploy it and render it in every host
+
+Deploy it as its own app ([Deployment](../deployment.mdx)). Add it to `remotes` and render it with `RemoteIsland`.
+
+</Step>
+</Steps>
+
+Client components that need only props and their own state work unchanged. Code that used host context, router hooks or `next/image` must be rewritten, because React context does not cross into an island. Props become plain JSON, and navigation uses `Link` from `@next-federation/island`.
+
+## Share a client component as a remote component
+
+For a small client component that must read the host's context or use its router, publish a [remote component](overview.mdx) instead. It is still a separate Vite or Rspack build.
+
+- **Only `next/link`, `next/navigation` and `next/router` can be shared**, and the host provides them. The Vite plugin refuses other `next/*` modules ([NF-002](../../errors/invalid-config.md)). Rspack hosts report them at runtime ([NF-036](../../errors/component-shared-unavailable.md)).
+- **Next.js hosts server-render it** only when the build is signed or pinned.
+
+## Next steps
+
+<Cards>
+  <Card title="Writing an island remote" href="../writing-an-island-remote.mdx">
+    Build the Vite remote that serves islands.
+  </Card>
+  <Card title="Remote Components" href="overview.mdx">
+    Set up remote components end to end.
+  </Card>
+  <Card title="Limits" href="../limits.mdx">
+    What islands and remote components cannot do.
+  </Card>
+</Cards>

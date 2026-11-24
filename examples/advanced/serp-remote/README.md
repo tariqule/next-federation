@@ -16,5 +16,5 @@ Part of the [commerce platform](../README.md) (`pnpm examples:platform`). Alone:
 Check it: <http://127.0.0.1:13402/_nf/health>. Then search for "camp" in the storefront's header
 and turn on **How is this page built?**: `SearchResults` is marked as streamed.
 
-Guides: [Writing an island remote](../../../docs/guides/writing-an-island-remote.md),
-[Caching](../../../docs/guides/caching.md).
+Guides: [Writing an island remote](../../../docs/guides/writing-an-island-remote.mdx),
+[Caching](../../../docs/guides/caching.mdx).

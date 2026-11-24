@@ -1,0 +1,134 @@
+---
+title: 'Build a Components Remote with Vite'
+description: Expose client components from a Vite project with nextFederationComponents.
+---
+
+Build a remote that exposes client components with `nextFederationComponents`. To render them, see [Host configuration](host-configuration.mdx).
+
+## Start from a create-vite project
+
+`npm create vite@latest widgets -- --template react-ts` scaffolds more than a remote needs. Make these changes:
+
+- **`@vitejs/plugin-react`:** remove it from the remote's config. An exposed module compiled with Fast Refresh fails the build (`NF-002`), because a host page has no Vite preamble.
+- **`index.html` and `src/main.tsx`:** the build reads only the files in `exposes`. Delete the scaffold page, or keep it as a [standalone app](#keep-a-standalone-app). Exposed modules must not import from it.
+- **Scripts:** use `"build": "vite build"` and `"start": "nf-serve --dir dist --port 4110"`. `vite preview` does not serve a remote.
+- **Dependencies:** add `@next-federation/vite` and `@next-federation/server` as dev dependencies. Pin `react` and `react-dom` to one exact version.
+- **`next`:** add it as a dev dependency, for types, if an exposed module imports `next/link` or `next/navigation` ([Links](links.mdx)).
+- **TypeScript:** `types: true` needs TypeScript 5 or 6. TypeScript 7 ships no compiler API: the build warns `NF-002` and publishes no types. Pin `typescript@~6` in a remote that publishes types.
+
+## Expose a component and build it
+
+List each component in the plugin config.
+
+```ts title="vite.config.ts"
+import { nextFederationComponents } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [
+    nextFederationComponents({
+      name: 'shop', // the Module Federation container name (a JS identifier)
+      base: 'https://shop.example.com/',
+      exposes: { './Cart': './src/Cart.tsx' },
+      // Modules shared with the host, besides React (see Sharing modules):
+      shared: ['@acme/host-context'],
+    }),
+  ],
+})
+```
+
+`vite build` writes `dist/<buildId>/`. The build id is `buildId`, `NF_BUILD_ID` or the build time. Serve it with `nf-serve`:
+
+- `/_nf/components.json` is the current build's descriptor (`Cache-Control: no-store`).
+- `/b/<buildId>/…` serves every build kept by retention.
+- A retired build answers `410` ([`NF-023`](../../errors/build-retired.md)).
+
+The plugin pins `@module-federation/vite` to exactly 1.24.0 (`NF-026` otherwise). React is always host-provided. [Build output](reference.mdx#build-output) lists every file.
+
+## Keep a standalone app
+
+The plugin applies to the whole Vite project: React and every `shared` module become host-provided, so a page of the project fails in its own dev server (`createContext is not a function`). To keep the app running, give the remote its own config.
+
+```ts title="vite.remote.config.ts"
+import { nextFederationComponents } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: [
+    nextFederationComponents({
+      name: 'widgets',
+      base: 'https://widgets.example.com/',
+      outDir: 'dist-remote',
+      exposes: { './Counter': './src/components/Counter.tsx' },
+    }),
+  ],
+})
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:remote": "vite build --config vite.remote.config.ts",
+    "start:remote": "nf-serve --dir dist-remote --port 4110"
+  }
+}
+```
+
+Keep create-vite's `vite.config.ts` (with `@vitejs/plugin-react`) for the app. Use a separate `outDir`, so neither build empties the other's folder.
+
+## Accept React 18
+
+The default range is React 19 only. To accept React 18 hosts too, set `react`.
+
+```ts title="vite.config.ts"
+nextFederationComponents({
+  name: 'shop',
+  base: 'https://shop.example.com/',
+  exposes: { './Cart': './src/Cart.tsx' },
+  react: '^18.3.0 || ^19.0.0',
+})
+```
+
+The range must be valid semver (`NF-002` otherwise). See [React versions](reference.mdx#react-versions) for the upgrade order and APIs to avoid.
+
+## Generate a signing key
+
+<Callout type="warn">
+  **Good to know:** A build without the key is unsigned, and nothing stops it.
+  `vite build` and `nf-describe` write an unsigned descriptor without failing.
+  Hosts then render the build in the browser only (`NF-028`).
+</Callout>
+
+Set the key in every build and describe step, then check the result with `nf-describe --verify --public-key`.
+
+```sh
+node -e "
+const { generateKeyPairSync } = require('node:crypto')
+const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+const jwk = { ...privateKey.export({ format: 'jwk' }), kid: 'shop-2026-11' }
+const { d, ...pub } = jwk
+console.log('NF_COMPONENTS_SIGNING_KEY=' + JSON.stringify(jwk))
+console.log('public key for the host: ' + JSON.stringify(pub))
+"
+```
+
+The `kid` is a label that tells keys apart when you rotate. Keep the private key (`NF_COMPONENTS_SIGNING_KEY`) in the remote's build environment, as a CI secret. Put the public key in the host's `components.ssr.publicKeys` ([Host configuration](host-configuration.mdx#configure-the-remote)). To rotate or pin, see [Integrity](security.mdx#rotation).
+
+## Next steps
+
+<Cards>
+  <Card title="Host configuration" href="host-configuration.mdx">
+    Render the remote's components in a Next.js app or an SPA.
+  </Card>
+  <Card title="Sharing modules" href="sharing-modules.mdx">
+    Share a context module or a library with the host.
+  </Card>
+  <Card title="Links that work in every host" href="links.mdx">
+    Use next/link or React Router in the remote.
+  </Card>
+  <Card title="Reference" href="reference.mdx">
+    Build output, integrity and limits.
+  </Card>
+</Cards>

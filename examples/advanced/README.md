@@ -101,8 +101,8 @@ starts and checks everything over HTTP, then stops (CI runs it). App logs go to 
    the build's descriptor is signed with a key it trusts. The category links and the product grid
    are islands from the CDP remote: rendered on the CDP remote's server, prerendered into this
    page's static shell. Turn JavaScript off: they are still there.
-   Guides: [Remote components](../../docs/guides/remote-components.md),
-   [Caching](../../docs/guides/caching.md).
+   Guides: [Remote components](../../docs/guides/remote-components/overview.mdx),
+   [Caching](../../docs/guides/caching.mdx).
 2. **Turn on _How is this page built?_** (bottom right). Every piece gets a chip that says what it
    is, which remote serves it, where it rendered and whether it came in the first HTML or streamed
    in later. Click a chip for the details: the cache mode the code configured, revalidate time and
@@ -111,24 +111,24 @@ starts and checks everything over HTTP, then stops (CI runs it). App logs go to 
 3. **Filter the grid, then click a product.** The filter buttons are the island's own client
    component, on the island's own React. The product link is an island `Link`: it navigates the
    storefront's router without a reload. On the product page, the detail and recommendations come
-   from the PDP remote. Guide: [Writing an island remote](../../docs/guides/writing-an-island-remote.md).
+   from the PDP remote. Guide: [Writing an island remote](../../docs/guides/writing-an-island-remote.mdx).
 4. **Click _Add to cart_.** It is a Header remote component, and so is the mini cart. Both read the
    storefront's cart context (a shared module the host provides), so the count updates at once.
    Turned on, the chips also show the design system's `Button` and `Pill`: here they are the host's
-   copy. Guide: [Sharing modules](../../docs/guides/remote-components.md#sharing-modules).
+   copy. Guide: [Sharing modules](../../docs/guides/remote-components/sharing-modules.mdx).
 5. **Search for "camp" in the header.** The search box (Header remote) navigates with the host's
    router to `/store/en/search?q=camp`, where the SERP remote's results stream into the static
    shell. Each query's envelope is cached.
 6. **Sign in on _Account_ as a customer** (any name; a demo form, no password). The header's
    `AccountBadge` (Account remote) now streams in per request. **Profile** and **Orders** are
    `blocking` private islands: view the page source and they are there, in place, with no loading
-   state, and no token. Guides: [Identity](../../docs/guides/identity.md),
-   [blocking](../../docs/guides/getting-started-app-router.md#private-content-in-the-first-html-blocking).
+   state, and no token. Guides: [Identity](../../docs/guides/identity.mdx),
+   [blocking](../../docs/guides/getting-started-app-router.mdx#put-private-content-in-the-first-html).
 7. **Change your display name, then cancel an order.** These are Server Actions of the Account
    remote, posted from the browser straight to that remote with the island's own token. The name
    shows at once (optimistic) while the button says _Saving…_; the order shows _cancelling…_ until
    the remote answers. A small message at the bottom left reports each action (the islands'
-   `nf:island` events). Guide: [Server Actions in islands](../../docs/guides/server-actions.md).
+   `nf:island` events). Guide: [Server Actions in islands](../../docs/guides/server-actions.mdx).
 8. **Open a product again.** _Picked for you_ is a private island from the PDP remote. The same
    sign-in gives each remote its own token, minted for that remote's audience only.
 9. **Open _Admin_.** It is a Pages Router route of the same Next.js app (the link reloads the page:
@@ -136,11 +136,11 @@ starts and checks everything over HTTP, then stops (CI runs it). App logs go to 
    same `ProductGrid` island, now rendered by the Pages Router, per request. As a customer, the
    **Inventory** island refuses you: the Account remote checks the `role` claim in the signed token.
    Sign in again as an admin (Account page) and it shows the stock, with a _+10_ action. Guide:
-   [Mixed-router hosts](../../docs/guides/remote-components.md#mixed-router-hosts).
+   [Mixed-router hosts](../../docs/guides/remote-components/security.mdx#mixed-router-hosts).
 10. **Publish.** As an admin, press _Publish_ on the admin page. It calls `revalidateIsland('cdp')`
     and `revalidateIsland('pdp')`; open the home page and the grid's "rendered by the CDP remote
     at" time changes. In production, the remotes' deploy pipeline would call such a route.
-    Guide: [Refreshing on demand](../../docs/guides/caching.md#refreshing-on-demand).
+    Guide: [Refreshing on demand](../../docs/guides/caching.mdx#refresh-an-island-on-demand).
     Coming later: an outage switch (stale-if-error and `errorFallback`), a redeploy while a tab stays
     open (build retention), and a React Router SPA host that shares its React with the islands.
 
@@ -183,15 +183,15 @@ component remotes built with Vite or Rspack (webpack is documented but untested)
 
 - Vue, Svelte, Angular or any other non-React framework, as a host or a remote.
 - A Next.js app as a remote: share its UI as an island remote or a components remote instead
-  ([Sharing components from a Next.js app](../../docs/guides/sharing-components-from-a-next-app.md)).
+  ([Sharing components from a Next.js app](../../docs/guides/remote-components/sharing-from-a-next-app.mdx)).
 - React Router in framework mode (server rendering) as a host: planned after 1.0.
 - Private islands in a client-only SPA: they need a server to sign tokens.
 
-See [Limits](../../docs/guides/limits.md).
+See [Limits](../../docs/guides/limits.mdx).
 
 ## Not shown here
 
 - Islands on a different exact React version on the same page (each build would keep its own copy;
   the e2e suite tests it with `test/fixtures/island-remote-old-react`).
 - Deploying the platform: each remote deploys like the first examples
-  ([Deploying an island remote on Vercel](../../docs/guides/deploying-a-remote-on-vercel.md)).
+  ([Deploying an island remote on Vercel](../../docs/guides/deploying-a-remote-on-vercel.mdx)).

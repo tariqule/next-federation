@@ -1,15 +1,13 @@
 # NF-003: Unsupported island protocol version
 
-## What happened
+## Why This Error Occurred
 
-An envelope declared a protocol version this host does not understand.
+An envelope declared a protocol version this host does not understand. Host and remote run different major versions of the island protocol.
 
-## Why
+## Possible Ways to Fix It
 
-Host and remote are on different major versions of the island protocol, so the host cannot safely interpret the envelope.
+- Upgrade the older side so both run compatible `@next-federation/*` versions. The message lists the versions seen.
 
-## How to fix
+## Useful Links
 
-Upgrade the older side so both run compatible `@next-federation/*` versions. The error detail lists the versions seen.
-
-See the [island protocol](../protocol/v1.md).
+- [Island protocol](../protocol/v1.md)

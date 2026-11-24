@@ -1,0 +1,101 @@
+---
+title: Caching
+description: Cache public islands, keep static pages static when a remote fails, and refresh an island on demand.
+---
+
+Control how a host caches islands. Public islands are cached. Private islands never are. See the [Caching reference](caching-reference.mdx) for each mode.
+
+<Callout>
+  **Good to know:** Example:
+  [examples/advanced/storefront](../../examples/advanced/storefront), an App
+  Router host with `cacheComponents`.
+</Callout>
+
+## Cache a public island
+
+The adapter caches the envelope for `islands.revalidate` seconds (60 by default). Set `revalidate` on one island, or `dynamic` to fetch on every request.
+
+```tsx title="app/page.tsx"
+<RemoteIsland
+  remote="shop"
+  island="Banner"
+  revalidate={300}
+  fallback={<p>loading…</p>}
+/>
+```
+
+Without `cacheComponents`, the adapter uses Next's fetch cache, and the page can be static. With it (Next 16), the envelope comes from `'use cache'`. See [the details](caching-reference.mdx#app-router-cachecomponents).
+
+## Keep a static page static when a remote fails
+
+A cached public island whose fetch fails renders the last good envelope from this server process. The page stays static and regenerates within seconds. A fresh process or `next build` has none, so it renders the fallback. See [Stale-if-error](caching-reference.mdx#stale-if-error).
+
+## Cache your own component around an island
+
+Wrap `RemoteIsland` in your own `'use cache'` component only inside `<Suspense>`.
+
+```tsx title="app/page.tsx"
+async function CachedSection() {
+  'use cache'
+  cacheLife('hours')
+  return (
+    <RemoteIsland remote="shop" island="Banner" fallback={<p>loading…</p>} />
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<p>loading section…</p>}>
+      <CachedSection />
+    </Suspense>
+  )
+}
+```
+
+A failed island gives your component's entry a short lifetime, so the failure is retried within seconds.
+
+## Refresh an island on demand
+
+`revalidateIsland(remote, island?)` expires `nf:<remote>` or `nf:<remote>:<island>` immediately. Call it from a deploy webhook. It works in the App Router only.
+
+## Put a private island in the first HTML
+
+Add `blocking` to render a private island in the first HTML ([App Router](getting-started-app-router.mdx#put-private-content-in-the-first-html)). With `cacheComponents`, also export `instant = false` from the page, or `next build` fails.
+
+<Callout type="warn">
+  **Good to know:** `blocking` makes the route per-request and waits for the
+  remote. See [the
+  costs](caching-reference.mdx#blocking-the-island-in-the-first-html).
+</Callout>
+
+## Cache an island on the Pages Router
+
+In `getStaticProps`, the page's `revalidate` is the cache. A failed fetch returns `stale: true` or `envelope: null`. Regenerate soon either way. Private islands work in `getServerSideProps` only.
+
+```ts title="pages/index.tsx"
+return {
+  props: { banner },
+  revalidate: banner.envelope && !banner.stale ? 60 : 5,
+}
+```
+
+## Keep your cache shorter than the remote's retention
+
+A cached envelope pins a remote build. Your host cache must not outlive the remote's retention, or the island stays inert. `nf-serve` keeps the newest 3 builds or any under 24 hours old. See [Build cache and remote retention](caching-reference.mdx#build-cache-and-remote-retention).
+
+## Next steps
+
+<Cards>
+  <Card title="Caching reference" href="caching-reference.mdx">
+    How each cache mode works, the Next 16 defaults and every cost of blocking.
+  </Card>
+  <Card title="Identity" href="identity.mdx">
+    Private islands, signing keys and key rotation.
+  </Card>
+  <Card title="Deployment" href="deployment.mdx">
+    Remote build retention and rolling out a remote.
+  </Card>
+  <Card title="Limits" href="limits.mdx">
+    What islands cannot do and what they cost.
+  </Card>
+</Cards>

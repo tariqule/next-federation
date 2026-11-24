@@ -1,16 +1,17 @@
 # NF-019: This remote build does not support island Server Actions
 
-## What happened
+## Why This Error Occurred
 
-An island tried to call a Server Action, and the remote build that rendered it rejected the call.
+An island called a Server Action, and the remote build that rendered it rejected the call. That build predates island Server Actions and has no action client. Current releases do not raise this code.
 
-## Why
+## Possible Ways to Fix It
 
-The remote was built with a next-federation release from before island Server Actions shipped. Its
-island runtime has no action client, so every Server Action call rejects with `NF-019`. Current
-releases do not raise this code.
+- Rebuild and redeploy the remote with the current packages:
 
-## How to fix
+  ```npm
+  npm install @next-federation/vite@latest @next-federation/island@latest
+  ```
 
-Rebuild and redeploy the remote with the current `@next-federation/vite` and
-`@next-federation/island`. See [Server Actions in islands](../guides/server-actions.md) for how to write and pass actions.
+## Useful Links
+
+- [Server Actions in islands](../guides/server-actions.mdx)

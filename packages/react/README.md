@@ -1,13 +1,11 @@
 # @next-federation/react
 
-React components for `next-federation` hosts: `IslandMount` hydrates a remote island,
-`FederationErrorBoundary` contains its failures, and `createRemoteComponent` renders a remote's
-client component. Peer dependencies: `react ^18.3.0 || ^19.0.0` and `react-dom ^18.3.0 || ^19.0.0` (a Pages Router or SPA host can run React 18; an App Router host runs Next's own React).
+Host-side React components: `IslandMount` hydrates a remote island, `FederationErrorBoundary` contains failures, and `createRemoteComponent` renders a remote's client component. Peers: `react` and `react-dom` `^18.3.0 || ^19.0.0`.
 
 ## Install
 
-```sh
-pnpm add @next-federation/react react react-dom
+```npm
+npm install @next-federation/react react react-dom
 ```
 
 ## Usage
@@ -19,46 +17,59 @@ import { FederationErrorBoundary } from '@next-federation/react'
 </FederationErrorBoundary>
 ```
 
-A failing island renders `fallback` instead of crashing the host page. The boundary resets
-when `resetKey` changes. The entry is marked `'use client'`, so it can be imported from
-Server Components in the App Router.
+## Entry points
+
+| Entry                               | Exports                                                                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@next-federation/react`            | `FederationErrorBoundary`, `IslandMount`, `getLiveIslandCount`, `ISLAND_EVENT`, `clearIslandTokens`, `createTokenClient`                                           |
+| `@next-federation/react/components` | `createRemoteComponent`, `loadRemoteModule`, `preloadRemoteComponent`, `fetchDescriptorInBrowser`, `registerSharedModules`, `provideNavigation`, `COMPONENT_EVENT` |
+| `@next-federation/react/share`      | `provideHostReact`, `isHostReactProvided`                                                                                                                          |
 
 ## API
 
-| Export                         | Purpose                                                   |
-| ------------------------------ | --------------------------------------------------------- |
-| `FederationErrorBoundary`      | Error boundary with `fallback`, `onError` and `resetKey`. |
-| `FederationErrorBoundaryProps` | Its props type.                                           |
-| `IslandMount`                  | Host-side mount that hydrates a remote island envelope.   |
-| `IslandMountProps`             | Its props type.                                           |
-| `getLiveIslandCount`           | Number of island roots mounted on the page.               |
-| `ISLAND_EVENT`                 | `'nf:island'`, the bubbling DOM event of every island.    |
-| `IslandClientEvent`            | The detail type of that event (and of `onEvent`).         |
-| `clearIslandTokens()`          | Forget every cached island token; call it on sign-out.    |
+### FederationErrorBoundary
 
-`IslandMount` writes the island HTML once and keeps the island root alive across host
-re-renders, StrictMode and hidden `<Activity>`. It tears the root down once its container has
-left the document. An uncaught error inside the island renders `errorFallback` instead. That
-fallback stays for the failed build; an envelope with a new `buildId` or `bootstrap` URL mounts
-a fresh container and bootstraps the island again. When the island's code cannot load (its
-bootstrap, or a module it needs while hydrating: the remote is down or the build was retired), the
-island reports `NF-011` and renders `errorFallback`. Without an `errorFallback` prop (or with
-`inertOnLoadFailure`), a bootstrap that fails to load leaves the server HTML in place and marks the
-island `inert`. Pass `inertOnLoadFailure` together with `errorFallback` to keep the server HTML when
-the island's build has been retired (skew) while an uncaught island error still shows
-`errorFallback`. The `RemoteIsland` components of `@next-federation/next` (App Router and Pages
-Router) take the same prop and pass it through; their default is the same.
-The container's `data-nf-state` becomes `live` (and `island:hydrate` fires) only once the
-island's hydration has committed, so the island is interactive from that point.
-`IslandMount` also renders the envelope's stylesheets as
-`<link rel="stylesheet" precedence="next-federation">`. React puts each href in the page once,
-however many islands use it, and keeps it. A server render emits the links ahead of the island
-HTML, so the island never paints unstyled; in the browser React adds them to `<head>`.
+An error boundary for islands. It is `'use client'`, so Server Components can import it.
 
-## Remote components (`@next-federation/react/components`)
+| Prop       | Type                                           | Default  | Description                             |
+| ---------- | ---------------------------------------------- | -------- | --------------------------------------- |
+| `fallback` | `ReactNode` or `(error: unknown) => ReactNode` | required | Rendered after an error.                |
+| `onError`  | `(error: unknown) => void`                     | none     | Called with the error.                  |
+| `resetKey` | `unknown`                                      | none     | Renders children again when it changes. |
+| `children` | `ReactNode`                                    | required | The content to protect.                 |
 
-A remote's client component, loaded through the Module Federation runtime and rendered in
-the host's React tree on the host's React (server-rendered by Next hosts for verified builds).
+### IslandMount
+
+Hydrates a remote island envelope and keeps its root alive across re-renders and StrictMode. `data-nf-state` becomes `live` after hydration.
+
+| Prop                 | Type                                                        | Default                                      | Description                                                          |
+| -------------------- | ----------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------- |
+| `envelope`           | `IslandEnvelope`                                            | required                                     | From `fetchIsland`. Its HTML is rendered as is.                      |
+| `bridge`             | `Partial<IslandBridge>`                                     | none                                         | Overrides for the host navigation bridge.                            |
+| `token`              | `{ endpoint: string; identityKey: string \| null } \| null` | none                                         | Token endpoint and identity for per-user islands.                    |
+| `errorFallback`      | `ReactNode`                                                 | none                                         | Shown after an island error or when its code cannot load (`NF-011`). |
+| `inertOnLoadFailure` | `boolean`                                                   | `true` without `errorFallback`, else `false` | On bootstrap failure, keep the server HTML, marked `inert`.          |
+| `onEvent`            | `(event: IslandClientEvent) => void`                        | none                                         | Called for `island:hydrate`, `island:action` and `island:error`.     |
+
+### getLiveIslandCount()
+
+Returns the island roots mounted on the page.
+
+### ISLAND_EVENT
+
+`'nf:island'`, the bubbling DOM event each island dispatches. Detail: `IslandClientEvent`.
+
+### clearIslandTokens()
+
+Forgets cached island tokens. Call it on sign-out.
+
+### createTokenClient(options)
+
+Creates the browser `TokenClient` that `IslandMount` uses. `options`: `endpoint`, `identityKey`, and optional `fetch` and `now` for tests.
+
+### createRemoteComponent(options)
+
+Binds an exposed client component of a components remote, in a `'use client'` module. The result has a `preload(descriptor)` method.
 
 ```tsx
 'use client'
@@ -66,85 +77,74 @@ import { createRemoteComponent } from '@next-federation/react/components'
 
 export const Cart = createRemoteComponent<{ items: number }>({
   expose: './Cart',
-  shared: { '@acme/host-context': { version: '1.0.0', module: HostContext } },
-  fallback: <p>Loading the cart…</p>, // while it loads
-  errorFallback: <p>Cart unavailable</p>, // when it failed (default: fallback)
+  fallback: <p>Loading the cart…</p>,
+  errorFallback: <p>Cart unavailable</p>,
 })
-// <Cart descriptor={descriptor} items={3} />  (descriptor: from @next-federation/next, or
-// fetchDescriptorInBrowser() in an SPA)
+// <Cart descriptor={descriptor} items={3} />
 ```
 
-| Export                                       | Purpose                                                                       |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `createRemoteComponent(options)`             | Binds an exposed component; renders `ErrorBoundary > Suspense > component`.   |
-| `loadRemoteModule(descriptor, expose)`       | The exposed module itself (cached per build).                                 |
-| `preloadRemoteComponent(descriptor, expose)` | Starts loading ahead of rendering (never rejects).                            |
-| `fetchDescriptorInBrowser(url, options?)`    | SPA: the current build, browser-only (`ssr: null`).                           |
-| `registerSharedModules(shared)`              | Provides modules to every remote component (`{ name: { version, module } }`). |
-| `provideNavigation(hooks)`                   | Gives remote links and navigation this host's router (once, at module scope). |
-| `NavigationHooks`                            | Its argument: `{ useNavigate, useHref?, useLocation? }` (React Router's fit). |
-| `COMPONENT_EVENT`                            | `'nf:component'`, the `document` event of every load and failure.             |
+| Option          | Type                                                   | Default    | Description                                                     |
+| --------------- | ------------------------------------------------------ | ---------- | --------------------------------------------------------------- |
+| `expose`        | `string`                                               | required   | Exposed module, such as `'./Cart'`. Its default export renders. |
+| `fallback`      | `ReactNode`                                            | none       | Shown while loading, and on failure without `errorFallback`.    |
+| `errorFallback` | `ReactNode`                                            | `fallback` | Shown when the remote fails to load or render (`NF-040`).       |
+| `shared`        | `Record<string, { version: string; module: unknown }>` | none       | Modules this host provides besides React. Mismatch: `NF-036`.   |
 
-The module is `'use client'` and imports `react`, `react-dom`, `react-dom/client` and
-`react/jsx-runtime` itself, so in Next each layer registers its own React for remotes. The server
-loader (`./components/server-loader`) is selected by the `node` export condition and replaced by a
-stub under `browser`, so it never reaches a client bundle. On the server it evaluates a build's
-CommonJS graph only after every file matches the verified sha384 (`NF-027`), its `require` resolves
-only `@module-federation/runtime` (`NF-030`), it uses `node:http` with a 3 s timeout, and it needs
-Node ≥ 20.16 (`process.getBuiltinModule`; otherwise browser-only, `NF-028`). Loaded builds are cached
-per remote up to the descriptor's `maxBuilds` (oldest evicted); failures are cached too (the server
-retries after 1 s, the browser retries 3 times with backoff while keeping the server HTML), and
-one load attempt times out after 10 s. A host module that this runtime's share cache holds in
-another instance (two Reacts, or a dev server reload) makes the server render browser-only.
-Shared modules: `version` must be the module's real semver version. Before loading an exposed
-module, the host checks the descriptor's `shared` list for the modules that expose imports: one the
-host does not provide, or provides outside the remote's `requiredVersion`, renders the fallback
-(`NF-036`, never retried), unless the remote bundles a fallback copy. Next.js hosts import
-`createRemoteComponent` from `@next-federation/next/components` (App Router) or
-`@next-federation/next/pages/components` (Pages Router) instead, which also provide the host's
-`next/*` modules.
-`fallback` shows while the component loads; `errorFallback` (default: `fallback`) when the remote
-is unreachable (`descriptor` is `null`), its module did not load, or it threw while rendering. A
-render error is `NF-040` and a `component:error` event in the browser. On the server, where React has
-no error boundaries, an error thrown by the exposed function component's own render is caught: the
-server HTML gets `fallback`, marked for the browser, which renders the component after hydration
-(so a statically prerendered page still builds), and `NF-040` is logged.
-Stylesheets listed in the descriptor are React stylesheet resources (`precedence="next-federation"`,
-one link per URL): rendered with a server-rendered component, inserted with `preinit` by one first
-mounted in the browser; a server render also modulepreloads the remote entry and chunks.
+The component takes your props plus `descriptor` (`RemoteComponentDescriptor | null`), `fallback` and `errorFallback`. Pass `descriptor` from `getComponentDescriptor` or `fetchDescriptorInBrowser`. In Next.js, import from `@next-federation/next/components` instead.
 
-**Trust.** The server never trusts a `descriptor` prop by itself: it evaluates a build only when
-`verifyComponentDescriptor` recorded the descriptor in this process, or it re-verifies the carried
-JWS (or a pin) against the keys `defineFederation` registered. Pass only the value of
-`getComponentDescriptor`. The `require` allow-list is not a sandbox; integrity is the boundary.
+### loadRemoteModule(descriptor, expose)
 
-## Sharing the host's React with islands
+Loads an exposed module of a remote build, cached per build.
+
+### preloadRemoteComponent(descriptor, expose)
+
+Starts loading a module early. It never rejects.
+
+### fetchDescriptorInBrowser(url, options?)
+
+For SPA hosts. Fetches the current descriptor in the browser with `ssr: null`, or `null` when unreachable.
+
+| Option      | Type     | Default             | Description                |
+| ----------- | -------- | ------------------- | -------------------------- |
+| `remote`    | `string` | the descriptor name | The remote name to record. |
+| `maxBuilds` | `number` | `5`                 | Builds kept loaded.        |
+
+### registerSharedModules(shared)
+
+Provides `{ name: { version, module } }` to every remote component. Call it at module scope, before anything renders.
+
+### provideNavigation(hooks)
+
+Gives remote links this host's router. Call it once at module scope. Without it, links do full page loads. Next.js hosts need not call it.
+
+| Hook          | Type                                                    | Description                                  |
+| ------------- | ------------------------------------------------------- | -------------------------------------------- |
+| `useNavigate` | `() => (href, options?: { replace?, scroll? }) => void` | Required. React Router's `useNavigate` fits. |
+| `useHref`     | `(href: string) => string`                              | Optional.                                    |
+| `useLocation` | `() => { pathname: string; search: string }`            | Optional.                                    |
+
+### COMPONENT_EVENT
+
+`'nf:component'`, the `document` event for each load and failure. Detail: `ComponentEvent`.
+
+### provideHostReact()
+
+From `@next-federation/react/share`. Puts the host's React into the island share scope, so islands on the same exact React version download none. Call it at module scope of the app entry, before the first island bootstraps. It returns `false` in development, with a pre-release React (every App Router host), or when an island already provides that version.
 
 ```tsx
-// The app entry (SPA main.tsx, or pages/_app.tsx), at module scope:
 import { provideHostReact } from '@next-federation/react/share'
+
 provideHostReact()
 ```
 
-Islands built on the host's exact React version then use the host's React and download none of
-their own. It returns `false` and does nothing in development, when React's version has a
-pre-release tag (every App Router host: Next runs its own canary React), or when an island already
-provides that version. Call it before the first island bootstraps; calling it later is harmless.
-On such a host `IslandMount` destroys a redeployed island's old root after its effect, since that
-root runs on the host's own React.
+### Types
 
-## Constraints
-
-`IslandMount` hydrates server-rendered island HTML, so props are plain JSON and React context does not
-cross into an island.
+`FederationErrorBoundaryProps`, `IslandMountProps`, `IslandClientEvent`, `TokenClient`, `RemoteComponentOptions`, `RemoteComponentProps`, `RemoteComponentType`, `RemoteProps`, `RemoteComponentDescriptor`, `ComponentEvent`, `RemoteModule`, `SharedModules`, `NavigationHooks`.
 
 ## Learn more
 
-- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.md)
-- [Pages Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-pages-router.md)
-- [SPA guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-spa.md)
-- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components.md)
-- [Limits](https://github.com/tariqule/next-federation/blob/main/docs/guides/limits.md)
-- [Island protocol v1](https://github.com/tariqule/next-federation/blob/main/docs/protocol/v1.md)
+- [App Router guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-app-router.mdx)
+- [SPA guide](https://github.com/tariqule/next-federation/blob/main/docs/guides/getting-started-spa.mdx)
+- [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx)
 
 License: MIT

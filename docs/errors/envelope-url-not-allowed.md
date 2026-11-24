@@ -1,15 +1,25 @@
 # NF-005: Envelope URL is outside the remote's origins
 
-## What happened
+## Why This Error Occurred
 
-An envelope referenced an asset or bootstrap URL on an origin the remote does not own.
+An envelope referenced an asset or bootstrap URL on an origin the remote does not declare, so a misbehaving remote cannot make the host load code from elsewhere.
 
-## Why
+## Possible Ways to Fix It
 
-Envelope URLs are checked against the remote's declared origins so a compromised or misbehaving remote cannot make the host load code from elsewhere.
+- Add a legitimate origin, such as a CDN, to the remote's `assetOrigins`. Its own `origin` is always allowed:
 
-## How to fix
+  ```ts
+  // federation.ts
+  remotes: {
+    shop: {
+      origin: 'https://shop.example.com',
+      assetOrigins: ['https://cdn.example.com'],
+    },
+  }
+  ```
 
-Add the origin to the remote's `assetOrigins` list in `defineFederation` if it is legitimate (for example a CDN). The remote's own `origin` is always allowed. Otherwise investigate why the remote emitted it.
+- Otherwise, find out why the remote emitted that URL.
 
-See [Getting started: App Router](../guides/getting-started-app-router.md#3-define-the-federation).
+## Useful Links
+
+- [Getting started: App Router](../guides/getting-started-app-router.mdx#define-the-federation)

@@ -1,0 +1,157 @@
+---
+title: Deploying an island remote on Vercel
+description: Run an island remote on Vercel as static files plus one Vercel Function. Hosts reach it at the project's **production domain**, never at a generated deployment URL.
+---
+
+## Deploy a remote to Vercel
+
+The fixture `test/fixtures/island-remote` is a working example. One deployment holds one build.
+
+<Steps>
+<Step>
+
+### Set the base to the production domain
+
+Vercel provides the production domain, without the scheme, as `VERCEL_PROJECT_PRODUCTION_URL`.
+
+```ts title="vite.config.ts"
+nextFederationIslands({
+  base: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/`,
+  // ...
+})
+```
+
+Do not use `VERCEL_URL` or any `*-<hash>.vercel.app` URL. Those URLs need a Vercel login, so browsers cannot load the island's assets from them.
+
+</Step>
+<Step>
+
+### Write the build script
+
+Set it as `buildCommand` in `vercel.json`. It runs `vite build`, then:
+
+- copies `dist/<build>/client/` to `<outputDirectory>/b/<build>/`, the build-pinned paths the envelope names;
+- writes `dist/vercel/entry.js`, which re-exports the build's `rsc/index.js` handler and `buildId`. The Function imports it statically, so Vercel bundles every server chunk.
+
+</Step>
+<Step>
+
+### Add the Function
+
+`api/nf.ts` is a Web `fetch` export that calls the build's handler. A path pinned to another build (`/b/<other>/_nf/...`) gets `410 {"error":"NF-023"}` with CORS `*`, as `nf-serve` answers for a retired build.
+
+</Step>
+<Step>
+
+### Configure routing and headers
+
+Assets load cross-origin, so they need `Access-Control-Allow-Origin`.
+
+```json title="vercel.json"
+{
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "node scripts/vercel-build.ts",
+  "outputDirectory": "dist/vercel/static",
+  "rewrites": [
+    { "source": "/_nf/:path*", "destination": "/api/nf" },
+    { "source": "/b/:build/_nf/:path*", "destination": "/api/nf" }
+  ],
+  "headers": [
+    {
+      "source": "/b/:build/assets/:file*",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}
+```
+
+</Step>
+<Step>
+
+### Deploy
+
+In a pnpm workspace, build on your machine or in CI and upload the output.
+
+```sh
+vercel link --project <project>
+VERCEL_PROJECT_PRODUCTION_URL=<project>.vercel.app vercel build --prod
+vercel deploy --prebuilt --prod
+```
+
+A prebuilt build has no `VERCEL_PROJECT_PRODUCTION_URL`, so set it as above. A build that Vercel runs sets it.
+
+</Step>
+</Steps>
+
+<Callout type="warn">
+  **Good to know:** The Vercel CLI writes `VERCEL_OIDC_TOKEN` to `.env.local`
+  and `.vercel/`. Keep both out of git.
+</Callout>
+
+## Know which path Vercel serves
+
+| Path                    | Served by                                           |
+| ----------------------- | --------------------------------------------------- |
+| `/b/<build>/assets/*`   | static output, with CORS `*` and `immutable`        |
+| `/_nf/*`                | the Function, through a rewrite                     |
+| `/b/<build>/_nf/*`      | the Function: its own build only, else `410 NF-023` |
+| an earlier build's file | `404`: a deployment holds only its own build        |
+
+## Handle skew after a deploy
+
+Choose one of three options. The behaviour on Hobby is in the [evidence notes](../maintainers/vercel-skew-evidence.md).
+
+<Steps>
+<Step>
+
+### Accept a short inert window
+
+This works on every plan. After a deploy, a cached island stays inert until the host renders a fresh envelope: at most the host's island `revalidate` (60 seconds by default), or until an open tab navigates. Shorten it with `revalidateIsland` or `revalidateTag('nf:<remote>')` from a deploy hook.
+
+</Step>
+<Step>
+
+### Use Skew Protection (Pro and Enterprise)
+
+Untested for islands. Islands are always cross-origin, and the library adds no deployment id to asset URLs, so treat this option as unproven.
+
+</Step>
+<Step>
+
+### Keep assets in persistent storage
+
+Keep every build's `/b/<build>/` files in storage that outlives a deployment, such as Vercel Blob or S3, and point `base` there. Add that origin to the remote's `assetOrigins` on the host. Cached pages of earlier builds still hydrate. Their build-pinned `_nf` paths answer `410`. Untested.
+
+</Step>
+</Steps>
+
+## Protect the deployment
+
+- **Standard Protection** (the default) protects generated URLs and leaves production domains public. Use it.
+- **All Deployments** also protects the production domain, so hosts cannot fetch envelopes. Do not use it.
+- Point the host's `remotes` config at the production domain. A generated URL answers `401` and the island shows its fallback.
+
+## Remove deployments after a security fix
+
+Every earlier deployment keeps its own Function and dependencies. After you upgrade away from a `react-server-dom-webpack` affected by [GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3), delete the affected deployments with `vercel remove <deployment-url>` or the dashboard. See [NF-041](../errors/vulnerable-react-server-dom.md).
+
+## Next steps
+
+<Cards>
+  <Card title="Self-hosted build retention" href="self-hosted-skew.mdx">
+    The retention schedule to follow for old builds.
+  </Card>
+  <Card title="Deployment" href="deployment.mdx">
+    Deploy a host and a remote, and turn on compression.
+  </Card>
+  <Card title="Live demo" href="../live-demo.mdx">
+    The example apps this setup deploys.
+  </Card>
+</Cards>

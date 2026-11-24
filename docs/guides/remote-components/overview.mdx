@@ -1,0 +1,74 @@
+---
+title: 'Remote Components'
+description: Share client components from one app and render them inside another app's React tree.
+---
+
+Render a client component from a remote app inside your own React tree. It runs on the host's React, reads the host's context and takes any props, including functions and children.
+
+Runnable example: [examples/components-remote](../../../examples/components-remote) (shared context: [examples/cart-context](../../../examples/cart-context)).
+
+Next.js hosts server-render a remote component when its build is signed or pinned, and the browser hydrates it. Any other build, and every SPA host, renders it in the browser only. See [Integrity](security.mdx#integrity-server-rendering).
+
+## Islands or remote components?
+
+An island renders on the remote's server, and hydrates in the host page as its own React root. A remote component is client code that runs inside the host's React tree.
+
+|                                 | Islands                     | Remote components                             |
+| ------------------------------- | --------------------------- | --------------------------------------------- |
+| React                           | The remote's own            | The host's                                    |
+| Host React context              | Does not cross in           | Readable through shared modules               |
+| Props                           | Plain JSON                  | Anything a client component takes             |
+| Server rendering                | Always, on the remote       | On the host, for verified builds only         |
+| Remote code in the host process | Never                       | For verified builds                           |
+| Remote build                    | Any server for the protocol | Vite or Rspack/webpack, Module Federation 2.0 |
+
+Use islands when the remote must stay isolated or owns its data fetching. Use remote components for interactive pieces that must feel like part of the host.
+
+## Set up remote components
+
+<Steps>
+<Step>
+
+### Build the remote
+
+Expose client components with [Vite](vite-remote.mdx) or [Rspack or webpack](rspack-remote.mdx).
+
+</Step>
+<Step>
+
+### Sign the build
+
+Set `NF_COMPONENTS_SIGNING_KEY` in the remote's build ([Generate a signing key](vite-remote.mdx#generate-a-signing-key)).
+
+</Step>
+<Step>
+
+### Configure the host
+
+Add the remote to `defineFederation` and bind each component with `createRemoteComponent` ([Host configuration](host-configuration.mdx)).
+
+</Step>
+</Steps>
+
+<Callout>
+  **Good to know:** A Next.js app cannot be the remote. See [Sharing from a
+  Next.js app](sharing-from-a-next-app.mdx). Server rendering needs Node.js
+  20.16 or newer.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Build a remote with Vite" href="vite-remote.mdx">
+    Expose components with nextFederationComponents.
+  </Card>
+  <Card title="Build a remote with Rspack or webpack" href="rspack-remote.mdx">
+    Describe any Module Federation 2.0 build with nf-describe.
+  </Card>
+  <Card title="Host configuration" href="host-configuration.mdx">
+    Trust policy, createRemoteComponent and descriptors per router.
+  </Card>
+  <Card title="Reference" href="reference.mdx">
+    Build output, runtime behaviour, limits and CSP.
+  </Card>
+</Cards>

@@ -1,26 +1,20 @@
 # NF-038: Server Action request failed
 
-## What happened
+## Why This Error Occurred
 
-A Server Action request got a response that is not a Server Action response, and the response
-carried no NF code: a `5xx` status, an unexpected status, a content type other than
-`text/x-component`, or no body. Or the remote did not start answering within the remote's
-`actions.timeoutMs` (only when the remote sets it), and the request was aborted. The caller's
-promise rejected; the action may or may not have run.
+A Server Action request got a response that is not a Server Action response and carries no NF code: a `5xx`, an unexpected status or content type, no body, or no answer within `actions.timeoutMs`. The caller's promise rejected; the action may or may not have run.
 
-## Why
+## Possible Ways to Fix It
 
-A `5xx` means the remote, or something between the browser and the remote (a proxy, load balancer
-or CDN), failed: the remote is down or restarting, timed out, or could not start the response
-stream. Another status or content type usually means the request reached something that is not the
-remote's `/_nf/action` endpoint, for example an error page served by a proxy.
+- Check the remote's server log, and that its `base` URL reaches it through any proxy in front of it.
+- Retry the action from your own code if it is safe to run twice. The island runtime does not retry a `5xx`.
+- For a timeout, speed up the action or raise `actions.timeoutMs`:
 
-## How to fix
+  ```ts
+  // vite.config.ts
+  nextFederationIslands({ actions: { timeoutMs: 30_000 } })
+  ```
 
-Check the remote's server log and that the remote's `base` URL reaches it, including through any
-proxy in front of it. A `5xx` is not retried by the island runtime: retry the action from your own
-code if it is safe to run twice. A `404` without an NF code is reported as `NF-031`, and a `413` as
-`NF-032`. For a timeout ("did not answer within N ms"), find what makes the action slow on the
-remote, or raise `actions.timeoutMs` in its `nextFederationIslands` options.
+## Useful Links
 
-See [Server Actions: errors](../guides/server-actions.md#errors).
+- [Server Actions: errors](../guides/server-actions-reference.mdx#errors)

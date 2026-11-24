@@ -1,0 +1,120 @@
+---
+title: Live demo
+description: Open five example apps on Vercel, three hosts and two remotes, and see islands and remote components work.
+---
+
+Try islands and remote components in a browser before you install anything. Five example apps run on Vercel, deployed from `main`: three hosts and two remotes.
+
+## Pick what to embed
+
+- **Islands** (`vite-remote`): the remote renders React Server Components on its server and sends HTML. The island keeps its own React.
+- **Remote components** (`components-remote`): the host loads the remote's client components into its own React tree and shares its context.
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│ REMOTE  vite-remote (remote name "shop", Vite)                   │
+│ serves islands: ProductPanel, Links, MyOrders                    │
+└──────────┬──────────────────────┬──────────────────────┬─────────┘
+           │ islands              │ islands              │ island
+           ▼                      ▼                      ▼
+┌────────────────────┐ ┌────────────────────┐ ┌────────────────────┐
+│ HOST               │ │ HOST               │ │ HOST               │
+│ next-app-router    │ │ next-pages-router  │ │ react-spa          │
+│ ProductPanel       │ │ ProductPanel       │ │ ProductPanel       │
+│ Links, MyOrders    │ │ Links, MyOrders    │ │                    │
+│ CartButton         │ │ CartButton         │ │ CartButton         │
+└────────────────────┘ └────────────────────┘ └────────────────────┘
+           ▲                      ▲                      ▲
+           │ remote               │ remote               │ remote
+           │ component            │ component            │ component
+┌──────────┴──────────────────────┴──────────────────────┴─────────┐
+│ REMOTE  components-remote (remote name "cart", Vite)             │
+│ exposes a remote component: CartButton                           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+| App                 | Role   | Embeds or serves                                      | Live                                                                              |
+| ------------------- | ------ | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `next-app-router`   | Host   | Next.js App Router                                    | [app-router](https://next-federation-example-app-router.vercel.app)               |
+| `next-pages-router` | Host   | Next.js Pages Router, `basePath: '/shop'`, en and fr  | [pages-router](https://next-federation-example-pages-router.vercel.app/shop)      |
+| `react-spa`         | Host   | Vite SPA, browser only                                | [react-spa](https://next-federation-example-react-spa.vercel.app)                 |
+| `vite-remote`       | Remote | Islands `ProductPanel`, `Links`, `MyOrders` (private) | [vite-remote](https://next-federation-example-vite-remote.vercel.app)             |
+| `components-remote` | Remote | Remote component `./CartButton`                       | [components-remote](https://next-federation-example-components-remote.vercel.app) |
+
+Embedded pieces have a dashed outline. The sign-in is a demo: any name works.
+
+## Try the App Router host
+
+Open the [App Router host](https://next-federation-example-app-router.vercel.app).
+
+<Steps>
+<Step>
+
+### Click the island's buttons
+
+`vite-remote` rendered the product panel on its server. The `−` and `+` buttons hydrate in your browser.
+
+</Step>
+<Step>
+
+### Add A1 to cart
+
+This remote component runs on the host's React and shares its cart context, so the header count goes up.
+
+</Step>
+<Step>
+
+### Follow the island links
+
+The **More products** links navigate without a reload, so the cart count stays.
+
+</Step>
+<Step>
+
+### Open the private island
+
+Open [`/orders`](https://next-federation-example-app-router.vercel.app/orders) and sign in with any name. The host signs a short-lived token, and `vite-remote` renders that name's orders.
+
+</Step>
+<Step>
+
+### Turn JavaScript off
+
+Reload. The panel and the cart button remain, because the host rendered both on its server.
+
+</Step>
+</Steps>
+
+## Try the other hosts
+
+- **Pages Router.** Open [`/shop/fr`](https://next-federation-example-pages-router.vercel.app/shop/fr). The island links keep the basePath and locale. [`/shop/orders`](https://next-federation-example-pages-router.vercel.app/shop/orders) is the private island.
+- **React SPA.** The [SPA](https://next-federation-example-react-spa.vercel.app) fetches the island and the component in the browser, It has no server to sign tokens, so no private island.
+
+## Look at the remotes
+
+- **vite-remote**: [`/_nf/health`](https://next-federation-example-vite-remote.vercel.app/_nf/health) answers `ok`.
+- **components-remote**: [`/_nf/components.json`](https://next-federation-example-components-remote.vercel.app/_nf/components.json) is the signed descriptor of the current build.
+
+## Copy the source
+
+Each app is a folder of [`examples/`](../examples/README.md). Run all five with `pnpm examples:dev`.
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Getting Started: App Router"
+    href="guides/getting-started-app-router.mdx"
+  >
+    Embed an island in your own App Router page.
+  </Card>
+  <Card
+    title="Deploying a remote on Vercel"
+    href="guides/deploying-a-remote-on-vercel.mdx"
+  >
+    How the demo remotes are deployed.
+  </Card>
+  <Card title="Maintainer note" href="maintainers/live-demo.md">
+    How the demo is set up and kept current.
+  </Card>
+</Cards>

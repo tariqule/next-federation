@@ -1,15 +1,16 @@
 # NF-014: Identity token rejected
 
-## What happened
+## Why This Error Occurred
 
-The remote rejected the identity token sent with the request.
+The remote rejected the identity token: it is expired, malformed, signed with an unknown key, or has the wrong audience.
 
-## Why
+## Possible Ways to Fix It
 
-The token is expired, malformed, signed with an unknown key, or has the wrong audience.
+- Check clock skew between services. The remote allows 30 seconds.
+- Check the token's `aud` and `exp` claims.
+- Check that the signing key is in the issuer's JWKS and tokens are signed with ES256.
+- After adding a key to the JWKS, wait up to 30 seconds for the remote's key cache to refresh.
 
-## How to fix
+## Useful Links
 
-Check clock skew between services (the remote allows 30 seconds), the token's `aud` and `exp` claims, and that the signing key is published in the issuer's JWKS. Tokens must be signed with ES256. A key added to the JWKS only moments ago may be rejected for up to 30 seconds while the remote's key cache refreshes.
-
-See [Identity: key rotation](../guides/identity.md#key-rotation).
+- [Identity: key rotation](../guides/identity.mdx#rotate-a-signing-key)

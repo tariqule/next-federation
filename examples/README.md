@@ -65,7 +65,7 @@ descriptor:
 [What to click](#what-to-click) applies there too, with these URLs (the redeploy step is local
 only). The sign-in is a demo: any name, no password, and the orders it shows are made up. Each
 project's `vercel.json` holds its install and build commands; the island remote is deployed as in
-[Deploying an island remote on Vercel](../docs/guides/deploying-a-remote-on-vercel.md).
+[Deploying an island remote on Vercel](../docs/guides/deploying-a-remote-on-vercel.mdx).
 Maintainers: [docs/maintainers/live-demo.md](../docs/maintainers/live-demo.md).
 
 ## Run them all
@@ -117,7 +117,7 @@ components from a build only.
   signed with.
 
 Never commit them. In production, keep each private key in a secret store (see
-[Identity](../docs/guides/identity.md) and [Remote components](../docs/guides/remote-components.md)).
+[Identity](../docs/guides/identity.mdx) and [Remote components](../docs/guides/remote-components/overview.mdx)).
 `pnpm examples:keys --force` replaces them.
 
 `pnpm examples:demo-keys` prints new keys and the URLs as the environment variables of each live demo

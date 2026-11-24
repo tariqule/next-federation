@@ -1,0 +1,256 @@
+---
+title: Identity
+description: Render per-user private islands with signed tokens, from host setup to key rotation.
+---
+
+Render an island for the signed-in user. The host signs a short-lived token, the remote verifies it, and the island reads the user with `getIdentity()`. For claims and sign-out behaviour, see [Identity reference](identity-reference.mdx).
+
+<Callout>
+  **Good to know:** Examples:
+  [examples/next-app-router](../../examples/next-app-router) with
+  [examples/vite-remote](../../examples/vite-remote), and
+  [examples/advanced](../../examples/advanced/README.md) for several remotes.
+</Callout>
+
+## Set up the host (App Router)
+
+<Steps>
+<Step>
+
+### Add identity to the federation config
+
+Add `identity` to the federation config. Read the secrets from the environment.
+
+```ts title="lib/federation.config.ts"
+import { defineFederation } from '@next-federation/core'
+
+export const federation = defineFederation({
+  remotes: {
+    shop: { origin: process.env.SHOP_ORIGIN ?? 'https://shop.example.com' },
+  },
+  identity: {
+    // Must equal the key in the remote's `issuers` map.
+    issuer: process.env.NF_ISSUER ?? 'https://www.example.com',
+    signingKeys: process.env.NF_SIGNING_KEY!,
+  },
+})
+```
+
+</Step>
+<Step>
+
+### Add `getIdentity` and the routes
+
+`getIdentity` returns `{ sub, claims? }` for a signed-in user, or `null`. Return `null` instead of throwing.
+
+```ts title="lib/federation.ts"
+import 'server-only'
+import { createFederationRoutes } from '@next-federation/next/routes'
+import { createIslands } from '@next-federation/next/server'
+import type { AppIdentity } from '@next-federation/next/server'
+import { federation } from './federation.config'
+
+export { federation }
+
+const getIdentity: AppIdentity = ({ cookies }) => {
+  const sub = cookies.get('session-user')?.value
+  return sub ? { sub } : null
+}
+
+export const { RemoteIsland } = createIslands(federation, { getIdentity })
+export const routes = createFederationRoutes(federation, { getIdentity })
+```
+
+</Step>
+<Step>
+
+### Mount the token routes
+
+Create this file. It serves `GET <routesPath>/jwks` and `POST <routesPath>/token?aud=<remote>`. `routesPath` defaults to `/api/next-federation`.
+
+```ts title="app/api/next-federation/[...nf]/route.ts"
+import { routes } from '../../../../lib/federation'
+
+export const { GET, POST } = routes
+```
+
+</Step>
+<Step>
+
+### Generate a signing key
+
+Run this script once with `node scripts/generate-key.mjs`.
+
+```js title="scripts/generate-key.mjs"
+import { generateSigningKey } from '@next-federation/core/identity'
+
+console.log(await generateSigningKey('2026-11'))
+```
+
+It prints a private JWK. Put it in `.env.local` (git-ignored) and in your production secret store.
+
+```sh title=".env.local"
+NF_SIGNING_KEY='{"kty":"EC","x":"...","y":"...","crv":"P-256","d":"...","kid":"2026-11","alg":"ES256"}'
+NF_ISSUER='http://localhost:3000'
+```
+
+To fail at boot on a malformed key, call `validateIdentity(federation)` from `instrumentation.ts`.
+
+```ts title="instrumentation.ts"
+export async function register() {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return
+  const { validateIdentity } = await import('@next-federation/core/identity')
+  const { federation } = await import('./lib/federation.config')
+  await validateIdentity(federation)
+}
+```
+
+</Step>
+</Steps>
+
+## Mark the island private on the remote
+
+List the host's issuer and JWKS URL in `issuers`, and mark the island `private: true`.
+
+```ts title="vite.config.ts"
+issuers: { 'https://www.example.com': 'https://www.example.com/api/next-federation/jwks' },
+islands: { MyOrders: { entry: './src/islands/MyOrders.tsx', private: true } },
+```
+
+The issuer must equal the host's `identity.issuer` exactly, and `hosts` holds the host's origin. A new host origin needs a rebuild. See [Issuers and JWKS URLs](identity-reference.mdx#issuers-and-jwks-urls).
+
+## Render the island for the user
+
+Mark the island `private` and give it an `errorFallback`. A visitor who is not signed in sees it.
+
+```tsx title="app/orders/page.tsx"
+<RemoteIsland
+  remote="shop"
+  island="MyOrders"
+  private
+  fallback={<p>loading orders…</p>}
+  errorFallback={<p>sign in to see your orders</p>}
+/>
+```
+
+In the island, `getIdentity()` from `@next-federation/island` returns the verified payload: `sub`, your claims, `iss`, `aud`, `iat` and `exp`.
+
+<Callout>
+  **Good to know:** `sub` is unique per issuer only. Key data by `(iss, sub)`
+  when a remote trusts several hosts. See [What `getIdentity`
+  returns](identity-reference.mdx#what-getidentity-returns).
+</Callout>
+
+## Sign users out
+
+On sign-out, clear the cookie, call `clearIslandTokens()` from `@next-federation/react`, then refresh the route.
+
+```tsx title="app/sign-out-button.tsx"
+'use client'
+import { clearIslandTokens } from '@next-federation/react'
+import { useRouter } from 'next/navigation'
+
+export function SignOutButton() {
+  const router = useRouter()
+  return (
+    <button
+      onClick={async () => {
+        await fetch('/api/logout', { method: 'POST' }) // with a basePath: `${basePath}/api/logout`
+        clearIslandTokens()
+        router.refresh()
+      }}
+    >
+      Sign out
+    </button>
+  )
+}
+```
+
+See [Sign in and sign out](identity-reference.mdx#sign-in-and-sign-out) for demo routes and what happens to issued tokens.
+
+## Set up the host (Pages Router)
+
+`getIdentity` takes the request. Private islands work in `getServerSideProps` only. In `getStaticProps` they throw `NF-002`.
+
+```ts title="lib/federation.ts"
+import { createPagesIslands } from '@next-federation/next/pages/server'
+import type { PagesIdentity } from '@next-federation/next/pages/server'
+import { federation } from './federation.config'
+
+export { federation }
+
+export const getIdentity: PagesIdentity = (req) => {
+  const sub = req.cookies['session-user']
+  return sub ? { sub } : null
+}
+
+export const { getIslandProps } = createPagesIslands(federation, {
+  getIdentity,
+})
+```
+
+```ts title="pages/api/next-federation/[...nf].ts"
+import { createFederationApiHandler } from '@next-federation/next/pages/server'
+import { federation, getIdentity } from '../../../lib/federation'
+
+export default createFederationApiHandler(federation, { getIdentity })
+```
+
+Sign-in and sign-out are API routes that set and clear the same cookie. Call `clearIslandTokens()` on sign-out.
+
+## Rotate a signing key
+
+Remotes cache the JWKS for up to 10 minutes. To rotate without rejected tokens:
+
+<Steps>
+<Step>
+
+### Publish the new key
+
+Add the new key to `identity.signingKeys` as a non-first entry. It is published but does not sign.
+
+</Step>
+<Step>
+
+### Wait for the caches
+
+Wait 10 minutes.
+
+</Step>
+<Step>
+
+### Start signing with it
+
+Move the new key to the first position. It now signs.
+
+</Step>
+<Step>
+
+### Retire the old key
+
+Keep the old key published until its last token expires, then remove it.
+
+</Step>
+</Steps>
+
+The per-user marker changes for every user at step 3, so anything cached per marker refreshes once.
+
+## Next steps
+
+<Cards>
+  <Card title="Identity reference" href="identity-reference.mdx">
+    The token model, claims, issuers, sign-out behaviour and what to expect.
+  </Card>
+  <Card title="Server Actions in islands" href="server-actions.mdx">
+    Act as the signed-in user from an island, and refuse unauthenticated
+    actions.
+  </Card>
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
+    Configure hosts and issuers on the remote.
+  </Card>
+  <Card title="Caching" href="caching.mdx">
+    Private islands and the first HTML.
+  </Card>
+</Cards>
+
+Related errors: [NF-013](../errors/identity-not-configured.md), [NF-014](../errors/invalid-token.md), [NF-015](../errors/jwks-unavailable.md), [NF-016](../errors/issuer-not-allowed.md).

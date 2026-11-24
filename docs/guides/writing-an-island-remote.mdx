@@ -1,0 +1,247 @@
+---
+title: Writing an island remote
+description: Build a Vite remote that renders React Server Components and serves them to hosts as islands.
+---
+
+Build a Vite 8 remote that runs React Server Components and answers island requests from hosts. To embed an island in a host, see [Getting Started](getting-started-app-router.mdx).
+
+<Callout>
+  **Good to know:** Requires Node `^20.19.0 || >=22.12.0`. One remote can also ship [remote components](remote-components/overview.mdx).
+</Callout>
+
+## Start from create-vite
+
+`npm create vite@latest shop -- --template react-ts` scaffolds a browser app. Edit it into a remote:
+
+1. Remove `@vitejs/plugin-react` and `@vitejs/plugin-react-swc` from `package.json` and `vite.config.ts`. Either one fails the build with [`NF-002`](../errors/invalid-config.md).
+2. Delete `index.html`, `src/main.tsx`, `src/App.tsx`, the CSS files and `src/assets/`. A remote has no page.
+3. Replace `vite.config.ts` with the config in [Configure Vite](#configure-vite). Put islands in `src/islands/`.
+4. Change the build script to `vite build`. Add `"start": "nf-serve --dir dist --port 4100"`. `vite preview` does not serve a remote.
+5. Add `react-server-dom-webpack` at the same exact version as `react`, and remove carets.
+6. For `node:*` imports in islands, add `"node"` to `types` in `tsconfig.app.json` and keep `@types/node`. Never import `node:*` from a `'use client'` file.
+
+## Build an island remote
+
+<Steps>
+<Step>
+
+### Install the packages
+
+Pin React, React DOM and `react-server-dom-webpack` to one exact version. The last is an optional peer dependency, so npm does not install it. Without it, `vite` fails at startup with `NF-002`.
+
+```npm
+npm install --save-exact react@19.3.1 react-dom@19.3.1 react-server-dom-webpack@19.3.1
+npm install @next-federation/island
+npm install --save-dev @next-federation/vite @next-federation/server vite
+```
+
+Remove any caret that `create-vite` wrote in `package.json`.
+
+<Callout type="warn">
+  **Good to know:** Use React 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch
+  ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3)).
+  `vite build` refuses older versions with
+  [`NF-041`](../errors/vulnerable-react-server-dom.md). After an upgrade,
+  [remove affected
+  builds](self-hosted-skew.mdx#remove-builds-with-a-security-advisory).
+</Callout>
+
+</Step>
+<Step>
+
+### Configure Vite
+
+```ts title="vite.config.ts"
+import { nextFederationIslands } from '@next-federation/vite'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  plugins: nextFederationIslands({
+    name: 'shop',
+    base: 'https://shop.example.com/',
+    hosts: ['https://www.example.com'],
+    issuers: {
+      'https://www.example.com':
+        'https://www.example.com/api/next-federation/jwks',
+    },
+    islands: {
+      ProductPanel: './src/islands/ProductPanel.tsx',
+      MyOrders: { entry: './src/islands/MyOrders.tsx', private: true },
+    },
+  }),
+})
+```
+
+| Option    | Meaning                                                                             |
+| --------- | ----------------------------------------------------------------------------------- |
+| `name`    | Remote id. It is the token audience, so it must equal the name the host configures. |
+| `base`    | Absolute URL the remote is served from. A relative `base` fails with `NF-020`.      |
+| `hosts`   | Exact browser origins allowed to embed (CORS and `Origin` check). No `*`.           |
+| `issuers` | Trusted token issuers: exact `iss` value to JWKS URL. Needed for private islands.   |
+| `islands` | Island name to entry file, or `{ entry, private }`.                                 |
+
+See the [`@next-federation/vite` README](../../packages/vite/README.md) for every option.
+
+</Step>
+<Step>
+
+### Write an island
+
+An island entry is a Server Component with a default export. It may not start with `'use client'` ([`NF-002`](../errors/invalid-config.md)). Put interactive code in client components.
+
+```tsx title="src/islands/ProductPanel.tsx"
+import './ProductPanel.css'
+import { getProduct } from '../data'
+import { Counter } from './Counter'
+
+export default async function ProductPanel({ sku }: { sku: string }) {
+  const product = await getProduct(sku)
+  return (
+    <section className="product-panel">
+      <h2>{product.name}</h2>
+      <p>${product.price}</p>
+      <Counter />
+    </section>
+  )
+}
+```
+
+```ts title="src/data.ts"
+const products: Record<string, { name: string; price: number }> = {
+  A1: { name: 'Desk lamp', price: 39 },
+}
+
+export async function getProduct(sku: string) {
+  return products[sku] ?? { name: `Unknown product ${sku}`, price: 0 }
+}
+```
+
+```css title="src/islands/ProductPanel.css"
+.product-panel {
+  border: 1px solid #ddd;
+  padding: 1rem;
+}
+```
+
+```tsx title="src/islands/Counter.tsx"
+'use client'
+import { useState } from 'react'
+
+export function Counter() {
+  const [n, setN] = useState(0)
+  return <button onClick={() => setN((v) => v + 1)}>count {n}</button>
+}
+```
+
+Imported CSS goes into the envelope. Do not call `import.meta.viteRsc.loadCss()`.
+
+</Step>
+<Step>
+
+### Build and serve
+
+```sh
+vite build                                  # writes dist/<buildId>/{client,ssr,rsc} and nf-build.json
+nf-serve --dir dist --port 4100             # from @next-federation/server
+```
+
+`vite` serves the remote in development. See [Deployment](deployment.mdx) for production.
+
+</Step>
+</Steps>
+
+<Callout>
+  **Good to know:** `vite build` warns `[MODULE_LEVEL_DIRECTIVE] "use client"`
+  once per client component. The warnings are harmless.
+</Callout>
+
+## Match host origins and issuers exactly
+
+Both lists are compared as strings.
+
+- `hosts` are origins: scheme, host and port, no path.
+- `issuers` equal the host's `identity.issuer` exactly, including `basePath`. The JWKS URL includes it too.
+
+```ts title="vite.config.ts (remote)"
+hosts: ['https://www.example.com'],
+issuers: {
+  'https://www.example.com/app': 'https://www.example.com/app/api/next-federation/jwks',
+},
+```
+
+```ts title="lib/federation.config.ts (host)"
+identity: { issuer: 'https://www.example.com/app', signingKeys: process.env.NF_SIGNING_KEY! },
+```
+
+A wrong issuer answers `401` ([`NF-016`](../errors/issuer-not-allowed.md)). An unlisted origin answers `403` ([`NF-022`](../errors/origin-not-allowed.md)). A new host origin needs a rebuild.
+
+## Show per-user content
+
+```tsx title="src/islands/MyOrders.tsx"
+import { getIdentity } from '@next-federation/island'
+
+export default async function MyOrders() {
+  const user = getIdentity() // { sub, ... } from a verified token
+  if (!user) throw new Error('MyOrders requires identity')
+  return <h2>Orders for {user.sub}</h2>
+}
+```
+
+`getIdentity()` works in Server Components and [Server Actions](server-actions.mdx). In client code it throws `NF-002`: pass what the client needs as props. See [Identity](identity.mdx).
+
+## Link to host pages
+
+```tsx title="src/islands/Orders.tsx"
+import { Link } from '@next-federation/island'
+;<Link href="/orders/1">Order</Link>
+```
+
+`Link` renders a real `<a href>`. Write host-relative hrefs. The host adds `basePath` and locale.
+
+## Develop against a host
+
+Run `vite` and point the host at it (`origin: 'http://localhost:4100'`). There is no Fast Refresh: edit, then reload the host page.
+
+The host caches public envelopes for 60 seconds, also in `next dev`. Add `dynamic` while you work ([Caching](caching.mdx)):
+
+```tsx title="app/page.tsx"
+<RemoteIsland
+  remote="shop"
+  island="ProductPanel"
+  dynamic
+  fallback={<p>loading…</p>}
+/>
+```
+
+<Callout type="warn">
+  **Good to know:** Remove `dynamic` before you ship. It makes the route
+  dynamic.
+</Callout>
+
+## Know the rules
+
+- Props are plain JSON. React context does not cross into an island.
+- Do not nest islands. Embed both from the host ([Limits](limits.mdx#what-an-island-cannot-do)).
+- `<title>`, `<meta>` and `<link>` never reach the host `<head>` ([`NF-018`](../errors/island-html-stripped.md) in development).
+- Pass Server Actions to client components as props ([`NF-034`](../errors/server-action-imported-by-client.md)). Use `<Form>` from `@next-federation/island` ([`NF-035`](../errors/raw-form-action.md)).
+- Keep islands small. The host warns above 100 KB per envelope ([`NF-024`](../errors/envelope-too-large.md)).
+- `@vitejs/plugin-rsc` must be exactly 0.5.39 ([`NF-025`](../errors/unsupported-plugin-rsc.md)).
+
+## Next steps
+
+<Cards>
+  <Card title="Identity" href="identity.mdx">
+    Private islands, signing keys and key rotation.
+  </Card>
+  <Card title="Deployment" href="deployment.mdx">
+    Serve a remote in production and keep old builds.
+  </Card>
+  <Card title="Server Actions" href="server-actions.mdx">
+    Run actions from an island.
+  </Card>
+  <Card title="Limits" href="limits.mdx">
+    What islands cannot do and what they cost, including JS cost.
+  </Card>
+</Cards>
+
+Runnable example: [examples/vite-remote](../../examples/vite-remote).

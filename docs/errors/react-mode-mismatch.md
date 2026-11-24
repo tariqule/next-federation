@@ -1,15 +1,14 @@
 # NF-006: Island server and client bundle run different React modes
 
-## What happened
+## Why This Error Occurred
 
-The island was rendered with one React mode (development or production) and hydrates with the other.
+The island was rendered with one React mode (development or production) and hydrates with the other. Mixing modes causes hydration errors that are hard to trace.
 
-## Why
+## Possible Ways to Fix It
 
-Mixing modes changes internal data structures and causes hydration errors that are hard to trace.
+- Build and run the remote with the same `NODE_ENV` on server and client.
+- Do not serve a development bootstrap against a production render.
 
-## How to fix
+## Useful Links
 
-Build and run the remote with the same `NODE_ENV` on server and client, and do not serve a development bootstrap against a production render.
-
-See [Writing an island remote](../guides/writing-an-island-remote.md).
+- [Writing an island remote](../guides/writing-an-island-remote.mdx)

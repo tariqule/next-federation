@@ -44,7 +44,7 @@ Check it: <http://127.0.0.1:3300/_nf/health>.
 ## Deploy on Vercel
 
 Static files plus one Vercel Function, as in
-[Deploying an island remote on Vercel](../../docs/guides/deploying-a-remote-on-vercel.md):
+[Deploying an island remote on Vercel](../../docs/guides/deploying-a-remote-on-vercel.mdx):
 `vercel.json` (install and build commands, rewrites, headers), `scripts/vercel-build.ts` (`vite build`
 with `NF_VERCEL=1`, then the static output) and `api/nf.ts` (the Function). The build reads its
 `base` from `NF_PUBLIC_ORIGIN` (this remote's https origin; else `VERCEL_PROJECT_PRODUCTION_URL`),
@@ -52,4 +52,4 @@ and the hosts' URLs from `APP_ROUTER_ORIGIN`, `PAGES_ROUTER_ORIGIN` and `SPA_ORI
 `issuers`); on Vercel a missing host URL fails the build. It needs no secret: it fetches each host's
 public keys from its JWKS URL. `vercel.json` builds production deployments only.
 
-Guide: [Writing an island remote](../../docs/guides/writing-an-island-remote.md).
+Guide: [Writing an island remote](../../docs/guides/writing-an-island-remote.mdx).

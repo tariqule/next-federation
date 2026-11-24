@@ -1,0 +1,144 @@
+---
+title: Server Actions in islands
+description: Call a remote's 'use server' functions from an island, protect them with identity, and handle errors.
+---
+
+Call the `'use server'` functions of the remote that rendered an island. The browser posts straight to that remote's build, not through the host.
+
+<Callout>
+  **Good to know:** Example:
+  [examples/advanced/account-remote](../../examples/advanced/account-remote),
+  embedded by
+  [examples/advanced/storefront](../../examples/advanced/storefront).
+</Callout>
+
+## Write an action
+
+<Steps>
+<Step>
+
+### Define the action in the remote
+
+Mark the file `'use server'`. `getIdentity()` returns the verified claims or `null`. Wrap an action in `requireIdentity` to refuse a request with no token (`401`, `NF-014`).
+
+```ts title="src/actions.ts"
+'use server'
+import { getIdentity, requireIdentity } from '@next-federation/island'
+
+export async function addToCart(sku: string) {
+  const user = getIdentity()
+  return cart.add(user?.sub ?? 'guest', sku)
+}
+
+export const placeOrder = requireIdentity(async (sku: string) => {
+  return orders.place(getIdentity()!.sub, sku)
+})
+```
+
+</Step>
+<Step>
+
+### Pass the action to a client component as a prop
+
+Import the action in a Server Component and pass it down.
+
+```tsx title="src/islands/Cart.tsx"
+import { addToCart } from '../actions'
+import { AddToCart } from '../AddToCart'
+
+export default function Cart({ sku }: { sku: string }) {
+  return <AddToCart sku={sku} action={addToCart} />
+}
+```
+
+</Step>
+<Step>
+
+### Submit it with `<Form>`
+
+Use `<Form>` from `@next-federation/island`.
+
+```tsx title="src/AddToCart.tsx"
+'use client'
+import { Form } from '@next-federation/island'
+import { useActionState } from 'react'
+
+export function AddToCart(props: {
+  sku: string
+  action: (sku: string) => Promise<number>
+}) {
+  const [count, submit, pending] = useActionState(
+    async () => props.action(props.sku),
+    0
+  )
+  return (
+    <Form action={submit}>
+      <button disabled={pending}>Add ({count})</button>
+    </Form>
+  )
+}
+```
+
+</Step>
+</Steps>
+
+A client module that imports a `'use server'` file fails the build with [`NF-034`](../errors/server-action-imported-by-client.md).
+
+## Return an error state
+
+A thrown error reaches the caller as "Minified React error #441" in production. The remote logs [`NF-033`](../errors/action-failed.md). Return an error state for failures users should see. Keep `throw` for bugs.
+
+```ts title="src/actions.ts"
+'use server'
+export async function addToCart(
+  sku: string
+): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
+  const stock = await getStock(sku)
+  if (stock === 0) return { ok: false, message: 'Out of stock' }
+  return { ok: true, count: await cart.add(sku) }
+}
+```
+
+## Refuse unauthenticated actions
+
+`requireIdentity(fn)` protects one action. To refuse every unauthenticated action, set `actions.requireIdentity`:
+
+```ts title="vite.config.ts"
+nextFederationIslands({
+  // ...
+  actions: { requireIdentity: true },
+})
+```
+
+Action ids are valid from any island, so protect data per action. See [Identity](identity.mdx).
+
+## Bound an action's wait
+
+Actions have no client-side timeout by default. Set `actions.timeoutMs` to abort a call that has not started responding. It rejects with `NF-038`.
+
+```ts title="vite.config.ts"
+nextFederationIslands({ /* ... */ actions: { timeoutMs: 15_000 } })
+```
+
+<Callout type="warn">
+  **Good to know:** An aborted action may still have run. Retry only actions
+  that are safe to run twice.
+</Callout>
+
+## Know what forms cannot do
+
+Island forms are not submittable until the island hydrates. Put a form that must work without JavaScript in the host. A plain `<form action>` warns [`NF-035`](../errors/raw-form-action.md). See the [reference](server-actions-reference.mdx#forms-no-progressive-enhancement).
+
+## Next steps
+
+<Cards>
+  <Card title="Identity" href="identity.mdx">
+    Tokens, claims and signing keys for `requireIdentity`.
+  </Card>
+  <Card title="Writing an island remote" href="writing-an-island-remote.mdx">
+    Build the remote that serves the actions.
+  </Card>
+  <Card title="Reference" href="server-actions-reference.mdx">
+    Errors, forms, body limits and what does not work.
+  </Card>
+</Cards>

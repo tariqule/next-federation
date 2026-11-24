@@ -1,0 +1,60 @@
+---
+title: 'Types for Remote Components'
+description: Publish a remote's declarations, what they make public and how nf-types verifies a download.
+---
+
+A host gets a remote component's props from the remote's own declarations. This page covers what the remote publishes and how the host checks it. To use them, see [Type the props with nf-types](host-configuration.mdx#type-the-props-with-nf-types).
+
+## Publish types from a remote
+
+Types are off by default. With `types: true`, `nextFederationComponents` emits the declarations of every exposed module with the project's own `typescript` and `tsconfig.json`:
+
+- `client/@mf-types/compiled-types/…`: the `.d.ts` of each exposed module and the local files it imports.
+- `client/@mf-types/<Name>.d.ts`: one per expose, re-exporting the module.
+- `client/@mf-types/index.json`: every file with its sha384.
+
+The descriptor's `types` field signs the index. Every URL is under the immutable `/b/<buildId>/`.
+
+Without `typescript`, or when TypeScript cannot emit, the build warns and publishes no types. It never fails for types, and never publishes partial types. Upgrade hosts first: an older host refuses a build that has `types` (`NF-027`).
+
+For Rspack and webpack, `nf-describe --types` signs `client/@mf-types/index.json`. Module Federation's `dts` plugin writes a zip that `nf-describe` does not read. Unzip it into `client/@mf-types/`, or emit the folder with `tsc --declaration --emitDeclarationOnly`.
+
+## What becomes public
+
+Declarations carry more than types:
+
+- Literal values of `const` declarations, exported or not (`export const KEY = 'sk_live_…'` publishes the key), `as const` objects and enum members.
+- Values TypeScript inlines from other files, including files outside the remote's folder.
+- Exported names and prop types.
+
+<Callout type="warn">
+  **Good to know:** Do not expose a module whose type graph reaches a secret,
+  such as a key, an internal URL or a flag name.
+</Callout>
+
+Comments and JSDoc are never published. A file that still has a comment makes the build warn and publish no types. When a declaration names an absolute path or a relative path above the Vite root, the build warns and publishes no types. Package imports stay as written and resolve from the host's dependencies.
+
+## How nf-types verifies a build
+
+For each remote, `nf-types`:
+
+1. Fetches the descriptor from the configured URL, without credentials or redirects. A build served outside the remote's origins is refused (`NF-005`).
+2. Verifies it with the remote's `components.ssr` policy (a signature or a pin) before fetching anything it names (`NF-028`, `NF-027`). A remote with `ssr: false` has no policy, so its types are refused.
+3. Downloads the index and checks its bytes against the signed sha384 (`NF-027`). An invalid index is `NF-029`: more than 2000 files, or a path that is not a plain relative `.d.ts` path.
+4. Downloads each file (at most 1 MiB per file and 20 MiB per build), checks its sha384 (`NF-027`) and writes the bytes unchanged. Only then does it replace `next-federation-types/<remote>/`.
+
+A remote also fails on an HTTP error, a network error, a redirect, a timeout or a descriptor over 1 MiB. A failed remote keeps the types it had, and the command exits 1. A verified build that publishes no types removes the remote's previous folder. `nf-types` needs the remote reachable (`NF-029` otherwise). Nothing downloaded ever runs.
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Host configuration"
+    href="host-configuration.mdx#type-the-props-with-nf-types"
+  >
+    Run nf-types and use RemoteProps.
+  </Card>
+  <Card title="Reference" href="reference.mdx">
+    Build output and nf-describe.
+  </Card>
+</Cards>

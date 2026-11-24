@@ -1,0 +1,146 @@
+---
+title: Architecture
+description: How islands and remote components work, and what a host trusts.
+---
+
+`next-federation` puts a remote app's UI in a host page at runtime. For the wire format see the [island protocol](protocol/v1.md).
+
+## The idea
+
+A **host** is the app your users visit. A **remote** is a separate app, deployed on its own, that provides UI to the host at runtime. Neither needs a rebuild when the other deploys.
+
+|                  | Islands                                     | Remote components                                                           |
+| ---------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
+| The remote ships | Server-rendered HTML and its own React tree | A client component module                                                   |
+| Runs             | On the remote's server, then in the browser | In the host's browser, and on its server when the build is signed or pinned |
+| React            | The remote's own                            | The host's                                                                  |
+| Props            | Plain JSON                                  | Anything, including functions and children                                  |
+| Host context     | Does not cross over                         | Shared                                                                      |
+
+Both work with remotes on any origin and call only public Next.js APIs. Next.js 14 is not supported. An App Router host always runs Next's React 19, so React 18 is only for Pages Router and SPA hosts ([Limits](guides/limits.mdx#react-18)).
+
+```text
+                 islands: HTML + RSC payload (JSON envelope)
+┌──────────────┐ ───────────────────────────────────────────▶ ┌──────────────┐
+│ REMOTE       │                                               │ HOST         │
+│ own server,  │ ◀─────────────────────────────────────────── │ Next.js, SPA │
+│ own React    │   GET /_nf/island/<name>?p=<props>            │ or Pages     │
+│              │                                               │              │
+│ components:  │ ───────────────────────────────────────────▶ │ renders in   │
+│ static build │   descriptor + client modules (Module         │ the host's   │
+│ (no server)  │   Federation), signed or pinned for SSR       │ React tree   │
+└──────────────┘                                               └──────────────┘
+```
+
+## How islands work
+
+An island is UI that a remote renders on its own server with React Server Components. The host embeds it as a separate React root.
+
+### Request and envelope
+
+1. The host asks the remote: `GET <remote>/_nf/island/<name>?p=<props>`.
+2. The remote renders HTML and an RSC (Flight) payload.
+3. It answers with a JSON **envelope**: the HTML, the payload, stylesheet URLs, a bootstrap module URL, the build id and the React version.
+4. The host checks that every URL is `http(s)` on the remote's configured origins, or it renders the fallback.
+5. The host puts the HTML in the page. In the browser, the bootstrap module hydrates it with the island's own React.
+
+Props are canonical JSON, so equal props give equal URLs and a CDN can cache the response. The fetch runs on the host's server, so the first paint contains the island. A remote that is down, slow or invalid shows a fallback and never breaks the page.
+
+### Mounting
+
+`IslandMount` (`@next-federation/react`) keeps the island stable inside the host's React tree:
+
+- The island root belongs to its container node, so Strict Mode and hidden `cacheComponents` routes leave it untouched.
+- The HTML is written once. A host re-render hands the new payload to the existing root.
+- Each mount gets a unique id prefix.
+- Errors inside the island do not reach the host's error boundaries. The mount reports them as events.
+
+### Identity
+
+A **private island** renders for the signed-in user. The host signs a short-lived ES256 token for the remote's audience and sends it as `Authorization: Bearer`. The remote fetches the host's JWKS from its own `issuers` configuration and verifies the token before it renders.
+
+Tokens never appear in HTML or browser storage. See [Identity](guides/identity.mdx).
+
+### Skew pinning
+
+Every URL in an envelope is absolute and pinned to the build that rendered it (`<remote>/b/<buildId>/...`). A cached envelope keeps working while that build is served, and a Server Action posts to the build that rendered its island.
+
+A build past retention answers `410` (`NF-023`), and the island stays visible but inert until the host refetches. See [Self-hosted build retention](guides/self-hosted-skew.mdx) and [Deploying a remote on Vercel](guides/deploying-a-remote-on-vercel.mdx).
+
+### Caching in the host
+
+A public island stays inside the page's static or ISR output. A private island is a dynamic hole under `<Suspense>` with `cacheComponents`, and makes the route dynamic without it. The library never silently turns a static page dynamic. See [Caching](guides/caching.mdx).
+
+### Sharing React between islands
+
+Each island remote ships its own React, about 75 KB gzipped. Production remotes on the same exact React version share one copy through the `nf-islands` share scope. A remote on another version uses its own copy.
+
+An SPA or Pages Router host can lend its React with `provideHostReact()`. App Router hosts never do. See [Limits](guides/limits.mdx#cost).
+
+## How remote components work
+
+A remote component is a client component that the remote builds as a Module Federation 2.0 module. The host renders it in its own tree, so it shares the host's React, context and router.
+
+### Loading
+
+The remote's build writes a **descriptor** (`nf-components.json`). It lists the build id, the manifest URL, the sha384 of every server file, and the stylesheets and chunks of each exposed module as absolute build-pinned URLs.
+
+The host fetches the descriptor, then renders the component:
+
+- **In the browser**, through the Module Federation runtime, with React and other `shared` modules from the host.
+- **On a Next.js host's server**, when the descriptor is verified. The browser then hydrates it.
+- **In a client-only host, or for an unverified build**, the server sends the component's `fallback` and the browser renders it.
+
+### Server rendering and the trust model
+
+Server rendering runs fetched code in the host's server process, so the host does it only when both hold:
+
+1. **The descriptor is verified.** It carries an ES256 signature that matches a public key you configured, or your configuration pins the build id to its digest. `unsafe-dev` skips verification and works only in `development` or `test`.
+2. **Every file matches its sha384** from the descriptor, checked before evaluation.
+
+The host never writes the code to disk. A build whose manifest lists further remotes, or has no checkable manifest, renders in the browser only. Details are in [Remote components](guides/remote-components/overview.mdx).
+
+## What the host trusts
+
+- **Island remotes.** The host accepts envelopes only from the configured origins (plus `assetOrigins`) and refuses redirects. Island HTML has scripts stripped, but that is cleanup, not a boundary: an island can run script in your page. List only remotes you trust.
+- **Remote components.** This is code you load into your page, and for verified builds into your server. Trust a remote like a dependency.
+- **Identity.** A remote trusts only the issuers in its own `issuers` map. Tokens are scoped to one remote, expire in 300 seconds by default (900 at most), and host cookies never reach remotes.
+
+Report a suspected vulnerability as described in [SECURITY.md](../SECURITY.md).
+
+## Design choices
+
+- **No Next.js internals.** Only small adapters call public Next.js APIs.
+- **A bundler-neutral protocol.** An island remote is anything that serves the envelope and a bootstrap module that exports `mountIsland`.
+- **Islands use their own React.** The RSC wire format is only guaranteed between identical React versions.
+- **Failures degrade.** A remote that is down, slow, invalid or unverified shows a fallback.
+
+## Packages
+
+| Package                                                       | Role                                                                           |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`@next-federation/next`](../packages/next/README.md)         | Next.js adapter: `withNextFederation`, islands, remote components, `nf-types`. |
+| [`@next-federation/react`](../packages/react/README.md)       | Island mount, error boundary and remote components for SPA hosts.              |
+| [`@next-federation/core`](../packages/core/README.md)         | Host config, island fetching and identity tokens, with no framework.           |
+| [`@next-federation/vite`](../packages/vite/README.md)         | Vite plugins for island remotes and components remotes.                        |
+| [`@next-federation/server`](../packages/server/README.md)     | Island handler, identity verification, `nf-serve` and `nf-describe`.           |
+| [`@next-federation/island`](../packages/island/README.md)     | Remote-side `Link`, `Form`, `getIdentity` and browser bootstrap.               |
+| [`@next-federation/protocol`](../packages/protocol/README.md) | The wire contract: envelope, request codec, descriptor.                        |
+| [`@next-federation/sdk`](../packages/sdk/README.md)           | `NF-xxx` error codes and the logger.                                           |
+| [`@next-federation/router`](../packages/router/README.md)     | Internal. Never imported by application code.                                  |
+
+The repo map is in [AGENTS.md](../AGENTS.md).
+
+## Next steps
+
+<Cards>
+  <Card title="Island protocol v1" href="protocol/v1.md">
+    The wire contract between a host and a remote.
+  </Card>
+  <Card title="Limits" href="guides/limits.mdx">
+    What islands cannot do and what they cost.
+  </Card>
+  <Card title="Remote components" href="guides/remote-components/overview.mdx">
+    Integrity, shared modules and host setup.
+  </Card>
+</Cards>

@@ -9,7 +9,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: SITE_URL, priority: 1 },
     ...source
       .getPages()
-      .filter((p) => p.url !== '/docs') // /docs redirects to the first guide
       .map((p) => ({ url: `${SITE_URL}${p.url}`, priority: 0.7 })),
   ]
 }

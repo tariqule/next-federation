@@ -1,18 +1,24 @@
 # NF-033: Server Action threw an error
 
-## What happened
+## Why This Error Occurred
 
-A Server Action on the remote threw. The remote logged this code and the caller's promise rejected.
+A Server Action on the remote threw, and the caller's promise rejected. The error came from the action's own code or from something it called.
 
-## Why
+## Possible Ways to Fix It
 
-The error came from the action's own code (or something it called). In production the error message
-sent to the browser is redacted; the remote's log has the details.
+- Find the original error in the remote's server log entry for `NF-033`. In production the message sent to the browser is redacted.
+- Handle expected failures inside the action and return a value instead of throwing:
 
-## How to fix
+  ```ts
+  'use server'
 
-Read the remote's server log entry for `NF-033` to find the original error. Handle expected failures
-inside the action and return a value (for example an error state for `useActionState`) instead of
-throwing.
+  export async function addToCart(formData: FormData) {
+    const id = formData.get('id')
+    if (typeof id !== 'string') return { error: 'Missing product id' }
+    return { error: null }
+  }
+  ```
 
-See [Server Actions: errors](../guides/server-actions.md#errors).
+## Useful Links
+
+- [Server Actions: errors](../guides/server-actions-reference.mdx#errors)

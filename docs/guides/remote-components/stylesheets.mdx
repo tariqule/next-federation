@@ -1,0 +1,31 @@
+---
+title: 'Share Stylesheets from a Remote Component'
+description: Import CSS in an exposed module and the host loads it with the component.
+---
+
+Import CSS in an exposed module and every host loads it with the component.
+
+## Import CSS in an exposed module
+
+Import CSS as usual (`import './Cart.css'`, CSS Modules). The build lists each exposed module's stylesheets in the descriptor. The host renders them as React 19 stylesheet resources, one link per URL.
+
+- **Server-rendered component:** the link comes ahead of the markup, so the component never paints unstyled. A streamed boundary is revealed only after its stylesheet loads. The server also preloads the stylesheets and the module's chunks.
+- **First mounted in the browser** (a client navigation, a browser-only build, an SPA): the stylesheets load with `preinit`. A slow stylesheet never blocks navigation, but the component can show unstyled until it arrives.
+
+<Callout>
+  **Good to know:** A remote dev server (`vite`) publishes no file list. Its
+  modules inject their own CSS. [Stylesheet
+  loading](reference.mdx#stylesheet-loading) covers lazy chunks and which URLs a
+  host accepts.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Sharing modules" href="sharing-modules.mdx">
+    Share a context module or a library with the host.
+  </Card>
+  <Card title="CSP" href="../csp.mdx">
+    Allow the remote's origin for scripts and styles.
+  </Card>
+</Cards>

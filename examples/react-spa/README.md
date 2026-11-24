@@ -39,5 +39,5 @@ Vercel `vite.config.ts` fails the build without them. The island remote must lis
 `hosts` (its `SPA_ORIGIN`). `vercel.json` builds production deployments only. On Vercel, the page
 shows a live demo banner (`VITE_VERCEL_ENV` is set at build time).
 
-Guides: [SPA host](../../docs/guides/getting-started-spa.md),
-[Remote components](../../docs/guides/remote-components.md).
+Guides: [SPA host](../../docs/guides/getting-started-spa.mdx),
+[Remote components](../../docs/guides/remote-components/overview.mdx).
