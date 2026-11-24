@@ -1,5 +1,13 @@
 # @next-federation/core
 
+## 0.2.1
+
+### Patch Changes
+
+- 2c28803: Error and warning messages link to the new docs pages.
+- @next-federation/protocol@0.2.1
+  - @next-federation/sdk@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes

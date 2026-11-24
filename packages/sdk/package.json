@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Category logger and NF-xxx error codes shared by every next-federation package.",
   "license": "MIT",
   "author": "tariqule",
