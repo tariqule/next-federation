@@ -18,7 +18,7 @@ What islands and remote components do not do, and what they cost.
 | `react-server-dom-webpack` | 19.0.9, 19.1.10, 19.2.9, 19.3.1 or a later patch. Older versions fail the build with `NF-041` ([GHSA-xqc2-xf4c-x3h3](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3)). |
 | `@module-federation/vite`  | 1.24.0 for a components remote. Another version fails with `NF-026` unless `NF_ALLOW_MF_VITE=1`.                                                                          |
 
-The two `NF_ALLOW_*` flags are for a CI canary job, never for a release. React Router hosts are planned after 1.0. `create-next-app --use-pnpm` writes a `pnpm-workspace.yaml` that pnpm 9 rejects: use pnpm 10 or newer, or npm.
+The two `NF_ALLOW_*` flags are for a CI canary job, never for a release. A React Router SPA host works: remote links navigate through it with `provideNavigation` ([SPA](getting-started-spa.mdx)). Server-rendering React Router hosts (framework mode) are planned after 1.0. `create-next-app --use-pnpm` writes a `pnpm-workspace.yaml` that pnpm 9 rejects: use pnpm 10 or newer, or npm.
 
 ### Next.js 15
 
@@ -64,7 +64,7 @@ Embed each island from the host instead, and pass data as props.
 
 ## What a remote component cannot do
 
-- **Only three `next/*` modules.** `next/link`, `next/navigation` (App Router) and `next/router` (Pages Router) come from the host's router through `@next-federation/next/components` or `@next-federation/next/pages/components`. An SPA provides none. `next/image`, `next/head` and the rest fail at build time (`NF-002`): pass props.
+- **Links work in every host; other `next/*` modules do not.** The build rewires `next/link` and `next/navigation` to the host's router ([Links](remote-components/links.mdx)). Through `shared`, a Next.js host provides only `next/link`, `next/navigation` (App Router) and `next/router` (Pages Router). `next/image`, `next/head` and the rest fail at build time (`NF-002`): pass props.
 - **No checks against a remote dev server.** A missing module fails only when the code asks for it (`NF-029`).
 - **No server rendering for unverified builds.** They render in the browser ([Remote components](remote-components/security.mdx#integrity-server-rendering)).
 - **No CSS isolation.** Stylesheet order follows the island rules.
