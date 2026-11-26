@@ -211,8 +211,9 @@ export type RuntimeDeps = {
    */
   loadTimeoutMs?: number
   /**
-   * A recorded build refusal (NF-027/NF-028) expires after this many ms;
-   * the next load checks the build again. Default REFUSAL_TTL_MS (5 minutes).
+   * Server: a recorded build refusal (NF-027/NF-028) expires after this many
+   * ms; the next load checks the build again. Default REFUSAL_TTL_MS (5
+   * minutes). Browser refusals never expire.
    */
   refusalTtlMs?: number
 }
@@ -264,7 +265,8 @@ export type ComponentRuntime = {
   /**
    * Records that the server refused this build's code (browser: read from
    * the server HTML). Every later load of it rejects with `code`, no request,
-   * until the refusal expires (refusalTtlMs). NF-036 is per expose: ignored.
+   * until the refusal expires (server only, refusalTtlMs). NF-036 is per
+   * expose: ignored.
    */
   refuse(
     build: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
@@ -801,7 +803,14 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     }
     const at = now()
     builds.delete(base)
-    builds.set(base, { code, at, until: at + refusalTtlMs })
+    // Only the server expires a refusal: it re-checks integrity on the next
+    // load. The browser cannot check file hashes, so it keeps a refusal for
+    // the page's lifetime (a fresh server render is how it recovers).
+    builds.set(base, {
+      code,
+      at,
+      until: deps.isServer ? at + refusalTtlMs : Number.POSITIVE_INFINITY,
+    })
     while (builds.size > MAX_REFUSED_PER_REMOTE) {
       builds.delete(builds.keys().next().value!)
     }

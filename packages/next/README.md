@@ -223,7 +223,7 @@ import { createRemoteComponent } from '@next-federation/next/components'
 export const NavMenu = createRemoteComponent({ expose: './NavMenu', fallback: null })
 ```
 
-A remote component that imports a module the host does not provide is refused and renders `errorFallback`, also after hydration (`NF-036`). Builds refused for integrity or trust are not loaded in the browser until the refusal expires (5 minutes). See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx).
+A remote component that imports a module the host does not provide is refused and renders `errorFallback`, also after hydration (`NF-036`). Builds refused for integrity or trust are not loaded in the browser; the server checks them again after 5 minutes. See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx).
 
 ### nf-types
 

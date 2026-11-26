@@ -1975,8 +1975,9 @@ describe('NF-036 is per expose, never per build', () => {
 
 describe('build refusals expire', () => {
   const TTL = 5 * 60 * 1000
-  for (const isServer of [false, true]) {
-    test(`${isServer ? 'server' : 'browser'}: refused within the TTL (default 5 minutes), loaded again after it`, async () => {
+  {
+    const isServer = true
+    test('server: refused within the TTL (default 5 minutes), loaded again after it', async () => {
       const { runtime, instance, tick } = setup({ isServer })
       const d = descriptor('t1')
       runtime.refuse(d, 'NF-027')
@@ -1997,6 +1998,21 @@ describe('build refusals expire', () => {
       expect(instance.loads).toHaveLength(1)
     })
   }
+
+  test('browser: a refusal never expires (it cannot re-check file hashes)', async () => {
+    const { runtime, instance, tick } = setup({
+      isServer: false,
+      refusalTtlMs: 1000,
+    })
+    const d = descriptor('t3')
+    runtime.refuse(d, 'NF-027')
+    tick(10 * TTL)
+    expect(runtime.refusedBuild(d)).toBe('NF-027')
+    await expect(runtime.load(d, './Counter')).rejects.toMatchObject({
+      code: 'NF-027',
+    })
+    expect(instance.loads).toEqual([])
+  })
 
   test('server: after the TTL a still failing build is attempted and refused again', async () => {
     const ctx = setup({ refusalTtlMs: 2000 })

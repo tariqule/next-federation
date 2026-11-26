@@ -628,7 +628,7 @@ export function createBindings({
     const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id, base))
     // Hydrating a boundary the server refused: keep its error fallback for
     // good. A build fact (NF-027/NF-028) is recorded for the build, so no
-    // boundary of this page loads it until the refusal expires; NF-036 is
+    // boundary of this page loads it (never expired here); NF-036 is
     // per expose and blocks this boundary only (runtime.refuse ignores it).
     const [refusedMark] = useState(() => {
       if (isServer) return undefined
