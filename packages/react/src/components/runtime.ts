@@ -753,15 +753,16 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     Map<string, Map<string, Thenable<RemoteModule>>>
   >()
   const buildIds = new Map<string, string>()
-  // Browser: builds whose code the server refused, by base, never loaded
-  // by this page. The server keeps its own retry rules (a cooldown) and
-  // records refusals process-wide for the descriptors it hands out
-  // (`refused`), which every runtime honours.
+  // Builds whose code is refused, never loaded again by this runtime.
+  // Browser: every refusal read from the server HTML. Server: NF-036 only,
+  // a fact of this layer's shared modules (another layer may provide them),
+  // lifted by registerShared. Build facts (NF-027/NF-028) go process-wide
+  // instead, for the descriptors the server hands out (`refused`).
   // Per remote (the host's key, never the remote's choice), then per base,
   // oldest first: a remote that floods refusals only evicts its own oldest.
   const refusedBases = new Map<string, Map<string, ComponentRefusalCode>>()
-  const refusalStore = () =>
-    deps.isServer
+  const refusalStore = (code: ComponentRefusalCode) =>
+    deps.isServer && code !== 'NF-036'
       ? (componentTrustRegistry().refusedBuilds ??= new Map())
       : refusedBases
   function refusedBuild(
@@ -773,7 +774,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     { remote, base }: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
     code: ComponentRefusalCode
   ): void {
-    const store = refusalStore()
+    const store = refusalStore(code)
     let builds = store.get(remote)
     if (!builds) {
       builds = new Map()
@@ -785,9 +786,9 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       builds.delete(builds.keys().next().value!)
     }
   }
-  /** NF-036 refusals: a module registered since may satisfy the build. */
+  /** NF-036 refusals (this runtime's own): a module registered since may satisfy the build. */
   function forgetSharedRefusals(): void {
-    for (const builds of refusalStore().values()) {
+    for (const builds of refusedBases.values()) {
       for (const [base, code] of builds) {
         if (code === 'NF-036') builds.delete(base)
       }

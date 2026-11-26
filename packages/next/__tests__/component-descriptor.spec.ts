@@ -228,7 +228,7 @@ test('a build this process refused comes back marked `refused`; other builds do 
   })
   expect(plain?.refused).toBeUndefined()
   const registry = componentTrustRegistry()
-  const refusedBuilds = new Map([[payload('c1').base, 'NF-036' as const]])
+  const refusedBuilds = new Map([[payload('c1').base, 'NF-027' as const]])
   ;(registry.refusedBuilds ??= new Map()).set('components', refusedBuilds)
   try {
     const marked = await resolveComponentDescriptor(federation, 'components', {
@@ -237,7 +237,7 @@ test('a build this process refused comes back marked `refused`; other builds do 
     expect(marked).toMatchObject({
       buildId: 'c1',
       ssr: payload('c1').ssr,
-      refused: { code: 'NF-036' },
+      refused: { code: 'NF-027' },
     })
     // The verified descriptor itself is not changed (nor the last known one).
     expect(plain?.refused).toBeUndefined()

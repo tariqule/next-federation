@@ -1923,3 +1923,36 @@ describe('refusal stores are bounded per remote', () => {
     expect(instance.loads).toHaveLength(1)
   })
 })
+
+describe('NF-036 refusals stay in their own layer', () => {
+  test('server: a Pages layer NF-036 is never stamped process-wide; another layer still loads', async () => {
+    const pages = setup()
+    pages.runtime.refuse(descriptor('m1'), 'NF-036')
+    const d = descriptor('m1')
+    expect(
+      componentTrustRegistry().refusedBuilds?.get('components')?.get(d.base)
+    ).toBeUndefined()
+    // The same layer keeps refusing it until shared modules change.
+    expect(pages.runtime.refusedBuild(d)).toBe('NF-036')
+    const app = setup()
+    expect(app.runtime.refusedBuild(d)).toBeUndefined()
+    expect(await app.runtime.serverLoad(d, './Counter')).not.toBeNull()
+  })
+
+  test('server: registerShared in one layer keeps NF-027 entries and other layers NF-036 state', () => {
+    const a = setup()
+    const b = setup()
+    const tampered = descriptor('m2')
+    const shared = descriptor('m3')
+    a.runtime.refuse(tampered, 'NF-027')
+    b.runtime.refuse(shared, 'NF-036')
+    a.runtime.registerShared({ 'late-x': { version: '1.0.0', module: {} } })
+    expect(
+      componentTrustRegistry().refusedBuilds?.get('components')?.get(tampered.base)
+    ).toBe('NF-027')
+    expect(b.runtime.refusedBuild(shared)).toBe('NF-036')
+    b.runtime.registerShared({ 'late-y': { version: '1.0.0', module: {} } })
+    expect(b.runtime.refusedBuild(shared)).toBeUndefined()
+    componentTrustRegistry().refusedBuilds?.get('components')?.delete(tampered.base)
+  })
+})

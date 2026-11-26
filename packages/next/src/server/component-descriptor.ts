@@ -30,7 +30,8 @@ const lastKnown = new Map<string, RemoteComponentDescriptor>()
 
 /**
  * The descriptor, marked `refused` when this server process refused the
- * build's code (recorded by its remote component runtime): the browser then
+ * build's code for a build fact (NF-027/NF-028, recorded by its remote
+ * component runtimes; NF-036 stays in the refusing layer): the browser then
  * never loads it, from any boundary or navigation. Outside the signed
  * payload, so verification and pinning never see it.
  */

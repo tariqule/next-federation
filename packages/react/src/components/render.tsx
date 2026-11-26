@@ -517,6 +517,11 @@ export function createBindings({
     expose: string,
     options?: PreloadOptions
   ): Promise<void | PreloadResult>
+  /** A promise of `run()`: a synchronous throw becomes a rejection. */
+  function attempt<T>(run: () => T | PromiseLike<T>): Promise<T> {
+    return new Promise<T>((resolve) => resolve(run()))
+  }
+
   function preloadRemoteComponent(
     descriptor: RemoteComponentDescriptor | null,
     expose: string,
@@ -546,18 +551,22 @@ export function createBindings({
     }
     // Settles to how the load went; never rejects, so a load that settles
     // after a timeout leaves no unhandled rejection.
+    const codeOf = (error: unknown) => (isNFError(error) ? error.code : 'NF-029')
     const settled: Promise<Omit<PreloadResult, 'ms'>> = isServer
-      ? Promise.resolve(runtime.serverLoad(descriptor, expose)).then(() => {
-          const outcome = runtime.serverOutcome(descriptor, expose)
-          const { state, code } = outcome
-            ? classifyOutcome(outcome)
-            : { state: 'failed' as const, code: 'NF-029' as const }
-          return code ? { state, code, ...id } : { state: 'ready', ...id }
-        })
-      : Promise.resolve(runtime.load(descriptor, expose)).then(
+      ? attempt(() => runtime.serverLoad(descriptor, expose)).then(
+          () => {
+            const outcome = runtime.serverOutcome(descriptor, expose)
+            const { state, code } = outcome
+              ? classifyOutcome(outcome)
+              : { state: 'failed' as const, code: 'NF-029' as const }
+            return code ? { state, code, ...id } : { state: 'ready', ...id }
+          },
+          (error: unknown) => ({ state: 'failed', code: codeOf(error), ...id })
+        )
+      : attempt(() => runtime.load(descriptor, expose)).then(
           () => ({ state: 'ready', ...id }),
           (error: unknown) => {
-            const code = isNFError(error) ? error.code : 'NF-029'
+            const code = codeOf(error)
             return {
               state: code === 'NF-036' ? 'refused' : 'failed',
               code,
@@ -582,11 +591,11 @@ export function createBindings({
     expose: string
   ): Promise<void> {
     if (!descriptor) return
-    if (isServer) {
-      await runtime.serverLoad(descriptor, expose)
-      return
-    }
-    await runtime.load(descriptor, expose).then(
+    await attempt(() =>
+      isServer
+        ? runtime.serverLoad(descriptor, expose)
+        : runtime.load(descriptor, expose)
+    ).then(
       () => undefined,
       () => undefined
     )
@@ -624,7 +633,9 @@ export function createBindings({
       if (code) runtime.refuse(descriptor, code)
       return code
     })
-    // Refused by the server (marker, descriptor, or recorded earlier).
+    // Refused: browser, by the server's marker, the descriptor, or an earlier
+    // marker on this page; server, by descriptor.refused or this layer's
+    // recorded outcome (an earlier refused load).
     const refusedCode = refusedMark ?? runtime.refusedBuild(descriptor)
     // Browser: a refused tree is reported once it is shown (effects only run
     // for a committed tree). The server reports it where it renders it.
