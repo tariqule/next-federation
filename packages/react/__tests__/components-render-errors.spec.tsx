@@ -337,3 +337,31 @@ test('errorFallback: fallback while loading, errorFallback on failure and for a 
   expect(await clientRender(<Plain descriptor={descriptor} />)).toBe('loading')
   expect(await clientRender(<Plain descriptor={null} />)).toBe('loading')
 })
+
+test('a browser-detected NF-036 renders errorFallback and does not retry', async () => {
+  const events: ComponentEvent[] = []
+  let loads = 0
+  const reason = Object.assign(new Error('nested remotes refused'), {
+    code: 'NF-036',
+  })
+  const runtime: BindingsRuntime = {
+    ...runtimeOf(fulfilled(boom)),
+    load: () => {
+      loads++
+      return rejected(reason)
+    },
+  }
+  const C = bind(runtime, false, events, { errorFallback: true })
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  await act(async () => {
+    root.render(<C descriptor={descriptor} />)
+  })
+  const settled = loads
+  await act(() => new Promise((r) => setTimeout(r, 50)))
+  expect(container.textContent).toBe('failed')
+  expect(loads).toBe(settled)
+  await act(async () => root.unmount())
+  container.remove()
+})

@@ -118,6 +118,13 @@ export type RemoteProps<
 /** Marks, in the server HTML, a boundary the server left to the browser. */
 export const BROWSER_ONLY_ATTR = 'data-nf-browser-only'
 
+/**
+ * Marks, in the server HTML, a boundary whose build the server refused (an
+ * integrity failure, code from other remotes): the browser keeps the error
+ * fallback and never loads that build.
+ */
+export const REFUSED_ATTR = 'data-nf-refused'
+
 type BoundaryProps = { fallback: ReactNode; children: ReactNode }
 
 /**
@@ -227,13 +234,19 @@ function BrowserOnly({ fallback, children }: BoundaryProps): ReactNode {
   return hydrated ? children : fallback
 }
 
-function hasBrowserOnlyMark(id: string): boolean {
+function hasMark(attr: string, id: string): boolean {
   if (typeof document === 'undefined') return false
   return (
-    document.querySelector(
-      `template[${BROWSER_ONLY_ATTR}="${CSS.escape(id)}"]`
-    ) !== null
+    document.querySelector(`template[${attr}="${CSS.escape(id)}"]`) !== null
   )
+}
+
+function hasBrowserOnlyMark(id: string): boolean {
+  return hasMark(BROWSER_ONLY_ATTR, id)
+}
+
+function hasRefusedMark(id: string): boolean {
+  return hasMark(REFUSED_ATTR, id)
 }
 
 /**
@@ -480,11 +493,13 @@ export function createBindings({
     expose,
     props,
     fallback,
+    errorFallback,
   }: {
     descriptor: RemoteComponentDescriptor
     expose: string
     props: Record<string, unknown>
     fallback: ReactNode
+    errorFallback: ReactNode
   }): ReactNode {
     // The same hooks on both sides, so ids below match during hydration.
     const id = useId()
@@ -492,6 +507,9 @@ export function createBindings({
     // what the server sent (a mark and the fallback), then load. No error,
     // no hydration mismatch.
     const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id))
+    // Hydrating a boundary whose build the server refused: keep its error
+    // fallback for good, and never load that build.
+    const [refusedMark] = useState(() => !isServer && hasRefusedMark(id))
     const hydrated = useSyncExternalStore(
       subscribeNothing,
       () => true,
@@ -528,6 +546,17 @@ export function createBindings({
         <Slot>{markAndFallback}</Slot>
       </>
     )
+    // The same shape again, so ids in the error fallback match too.
+    const refused = (
+      <>
+        {null}
+        <Slot>
+          <template {...{ [REFUSED_ATTR]: id }} />
+          {errorFallback}
+        </Slot>
+      </>
+    )
+    if (refusedMark) return refused
     if (marked && !hydrated) return browserOnly
     const loading = (
       isServer
@@ -544,7 +573,14 @@ export function createBindings({
       loadFailures.add(loading.reason)
     }
     const mod = readThenable(loading)
-    if (!mod) return browserOnly
+    if (!mod) {
+      const outcome = isServer
+        ? runtime.serverOutcome(descriptor, expose)
+        : undefined
+      return outcome && classifyOutcome(outcome).state === 'refused'
+        ? refused
+        : browserOnly
+    }
     const Render = renderer(mod.default, isServer, renderers)
     return (
       <>
@@ -596,6 +632,10 @@ export function createBindings({
     expose: string
   ): void {
     if (!descriptor.ssr || runtime.serverBlock(descriptor)) return
+    // A build already known refused is never fetched. A refusal found later
+    // (the load still running) cannot take back hints already sent.
+    const outcome = runtime.serverOutcome(descriptor, expose)
+    if (outcome && classifyOutcome(outcome).state === 'refused') return
     const files = exposeAssets(descriptor, expose)
     if (!files) return
     for (const href of files.css) preloadStyle(href)
@@ -643,6 +683,7 @@ export function createBindings({
               expose={expose}
               props={props as Record<string, unknown>}
               fallback={fallback}
+              errorFallback={errorFallback}
             />
           </Suspense>
         </Boundary>
