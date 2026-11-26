@@ -29,11 +29,28 @@ export type FederationEvent =
       ms: number
     }
   | {
+      /** A remote component module loaded (server-side, routed by descriptor). */
+      type: 'component:load'
+      remote: string
+      buildId: string
+      expose: string
+      ms: number
+      env: 'server' | 'client'
+      phase?: 'descriptor' | 'load' | 'render'
+      outcome?: 'ready' | 'browser-only' | 'refused' | 'failed' | 'fallback'
+    }
+  | {
       type: 'component:error'
       remote: string
       code: NFErrorCode
-      ms: number
+      /** Absent for a descriptor failure, which has no load or render time. */
+      ms?: number
       status?: number
+      /** Set for a load or render failure (server-side, routed by descriptor). */
+      buildId?: string
+      expose?: string
+      env?: 'server' | 'client'
+      error?: unknown
       phase?: 'descriptor' | 'load' | 'render'
       outcome?: 'ready' | 'browser-only' | 'refused' | 'failed' | 'fallback'
     }

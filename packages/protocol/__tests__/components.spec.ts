@@ -502,3 +502,13 @@ test('a fallback copy of a module that only starts like React or Next.js is acce
     ).not.toBeNull()
   }
 })
+
+test('an `events` routing key is outside the signed payload: same digest, dropped by the file parser', async () => {
+  const withKey = { ...payload, events: 'abc.0' }
+  expect(await componentDescriptorDigest(withKey)).toBe(
+    await componentDescriptorDigest(payload)
+  )
+  expect(
+    parseComponentDescriptorFile({ ...withKey, digest: 'sha384-x' })
+  ).toEqual({ ...payload, digest: 'sha384-x' })
+})

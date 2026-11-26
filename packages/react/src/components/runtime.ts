@@ -195,7 +195,8 @@ export type RuntimeDeps = {
   importEntry?: (url: string) => Promise<unknown>
   now?: () => number
   sleep?: (ms: number) => Promise<void>
-  emit?: (event: ComponentEvent) => void
+  /** Receives each event with the descriptor it is about (server routing). */
+  emit?: (event: ComponentEvent, descriptor: RemoteComponentDescriptor) => void
   /** Browser: delays between attempts. Default [500, 1000, 2000]. */
   clientRetryDelays?: number[]
   /** Server: a failed load is retried after this many ms. Default 1000. */
@@ -955,9 +956,12 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     return instance
   }
 
-  function emit(event: ComponentEvent): void {
+  function emit(
+    event: ComponentEvent,
+    descriptor: RemoteComponentDescriptor
+  ): void {
     try {
-      deps.emit?.(event)
+      deps.emit?.(event, descriptor)
     } catch (error) {
       logger.debug('component event observer threw', error)
     }
@@ -1066,16 +1070,19 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
             throw error
           }
         })
-        emit({
-          type: 'component:load',
-          remote: d.remote,
-          buildId: d.buildId,
-          expose,
-          ms: Math.round(now() - started),
-          env,
-          phase: 'load',
-          outcome: 'ready',
-        })
+        emit(
+          {
+            type: 'component:load',
+            remote: d.remote,
+            buildId: d.buildId,
+            expose,
+            ms: Math.round(now() - started),
+            env,
+            phase: 'load',
+            outcome: 'ready',
+          },
+          d
+        )
         return mod
       } catch (error) {
         last = error
@@ -1108,17 +1115,20 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         last
       )
     }
-    emit({
-      type: 'component:error',
-      remote: d.remote,
-      buildId: d.buildId,
-      expose,
-      code,
-      error: last,
-      env,
-      phase: 'load',
-      outcome: classifyOutcome({ kind: 'error', code, error: last }).state,
-    })
+    emit(
+      {
+        type: 'component:error',
+        remote: d.remote,
+        buildId: d.buildId,
+        expose,
+        code,
+        error: last,
+        env,
+        phase: 'load',
+        outcome: classifyOutcome({ kind: 'error', code, error: last }).state,
+      },
+      d
+    )
     throw isNFError(last)
       ? last
       : new NFError('NF-029', `${d.remote}:${expose} failed to load.`, {

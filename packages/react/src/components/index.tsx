@@ -23,6 +23,7 @@ export type {
 } from './preload-result.ts'
 import type { Bindings } from './render.tsx'
 import { createComponentRuntime } from './runtime.ts'
+import { serverComponentEmit } from './server-events.ts'
 import type {
   ComponentEvent,
   FederationInstance,
@@ -45,8 +46,15 @@ export const COMPONENT_EVENT = 'nf:component'
 
 const isServer = typeof window === 'undefined'
 
-function emit(event: ComponentEvent): void {
-  if (typeof document === 'undefined') return
+function emit(
+  event: ComponentEvent,
+  descriptor: RemoteComponentDescriptor
+): void {
+  // Server: to the onEvent of the federation that resolved the descriptor.
+  if (typeof document === 'undefined') {
+    serverComponentEmit(event, descriptor)
+    return
+  }
   document.dispatchEvent(new CustomEvent(COMPONENT_EVENT, { detail: event }))
 }
 

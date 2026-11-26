@@ -351,7 +351,7 @@ export function createBindings({
    * Receives `component:error` for a render error (NF-040) or a refusal no
    * load reported, and `component:fallback` for each degraded render.
    */
-  emit?: (event: ComponentEvent) => void
+  emit?: (event: ComponentEvent, descriptor: RemoteComponentDescriptor) => void
 }): Bindings {
   // Module load failures the runtime reported itself (thrown by `use`).
   const loadFailures = new WeakSet<object>()
@@ -360,9 +360,12 @@ export function createBindings({
   // One renderer per component type, so its identity (and state) is stable.
   const renderers = new WeakMap<object, ComponentType<RendererProps>>()
 
-  function send(event: ComponentEvent): void {
+  function send(
+    event: ComponentEvent,
+    descriptor: RemoteComponentDescriptor
+  ): void {
     try {
-      emit?.(event)
+      emit?.(event, descriptor)
     } catch (observerError) {
       logger.debug('component event observer threw', observerError)
     }
@@ -378,16 +381,19 @@ export function createBindings({
     reason: ComponentFallbackEvent['reason'],
     code?: NFErrorCode
   ): void {
-    send({
-      type: 'component:fallback',
-      remote: descriptor.remote,
-      buildId: descriptor.buildId,
-      expose,
-      env: isServer ? 'server' : 'client',
-      phase: 'render',
-      reason,
-      ...(code ? { code } : {}),
-    })
+    send(
+      {
+        type: 'component:fallback',
+        remote: descriptor.remote,
+        buildId: descriptor.buildId,
+        expose,
+        env: isServer ? 'server' : 'client',
+        phase: 'render',
+        reason,
+        ...(code ? { code } : {}),
+      },
+      descriptor
+    )
   }
 
   /** A refusal no load reported (refused before any load), then its fallback. */
@@ -398,20 +404,23 @@ export function createBindings({
     error: boolean
   ): void {
     if (error) {
-      send({
-        type: 'component:error',
-        remote: descriptor.remote,
-        buildId: descriptor.buildId,
-        expose,
-        code,
-        error: new NFError(
+      send(
+        {
+          type: 'component:error',
+          remote: descriptor.remote,
+          buildId: descriptor.buildId,
+          expose,
           code,
-          `Build ${descriptor.buildId} of ${descriptor.remote} is refused (${code}); it is not loaded.`
-        ),
-        env: isServer ? 'server' : 'client',
-        phase: 'render',
-        outcome: 'refused',
-      })
+          error: new NFError(
+            code,
+            `Build ${descriptor.buildId} of ${descriptor.remote} is refused (${code}); it is not loaded.`
+          ),
+          env: isServer ? 'server' : 'client',
+          phase: 'render',
+          outcome: 'refused',
+        },
+        descriptor
+      )
     }
     reportFallback(descriptor, expose, 'refused', code)
   }
@@ -444,17 +453,20 @@ export function createBindings({
         error
       )
     }
-    send({
-      type: 'component:error',
-      remote: descriptor.remote,
-      buildId: descriptor.buildId,
-      expose,
-      code: 'NF-040',
-      error,
-      env,
-      phase: 'render',
-      outcome: 'fallback',
-    })
+    send(
+      {
+        type: 'component:error',
+        remote: descriptor.remote,
+        buildId: descriptor.buildId,
+        expose,
+        code: 'NF-040',
+        error,
+        env,
+        phase: 'render',
+        outcome: 'fallback',
+      },
+      descriptor
+    )
     reportFallback(descriptor, expose, 'render-error', 'NF-040')
   }
 

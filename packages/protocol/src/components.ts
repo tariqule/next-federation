@@ -142,7 +142,18 @@ export type RemoteComponentDescriptor = {
    * Not part of the signed payload, so never covered by verification.
    */
   refused?: { code: ComponentRefusalCode }
+  /**
+   * Set by the server: the opaque key of the federation that resolved this
+   * descriptor, so server-side component events reach that federation's
+   * `onEvent` (see `routeComponentEvent`). A plain string that survives a
+   * copy or serialisation; never a callback. Not part of the signed payload,
+   * so never covered by verification.
+   */
+  events?: string
 }
+
+/** Where server-side component events of one federation go (its `emit`). */
+export type ComponentEventRoute = { emit(event: object): void }
 
 /** Why a build's code was refused (never loaded on either side). */
 export type ComponentRefusalCode = 'NF-027' | 'NF-028' | 'NF-036'
@@ -223,6 +234,12 @@ export type ComponentTrustRegistry = {
    * for the descriptors it hands out.
    */
   refusedBuilds?: Map<string, Map<string, ComponentRefusalCode>>
+  /**
+   * Per opaque federation key (`RemoteComponentDescriptor.events`): that
+   * federation, held weakly, which receives its descriptors' server-side
+   * component events. Never keyed by remote name.
+   */
+  eventRoutes?: Map<string, WeakRef<ComponentEventRoute>>
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')
@@ -236,6 +253,27 @@ export function verifiedKey(remote: string, digest: string): string {
 export function componentTrustRegistry(): ComponentTrustRegistry {
   const g = globalThis as Record<symbol, ComponentTrustRegistry | undefined>
   return (g[TRUST_REGISTRY] ??= { verified: new Map(), trust: new Map() })
+}
+
+/**
+ * Server only: hands a component event to the federation that resolved the
+ * descriptor (by its `events` key, so a copied or deserialised descriptor
+ * routes too). Returns false when no federation is registered for it.
+ */
+export function routeComponentEvent(
+  descriptor: { events?: string } | null | undefined,
+  event: object
+): boolean {
+  const key = descriptor?.events
+  if (typeof key !== 'string') return false
+  const routes = componentTrustRegistry().eventRoutes
+  const target = routes?.get(key)?.deref()
+  if (!target) {
+    if (routes?.has(key)) routes.delete(key)
+    return false
+  }
+  target.emit(event)
+  return true
 }
 
 /** Wall-clock seconds without `Date.now()` (cacheComponents prerenders flag it). */

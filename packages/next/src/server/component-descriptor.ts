@@ -10,6 +10,7 @@ import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { canLoadServerCode } from '@next-federation/react/components/server-loader'
 import { logger } from '@next-federation/sdk'
+import { withEvents } from './component-events.ts'
 
 export type { RemoteComponentDescriptor }
 
@@ -70,7 +71,7 @@ export async function resolveComponentDescriptor(
       result.code,
       `${result.detail} ${kept ? `Rendering the last known build "${kept.buildId}".` : 'Rendering the fallback.'}`
     )
-    return kept && withRefusal(kept)
+    return kept && withEvents(federation, withRefusal(kept))
   }
   const { verified } = result
   let { descriptor } = verified
@@ -97,5 +98,5 @@ export async function resolveComponentDescriptor(
     ssr: descriptor.ssr !== null,
     ms: result.ms,
   })
-  return withRefusal(descriptor)
+  return withEvents(federation, withRefusal(descriptor))
 }
