@@ -275,8 +275,8 @@ export type ComponentTrustRegistry = {
    * component events. Never keyed by remote name.
    */
   eventRoutes?: Map<string, WeakRef<ComponentEventRoute>>
-  /** Made once per process (clock origin and pid): the prefix of every route key it issues. */
-  eventProcessId?: string
+  /** This process's secret (made on first use, never sent): route keys are hashes of it. */
+  eventProcessSecret?: string
   /**
    * How many federations this process created a route key for. Only grows,
    * so a route key is never reused in a process.

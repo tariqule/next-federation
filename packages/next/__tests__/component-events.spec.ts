@@ -242,7 +242,10 @@ test('a descriptor cached by another process is not routed there (events are sti
     const a = await processWith(1_000)
     const cached = JSON.parse(JSON.stringify(a.d)) as RemoteComponentDescriptor
     const b = await processWith(9_999_999)
-    expect(cached.events).toMatch(/^[0-9a-z]+-[0-9a-z]+\.\d+$/)
+    // Opaque: reveals neither the pid nor the clock origin.
+    expect(cached.events).toMatch(/^[0-9a-f]{32}$/)
+    expect(cached.events).not.toContain(process.pid.toString(36))
+    expect(cached.events).not.toContain(Math.round(1_000 * 1000).toString(36))
     // Same config, same position: still another key in another process.
     expect(b.d.events).not.toBe(cached.events)
     a.got.length = 0
@@ -250,6 +253,10 @@ test('a descriptor cached by another process is not routed there (events are sti
     loadEvent(cached)
     expect(b.got).toEqual([])
     expect(a.got).toEqual([])
+    // A coarse clock (timeOrigin 0) in two processes: still different keys.
+    const c = await processWith(0)
+    const e = await processWith(0)
+    expect(c.d.events).not.toBe(e.d.events)
   } finally {
     Object.defineProperty(performance, 'timeOrigin', {
       value: realOrigin,
