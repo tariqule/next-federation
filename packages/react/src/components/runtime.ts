@@ -16,6 +16,7 @@ import type {
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
+import type { ServerLoadOutcome } from './preload-result.ts'
 
 export type RemoteModule = { default: unknown; [name: string]: unknown }
 
@@ -203,6 +204,14 @@ export type ComponentRuntime = {
     descriptor: RemoteComponentDescriptor,
     expose: string
   ): Thenable<RemoteModule | null>
+  /**
+   * Server: why the `serverLoad` of this descriptor object and expose settled
+   * as it did; undefined while pending or never loaded.
+   */
+  serverOutcome(
+    descriptor: RemoteComponentDescriptor,
+    expose: string
+  ): ServerLoadOutcome | undefined
   /** Build ids of a container kept loaded, oldest first. */
   loadedBuilds(name: string): string[]
 }
@@ -1021,6 +1030,23 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         })
   }
 
+  /**
+   * The NF code of a rejected load. An unmet shared module (NF-036) keeps its
+   * own code under the NF-028 wrapping of a build the loader refused.
+   */
+  function loadErrorCode(error: unknown): NFErrorCode {
+    if (!isNFError(error)) return 'NF-029'
+    const { code, cause } = error as NFError
+    if (
+      code === 'NF-028' &&
+      isNFError(cause) &&
+      (cause as NFError).code === 'NF-036'
+    ) {
+      return 'NF-036'
+    }
+    return code
+  }
+
   function thenable(promise: Promise<RemoteModule>): Thenable<RemoteModule> {
     const t = promise as Thenable<RemoteModule>
     t.status = 'pending'
@@ -1062,6 +1088,12 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const serverResults = new WeakMap<
     RemoteComponentDescriptor,
     Map<string, Thenable<RemoteModule | null>>
+  >()
+  // Recorded with each server result when it settles (a cooldown hit
+  // returns the same result, so it replays the same outcome).
+  const outcomes = new WeakMap<
+    Thenable<RemoteModule | null>,
+    ServerLoadOutcome
   >()
   const resolved = <T>(value: T): Thenable<T> =>
     Object.assign(Promise.resolve(value), {
@@ -1245,8 +1277,11 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       }
       const ready = (state: 'loaded' | 'refused') =>
         (componentTrustRegistry().serverReady ??= new Map()).set(d.base, state)
-      if (this.serverBlock(d)) {
+      let outcome: ServerLoadOutcome | undefined
+      const preBlock = this.serverBlock(d)
+      if (preBlock) {
         result = resolved(null)
+        outcome = { kind: 'blocked', block: preBlock, code: 'NF-028' }
         ready('refused')
       } else {
         const load = this.load(d, expose)
@@ -1254,20 +1289,30 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         // in: another instance of a host module may have reached it.
         const from = loadScopes.get(load) ?? scope
         const after = (mod: RemoteModule): RemoteModule | null => {
-          const blockedNow = serverBlockIn(d, from) !== null
-          ready(blockedNow ? 'refused' : 'loaded')
-          return blockedNow ? null : mod
+          const block = serverBlockIn(d, from)
+          ready(block ? 'refused' : 'loaded')
+          outcome = block
+            ? { kind: 'blocked', block, code: 'NF-028' }
+            : { kind: 'loaded' }
+          return block ? null : mod
         }
         // A load the loader refused: recorded at once, so a static
         // regeneration is not deferred for it again.
-        const failed = (): null => {
-          if (refusal(d.base)) ready('refused')
+        const failed = (error: unknown): null => {
+          const refused = refusal(d.base)
+          if (refused) ready('refused')
+          const code = loadErrorCode(error)
+          // The loader refused this build in this layer: its reason decides.
+          outcome =
+            code === 'NF-028' && refused
+              ? { kind: 'blocked', block: refused, code }
+              : { kind: 'error', code, error }
           return null
         }
         if (load.status === 'fulfilled') {
           result = resolved(after(load.value!))
         } else if (load.status === 'rejected') {
-          result = resolved(failed())
+          result = resolved(failed(load.reason))
         } else {
           result = load.then(after, failed) as Thenable<RemoteModule | null>
           result.status = 'pending'
@@ -1276,11 +1321,15 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
             r.status = 'fulfilled'
             r.value = value
             if (value === null) r.failedAt = now()
+            if (outcome) outcomes.set(r, outcome)
           })
         }
       }
       if (result.status === 'fulfilled' && result.value === null) {
         result.failedAt = now()
+      }
+      if (result.status === 'fulfilled' && outcome) {
+        outcomes.set(result, outcome)
       }
       if (!perDescriptor) {
         perDescriptor = new Map()
@@ -1288,6 +1337,11 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       }
       perDescriptor.set(expose, result)
       return result
+    },
+
+    serverOutcome(d, expose) {
+      const result = serverResults.get(d)?.get(expose)
+      return result ? outcomes.get(result) : undefined
     },
 
     loadedBuilds(name) {
