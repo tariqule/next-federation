@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve as resolvePath } from 'node:path'
+import { fileURLToPath } from 'node:url'
 // Server-side component events reach the `onEvent` of the federation that
 // resolved the descriptor: by an opaque key carried on the descriptor (never
 // by remote name), so a cached, copied or serialised descriptor routes too.
@@ -257,6 +260,36 @@ test('a descriptor cached by another process is not routed there (events are sti
     const c = await processWith(0)
     const e = await processWith(0)
     expect(c.d.events).not.toBe(e.d.events)
+    // Edge-like isolates: no hrtime, no pid, frozen clock. getRandomValues
+    // keeps their keys apart; without it, nothing is routed.
+    const proc = process as unknown as Record<string, unknown>
+    const hrtime = proc.hrtime
+    const pid = Object.getOwnPropertyDescriptor(process, 'pid')
+    const cryptoDesc = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+    const nowSpy = rs.spyOn(performance, 'now').mockReturnValue(5)
+    proc.hrtime = undefined
+    Object.defineProperty(process, 'pid', {
+      value: undefined,
+      configurable: true,
+    })
+    try {
+      const i1 = await processWith(0)
+      const i2 = await processWith(0)
+      expect(i1.d.events).toMatch(/^[0-9a-f]{32}$/)
+      expect(i1.d.events).not.toBe(i2.d.events)
+      // Web Crypto without getRandomValues (verification still needs subtle).
+      Object.defineProperty(globalThis, 'crypto', {
+        value: { subtle: globalThis.crypto.subtle },
+        configurable: true,
+      })
+      const bare = await processWith(0)
+      expect(bare.d.events).toBeUndefined()
+    } finally {
+      proc.hrtime = hrtime
+      if (pid) Object.defineProperty(process, 'pid', pid)
+      if (cryptoDesc) Object.defineProperty(globalThis, 'crypto', cryptoDesc)
+      nowSpy.mockRestore()
+    }
   } finally {
     Object.defineProperty(performance, 'timeOrigin', {
       value: realOrigin,
@@ -264,4 +297,15 @@ test('a descriptor cached by another process is not routed there (events are sti
     })
     g[slot] = saved
   }
+})
+
+test('the events module has no node: import (edge routes load @next-federation/next/server)', () => {
+  const source = readFileSync(
+    resolvePath(
+      dirname(fileURLToPath(import.meta.url)),
+      '../src/server/component-events.ts'
+    ),
+    'utf8'
+  )
+  expect(source).not.toMatch(/from ['"]node:/)
 })
