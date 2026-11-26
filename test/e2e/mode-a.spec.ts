@@ -43,6 +43,9 @@ const SIGNED = origin(COMPONENTS_PORTS.signed)
 const REDEPLOY = origin(COMPONENTS_PORTS.redeploy)
 const TAMPERED = origin(COMPONENTS_PORTS.tampered)
 
+/** Escapes every regex metacharacter of `s` for use inside a RegExp. */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 type Host = {
   name: string
   url: string
@@ -273,7 +276,7 @@ for (const host of HOSTS) {
       expect(body).toContain('counter unavailable')
       // No modulepreload or stylesheet hint for the refused build.
       expect(body).not.toMatch(
-        new RegExp(`<link[^>]*${TAMPERED.replace(/\./g, '\\.')}`)
+        new RegExp(`<link[^>]*${escapeRegExp(TAMPERED)}`)
       )
       const requested: string[] = []
       page.on('request', (r) => {
