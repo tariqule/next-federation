@@ -33,6 +33,7 @@ export function fakeRuntime(server: RemoteModule | null): BindingsRuntime {
     load: () => fulfilled(mod),
     serverLoad: () => fulfilled(server),
     serverBlock: () => null,
+    serverOutcome: () => undefined,
     registerShared: () => {},
   }
 }

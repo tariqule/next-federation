@@ -53,6 +53,7 @@ function runtimeOf(
     load: () => client,
     serverLoad: () => server,
     serverBlock: () => null,
+    serverOutcome: () => undefined,
     registerShared: () => {},
   }
 }

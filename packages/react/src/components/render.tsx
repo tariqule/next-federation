@@ -4,7 +4,7 @@ import type {
   ComponentExposeAssets,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
-import { NFError, logger } from '@next-federation/sdk'
+import { NFError, isNFError, logger } from '@next-federation/sdk'
 import {
   Component,
   Suspense,
@@ -29,10 +29,12 @@ import type {
   SharedModules,
   Thenable,
 } from './runtime.ts'
+import { classifyOutcome } from './preload-result.ts'
+import type { PreloadOptions, PreloadResult } from './preload-result.ts'
 
 export type BindingsRuntime = Pick<
   ComponentRuntime,
-  'load' | 'serverLoad' | 'serverBlock' | 'registerShared'
+  'load' | 'serverLoad' | 'serverBlock' | 'serverOutcome' | 'registerShared'
 >
 
 export type RemoteComponentOptions = {
@@ -75,6 +77,15 @@ export type RemoteComponentType<P> = ((
 ) => ReactNode) & {
   /** `preloadRemoteComponent` for this component's expose. */
   preload(descriptor: RemoteComponentDescriptor | null): Promise<void>
+  /** With options: waits at most `timeoutMs` and says how the load settled. */
+  preload(
+    descriptor: RemoteComponentDescriptor | null,
+    options: PreloadOptions
+  ): Promise<PreloadResult>
+  preload(
+    descriptor: RemoteComponentDescriptor | null,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult>
 }
 
 declare global {
@@ -271,6 +282,16 @@ export type Bindings = {
     descriptor: RemoteComponentDescriptor | null,
     expose: string
   ): Promise<void>
+  preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options: PreloadOptions
+  ): Promise<PreloadResult>
+  preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult>
   createRemoteComponent<P extends object = Record<string, unknown>>(
     options: RemoteComponentOptions
   ): RemoteComponentType<P>
@@ -365,7 +386,81 @@ export function createBindings({
    * Starts loading a remote component's module ahead of rendering, for
    * example in `getServerSideProps`. Never rejects.
    */
-  async function preloadRemoteComponent(
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string
+  ): Promise<void>
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options: PreloadOptions
+  ): Promise<PreloadResult>
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult>
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult> {
+    return options
+      ? preloadWithResult(descriptor, expose, options.timeoutMs)
+      : preloadOnly(descriptor, expose)
+  }
+
+  /**
+   * Races the load against `timeoutMs`. A timeout never cancels the load: it
+   * keeps running for later renders and preloads.
+   */
+  async function preloadWithResult(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    timeoutMs: number
+  ): Promise<PreloadResult> {
+    const start = Date.now()
+    const ms = () => Math.max(0, Date.now() - start)
+    if (!descriptor) return { state: 'no-descriptor', ms: ms() }
+    const id = {
+      remote: descriptor.remote,
+      buildId: descriptor.buildId,
+      expose,
+    }
+    // Settles to how the load went; never rejects, so a load that settles
+    // after a timeout leaves no unhandled rejection.
+    const settled: Promise<Omit<PreloadResult, 'ms'>> = isServer
+      ? Promise.resolve(runtime.serverLoad(descriptor, expose)).then(() => {
+          const outcome = runtime.serverOutcome(descriptor, expose)
+          const { state, code } = outcome
+            ? classifyOutcome(outcome)
+            : { state: 'failed' as const, code: 'NF-029' as const }
+          return code ? { state, code, ...id } : { state: 'ready', ...id }
+        })
+      : Promise.resolve(runtime.load(descriptor, expose)).then(
+          () => ({ state: 'ready', ...id }),
+          (error: unknown) => {
+            const code = isNFError(error) ? error.code : 'NF-029'
+            return {
+              state: code === 'NF-036' ? 'refused' : 'failed',
+              code,
+              ...id,
+            }
+          }
+        )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<Omit<PreloadResult, 'ms'>>((resolve) => {
+      timer = setTimeout(() => resolve({ state: 'timeout', ...id }), timeoutMs)
+    })
+    try {
+      const result = await Promise.race([settled, timedOut])
+      return { ...result, ms: ms() } as PreloadResult
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async function preloadOnly(
     descriptor: RemoteComponentDescriptor | null,
     expose: string
   ): Promise<void> {
@@ -560,8 +655,15 @@ export function createBindings({
       )
     }
     RemoteComponent.displayName = `RemoteComponent(${expose})`
-    RemoteComponent.preload = (descriptor: RemoteComponentDescriptor | null) =>
-      preloadRemoteComponent(descriptor, expose)
+    RemoteComponent.preload = ((
+      descriptor: RemoteComponentDescriptor | null,
+      options?: PreloadOptions
+    ) =>
+      preloadRemoteComponent(
+        descriptor,
+        expose,
+        options
+      )) as RemoteComponentType<P>['preload']
     return RemoteComponent
   }
 

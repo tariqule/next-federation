@@ -16,6 +16,11 @@ import * as ReactDOM from 'react-dom'
 import * as ReactDOMClient from 'react-dom/client'
 import * as JsxRuntime from 'react/jsx-runtime'
 import { createBindings } from './render.tsx'
+export type {
+  PreloadOptions,
+  PreloadResult,
+  PreloadState,
+} from './preload-result.ts'
 import type { Bindings } from './render.tsx'
 import { createComponentRuntime } from './runtime.ts'
 import type {
