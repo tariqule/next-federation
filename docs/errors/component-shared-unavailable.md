@@ -2,7 +2,7 @@
 
 ## Why This Error Occurred
 
-A remote component imports a module its remote lists in `shared` as host-provided, and the host does not provide it or provides a version outside `requiredVersion`. The host renders the fallback and the page still answers `200`.
+A remote component imports a module its remote lists in `shared` as host-provided, and the host does not provide it or provides a version outside `requiredVersion`. The host refuses the build: it renders `errorFallback` on the server and after hydration, never requests it in the browser, and answers `200`. The refusal clears when the host registers shared modules.
 
 ## Possible Ways to Fix It
 
@@ -14,7 +14,7 @@ A remote component imports a module its remote lists in `shared` as host-provide
   shared: { '@acme/ui': { version: '2.4.0', module: AcmeUi } }
   ```
 
-- Set `fallback: true` on the entry in the remote's `shared` if it can run with its own copy. React and `next/*` never fall back.
+- Set `fallback: true` on the remote's `shared` entry if it can run with its own copy. React and `next/*` never do.
 
 ## Useful Links
 

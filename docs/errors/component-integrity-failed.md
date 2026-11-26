@@ -2,7 +2,7 @@
 
 ## Why This Error Occurred
 
-The host could not verify a remote component build, so it did not run its server code. The component renders in the browser only. Server rendering runs the remote's code in the host's process, so the host only evaluates code that matches a descriptor it trusts.
+The host could not verify a remote component build, so it did not run its server code. The component renders `errorFallback` on the server and after hydration, and the browser never requests the build. The server remembers the build and marks later descriptors `refused`. Server rendering runs the remote's code in the host's process, so the host only evaluates code that matches a descriptor it trusts.
 
 ## Possible Ways to Fix It
 

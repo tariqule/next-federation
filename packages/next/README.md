@@ -199,7 +199,7 @@ Island scripts run in the host origin, so any island on the page can request a t
 
 ### getComponentDescriptor(federation, remote, options?)
 
-From `/server` (App Router) or `/pages/server`. Resolves and verifies the build of a components remote this render uses. Only a signed or pinned build keeps `ssr`; others render in the browser only (`NF-028`, or `NF-027` for a bad signature). When the remote is down it returns the last known descriptor, or `null`.
+From `/server` (App Router) or `/pages/server`. Resolves and verifies the build of a components remote this render uses. Only a signed or pinned build keeps `ssr`; an unsigned build renders in the browser only (`NF-028`), and a bad signature is refused (`NF-027`). When the remote is down it returns the last known descriptor, or `null`.
 
 | Option    | Type      | Default | Description                                                       |
 | --------- | --------- | ------- | ----------------------------------------------------------------- |
@@ -214,7 +214,7 @@ return <Cart descriptor={descriptor} items={3} /> // Cart: createRemoteComponent
 
 ### createRemoteComponent and the other components exports
 
-`/components` (App Router) and `/pages/components` (Pages Router) are `'use client'` entries. They export `createRemoteComponent`, `loadRemoteModule`, `preloadRemoteComponent`, `registerSharedModules` and `COMPONENT_EVENT`, like `@next-federation/react/components` (without `fetchDescriptorInBrowser`). They also share the host's `next/link` and `next/navigation` (`next/router` in Pages) with remotes that list them in `shared`.
+`/components` (App Router) and `/pages/components` (Pages Router) are `'use client'` entries. They export `createRemoteComponent`, `loadRemoteModule`, `preloadRemoteComponent`, `registerSharedModules` and `COMPONENT_EVENT`, like `@next-federation/react/components` (without `fetchDescriptorInBrowser`). `preloadRemoteComponent` and a component's `preload` take `{ timeoutMs }` and then resolve a `PreloadResult`, and components take `browserOnly` (see the [React README](https://github.com/tariqule/next-federation/blob/main/packages/react/README.md#preloadremotecomponentdescriptor-expose-options)). `/pages/server` also exports `preloadRemoteComponent` and registers `next/link` and `next/router`. These entries are client modules, so a preload is not callable from an App Router Server Component. In the Pages Router, `getServerSideProps` is the supported place to set `Cache-Control: no-store` for a non-`ready` result. They also share the host's `next/link` and `next/navigation` (`next/router` in Pages) with remotes that list them in `shared`.
 
 ```tsx title="lib/NavMenu.tsx"
 'use client'
@@ -223,7 +223,7 @@ import { createRemoteComponent } from '@next-federation/next/components'
 export const NavMenu = createRemoteComponent({ expose: './NavMenu', fallback: null })
 ```
 
-A remote component that imports a module the host does not provide renders its fallback (`NF-036`). See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx).
+A remote component that imports a module the host does not provide is refused and renders `errorFallback`, also after hydration (`NF-036`). Builds refused for integrity or trust are never loaded in the browser. See [Remote components](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/overview.mdx).
 
 ### nf-types
 
@@ -247,7 +247,7 @@ A `.ts` config needs Node 22.18 or 23.6 or newer; otherwise use `.mjs`. It does 
 
 ### Types
 
-`IslandSpec`, `RemoteIslandProps`, `AppIdentity`, `PagesIdentity`, `PagesIslandSpec`, `IslandProps`, `ComponentDescriptorOptions`, `RemoteComponentDescriptor`.
+`IslandSpec`, `RemoteIslandProps`, `AppIdentity`, `PagesIdentity`, `PagesIslandSpec`, `IslandProps`, `ComponentDescriptorOptions`, `RemoteComponentDescriptor`, `PreloadResult`, `PreloadOptions`, `ComponentEvent`.
 
 ## Learn more
 

@@ -64,7 +64,7 @@ The range is the `requiredVersion` of the four React modules. It must be valid s
 - **Static prerender (`NF-039`):** Next ends a static prerender before the build loads, so components are left out of the shell and render per request. The page regenerates on `components.revalidate` (60 s by default). `next build` and `next dev` never defer.
 - **Remote down:** the page answers 200. A host that never fetched a descriptor renders `errorFallback`. One that did keeps rendering the last known build.
 - **Redeploys** are picked up within `revalidate`, with no host restart.
-- **Events:** in the browser, every load and failure is an `nf:component` `CustomEvent` on `document` (`COMPONENT_EVENT`). On the server, `defineFederation({ onEvent })` receives `component:descriptor` and `component:error`. Server load and render failures are logged (`NF-029`, `NF-040`), not sent to `onEvent`.
+- **Events and preload:** see [Preload result and events](preload-and-events.mdx).
 
 ## Requirements and limits
 
