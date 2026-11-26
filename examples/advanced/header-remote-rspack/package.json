@@ -16,7 +16,7 @@
     "example-cart-context": "workspace:*",
     "example-design-system": "workspace:*",
     "example-session-context": "workspace:*",
-    "next": "16.4.6",
+    "next": "15.5.29",
     "react": "19.3.1",
     "typescript": "6.0.3"
   }
