@@ -41,6 +41,7 @@ const NF_SERVE = join(
 const origin = (port: number) => `http://127.0.0.1:${lanePort(port)}`
 const SIGNED = origin(COMPONENTS_PORTS.signed)
 const REDEPLOY = origin(COMPONENTS_PORTS.redeploy)
+const TAMPERED = origin(COMPONENTS_PORTS.tampered)
 
 type Host = {
   name: string
@@ -261,16 +262,28 @@ for (const host of HOSTS) {
 
     if (!host.ssr) return
 
-    test('a tampered server chunk never runs: browser-only render', async ({
+    test('a tampered build is refused: the fallback stays and the browser never loads it', async ({
       page,
     }) => {
       const { status, body } = await html(`${host.url}/mode-a/tampered`)
       expect(status).toBe(200)
       expect(body).not.toContain('data-testid="counter"')
+      expect(body).toContain('data-nf-refused')
+      expect(body).toContain('data-nf-code="NF-027"')
+      expect(body).toContain('counter unavailable')
+      // No modulepreload or stylesheet hint for the refused build.
+      expect(body).not.toMatch(
+        new RegExp(`<link[^>]*${TAMPERED.replace(/\./g, '\\.')}`)
+      )
+      const requested: string[] = []
+      page.on('request', (r) => {
+        if (r.url().startsWith(TAMPERED)) requested.push(r.url())
+      })
       await page.goto(`${host.url}/mode-a/tampered`)
-      await expect(counterText(page)).toHaveText(`host=${host.value} build=t1`)
-      await page.getByTestId('counter-btn').click()
-      await expect(page.getByTestId('counter-btn')).toHaveText('count 2')
+      await page.waitForLoadState('networkidle')
+      await expect(page.getByTestId('fallback')).toBeVisible()
+      await expect(page.getByTestId('counter')).toHaveCount(0)
+      expect(requested).toEqual([])
       const probe = await (
         await fetch(`${host.url}/api/components-probe`)
       ).json()

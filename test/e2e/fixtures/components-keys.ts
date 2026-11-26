@@ -44,6 +44,12 @@ export const COMPONENTS_PORTS = {
    * only (router.spec.ts).
    */
   routerMiss: 4117,
+  /**
+   * Signed s1 behind a proxy that holds every server-side (non-browser)
+   * asset request for 20 s, then answers 503: a deterministic preload
+   * timeout (preload.spec.ts). Browser requests pass straight through.
+   */
+  slow: 4118,
   /** Nothing listens here. */
   down: 4119,
   /**
