@@ -51,14 +51,14 @@
     "build": "tsdown"
   },
   "dependencies": {
-    "@module-federation/vite": "1.24.0",
+    "@module-federation/vite": "1.24.1",
     "@next-federation/island": "workspace:*",
     "@next-federation/protocol": "workspace:*",
     "@next-federation/router": "workspace:*",
     "@next-federation/sdk": "workspace:*",
     "@next-federation/server": "workspace:*",
     "@vitejs/plugin-rsc": "0.5.39",
-    "jose": "^6.2.17"
+    "jose": "^6.2.18"
   },
   "peerDependencies": {
     "react": "^19.0.0",
