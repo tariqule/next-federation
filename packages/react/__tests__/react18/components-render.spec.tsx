@@ -283,8 +283,14 @@ it('a failed load renders the fallback and reports the same NF code as React 19'
   // Assertions as in components-render-errors.spec.tsx ("browser: a failed
   // load renders errorFallback and is not reported again as a render error").
   expect(el.textContent).toBe('failed')
-  // The runtime reported the load failure itself (NF-029).
-  expect(events).toEqual([])
+  // The runtime reported the load failure itself (NF-029): only its fallback.
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'component:fallback',
+      reason: 'failed',
+      code: 'NF-029',
+    }),
+  ])
   expect(nfLogs('NF-040')).toHaveLength(0)
 })
 
@@ -338,7 +344,9 @@ it('a build requiring react ^19.0.0 on a host registering react 18.3.1 renders t
   expect(String(nf036[0])).toContain('^19.0.0')
   expect(String(nf036[0])).toContain('18.3.1')
   // The boundary only renders the fallback: no render error (NF-040).
-  expect(bindingEvents).toEqual([])
+  expect(bindingEvents).toEqual([
+    expect.objectContaining({ type: 'component:fallback', code: 'NF-036' }),
+  ])
   const nf040 = consoleError.mock.calls.filter((args: unknown[]) =>
     args.some((a) => typeof a === 'string' && a.includes('NF-040'))
   )
@@ -397,7 +405,9 @@ it('a build whose descriptor lists no React range counts as react ^19.0.0: fallb
   expect(nf036).toHaveLength(1)
   expect(String(nf036[0])).toContain('"react" "^19.0.0"')
   expect(String(nf036[0])).toContain('18.3.1')
-  expect(bindingEvents).toEqual([])
+  expect(bindingEvents).toEqual([
+    expect.objectContaining({ type: 'component:fallback', code: 'NF-036' }),
+  ])
 })
 
 it("a build listing react '^18.3.0 || ^19.0.0' renders on React 18.3.1", async () => {

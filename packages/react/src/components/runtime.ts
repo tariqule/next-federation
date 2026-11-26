@@ -56,6 +56,35 @@ export type FederationInstance = {
   loadRemote<T>(id: string): Promise<T | null | undefined>
 }
 
+/** Where in a component's life an event happened (optional on older events). */
+export type ComponentPhase = 'descriptor' | 'load' | 'render'
+
+/** How a load or render settled for the page (optional on older events). */
+export type ComponentOutcome =
+  | 'ready'
+  | 'browser-only'
+  | 'refused'
+  | 'failed'
+  | 'fallback'
+
+/**
+ * Fired only when a degraded tree renders in place of the component: refused,
+ * browser-only on the server, a render error, or a failed load. Never for the
+ * loading placeholder of a pending load. An error and the fallback it causes
+ * both fire: two signals for one incident.
+ */
+export type ComponentFallbackEvent = {
+  type: 'component:fallback'
+  remote: string
+  buildId: string
+  expose: string
+  env: 'server' | 'client'
+  phase: 'render'
+  reason: 'browser-only' | 'refused' | 'failed' | 'render-error'
+  code?: NFErrorCode
+  ms?: number
+}
+
 export type ComponentEvent =
   | {
       type: 'component:load'
@@ -64,6 +93,8 @@ export type ComponentEvent =
       expose: string
       ms: number
       env: 'server' | 'client'
+      phase?: ComponentPhase
+      outcome?: ComponentOutcome
     }
   | {
       type: 'component:error'
@@ -73,7 +104,11 @@ export type ComponentEvent =
       code: NFErrorCode
       error: unknown
       env: 'server' | 'client'
+      phase?: ComponentPhase
+      outcome?: ComponentOutcome
+      ms?: number
     }
+  | ComponentFallbackEvent
 
 export type IntegrityLookup = (
   url: string
@@ -1038,6 +1073,8 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
           expose,
           ms: Math.round(now() - started),
           env,
+          phase: 'load',
+          outcome: 'ready',
         })
         return mod
       } catch (error) {
@@ -1079,6 +1116,8 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       code,
       error: last,
       env,
+      phase: 'load',
+      outcome: classifyOutcome({ kind: 'error', code, error: last }).state,
     })
     throw isNFError(last)
       ? last

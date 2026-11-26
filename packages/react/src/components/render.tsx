@@ -6,10 +6,12 @@ import type {
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
+import type { NFErrorCode } from '@next-federation/sdk'
 import {
   Component,
   Suspense,
   createElement,
+  useEffect,
   useId,
   useState,
   useSyncExternalStore,
@@ -25,6 +27,7 @@ import {
 } from '../react-compat.ts'
 import type {
   ComponentEvent,
+  ComponentFallbackEvent,
   ComponentRuntime,
   RemoteModule,
   SharedModules,
@@ -344,7 +347,10 @@ export function createBindings({
 }: {
   runtime: BindingsRuntime
   isServer: boolean
-  /** Receives `component:error` for a render error (NF-040). */
+  /**
+   * Receives `component:error` for a render error (NF-040) or a refusal no
+   * load reported, and `component:fallback` for each degraded render.
+   */
   emit?: (event: ComponentEvent) => void
 }): Bindings {
   // Module load failures the runtime reported itself (thrown by `use`).
@@ -353,6 +359,62 @@ export function createBindings({
   const loggedOnServer = new Set<string>()
   // One renderer per component type, so its identity (and state) is stable.
   const renderers = new WeakMap<object, ComponentType<RendererProps>>()
+
+  function send(event: ComponentEvent): void {
+    try {
+      emit?.(event)
+    } catch (observerError) {
+      logger.debug('component event observer threw', observerError)
+    }
+  }
+
+  /**
+   * `component:fallback`: a degraded tree renders in place of the component.
+   * Never for the loading placeholder of a pending load.
+   */
+  function reportFallback(
+    descriptor: RemoteComponentDescriptor,
+    expose: string,
+    reason: ComponentFallbackEvent['reason'],
+    code?: NFErrorCode
+  ): void {
+    send({
+      type: 'component:fallback',
+      remote: descriptor.remote,
+      buildId: descriptor.buildId,
+      expose,
+      env: isServer ? 'server' : 'client',
+      phase: 'render',
+      reason,
+      ...(code ? { code } : {}),
+    })
+  }
+
+  /** A refusal no load reported (refused before any load), then its fallback. */
+  function reportRefused(
+    descriptor: RemoteComponentDescriptor,
+    expose: string,
+    code: ComponentRefusalCode,
+    error: boolean
+  ): void {
+    if (error) {
+      send({
+        type: 'component:error',
+        remote: descriptor.remote,
+        buildId: descriptor.buildId,
+        expose,
+        code,
+        error: new NFError(
+          code,
+          `Build ${descriptor.buildId} of ${descriptor.remote} is refused (${code}); it is not loaded.`
+        ),
+        env: isServer ? 'server' : 'client',
+        phase: 'render',
+        outcome: 'refused',
+      })
+    }
+    reportFallback(descriptor, expose, 'refused', code)
+  }
 
   /** NF-040 for an error a remote component threw while rendering. */
   function reportRenderError(
@@ -382,19 +444,18 @@ export function createBindings({
         error
       )
     }
-    try {
-      emit?.({
-        type: 'component:error',
-        remote: descriptor.remote,
-        buildId: descriptor.buildId,
-        expose,
-        code: 'NF-040',
-        error,
-        env,
-      })
-    } catch (observerError) {
-      logger.debug('component event observer threw', observerError)
-    }
+    send({
+      type: 'component:error',
+      remote: descriptor.remote,
+      buildId: descriptor.buildId,
+      expose,
+      code: 'NF-040',
+      error,
+      env,
+      phase: 'render',
+      outcome: 'fallback',
+    })
+    reportFallback(descriptor, expose, 'render-error', 'NF-040')
   }
 
   /**
@@ -549,6 +610,13 @@ export function createBindings({
     })
     // Refused by the server (marker, descriptor, or recorded earlier).
     const refusedCode = refusedMark ?? runtime.refusedBuild(descriptor)
+    // Browser: a refused tree is reported once it is shown (effects only run
+    // for a committed tree). The server reports it where it renders it.
+    useEffect(() => {
+      if (!isServer && refusedCode) {
+        reportRefused(descriptor, expose, refusedCode, true)
+      }
+    }, [refusedCode, base, expose])
     const hydrated = useSyncExternalStore(
       subscribeNothing,
       () => true,
@@ -601,16 +669,42 @@ export function createBindings({
         </Slot>
       </>
     )
-    if (refusedCode) return refused(refusedCode)
-    if (marked && !hydrated) return browserOnly
-    if (isServer && skipServer) {
-      // A refusal recorded by an earlier load still wins; no load starts.
+    /**
+     * Server: the refused or browser-only tree for a recorded outcome, and
+     * its events. A load error was already reported by the runtime; a
+     * refusal the loader blocked (no load ran) is reported here.
+     */
+    const serverDegraded = (): ReactNode => {
       const outcome = runtime.serverOutcome(descriptor, expose)
-      const refusal = outcome ? classifyOutcome(outcome) : undefined
-      return refusal?.state === 'refused' && refusal.code
-        ? refused(refusal.code as ComponentRefusalCode)
-        : browserOnly
+      const settled = outcome ? classifyOutcome(outcome) : undefined
+      if (settled?.state === 'refused' && settled.code) {
+        const code = settled.code as ComponentRefusalCode
+        reportRefused(descriptor, expose, code, outcome?.kind === 'blocked')
+        return refused(code)
+      }
+      reportFallback(
+        descriptor,
+        expose,
+        settled?.state === 'failed' ? 'failed' : 'browser-only',
+        settled?.code
+      )
+      return browserOnly
     }
+    if (refusedCode) {
+      // A refusal recorded by a load in this process was reported by it.
+      if (isServer) {
+        reportRefused(
+          descriptor,
+          expose,
+          refusedCode,
+          descriptor.refused?.code === refusedCode
+        )
+      }
+      return refused(refusedCode)
+    }
+    if (marked && !hydrated) return browserOnly
+    // A refusal recorded by an earlier load still wins; no load starts.
+    if (isServer && skipServer) return serverDegraded()
     const loading = (
       isServer
         ? runtime.serverLoad(descriptor, expose)
@@ -626,15 +720,7 @@ export function createBindings({
       loadFailures.add(loading.reason)
     }
     const mod = readThenable(loading)
-    if (!mod) {
-      const outcome = isServer
-        ? runtime.serverOutcome(descriptor, expose)
-        : undefined
-      const refusal = outcome ? classifyOutcome(outcome) : undefined
-      return refusal?.state === 'refused' && refusal.code
-        ? refused(refusal.code as ComponentRefusalCode)
-        : browserOnly
-    }
+    if (!mod) return serverDegraded()
     // Hints only for a build this server loaded (never pending or refused
     // ones). React hoists them out of the boundary.
     if (isServer) preloadAssets(descriptor, expose)
@@ -721,7 +807,18 @@ export function createBindings({
       if (!descriptor) return errorFallback
       const onError = (error: unknown) => {
         if (typeof error === 'object' && error !== null) {
-          if (loadFailures.has(error)) return
+          // The runtime reported the load error; the fallback is ours.
+          if (loadFailures.has(error)) {
+            const code = isNFError(error) ? error.code : 'NF-029'
+            const refusal = code === 'NF-027' || code === 'NF-036'
+            reportFallback(
+              descriptor,
+              expose,
+              refusal ? 'refused' : 'failed',
+              code
+            )
+            return
+          }
         }
         reportRenderError(descriptor, expose, error)
       }
@@ -744,6 +841,9 @@ export function createBindings({
         </Boundary>
       )
       // An unverified build has no server rendering: render it after hydration.
+      if (isServer && !descriptor.ssr) {
+        reportFallback(descriptor, expose, 'browser-only')
+      }
       return descriptor.ssr ? (
         tree
       ) : (

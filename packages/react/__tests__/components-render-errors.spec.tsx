@@ -129,6 +129,11 @@ test('server: a component that throws while rendering never reaches the renderer
       env: 'server',
       error: expect.objectContaining({ message: 'server boom' }),
     }),
+    expect.objectContaining({
+      type: 'component:fallback',
+      env: 'server',
+      reason: 'render-error',
+    }),
   ])
 })
 
@@ -221,6 +226,11 @@ test('hydrating a server render error: the browser renders it, its error goes to
       env: 'client',
       error: expect.objectContaining({ message: 'boom' }),
     }),
+    expect.objectContaining({
+      type: 'component:fallback',
+      env: 'client',
+      reason: 'render-error',
+    }),
   ])
   container.remove()
 })
@@ -299,6 +309,7 @@ test('browser: an error thrown deeper in the remote tree is reported too (compon
   expect(await clientRender(<C descriptor={descriptor} />)).toBe('failed')
   expect(events).toEqual([
     expect.objectContaining({ code: 'NF-040', env: 'client' }),
+    expect.objectContaining({ type: 'component:fallback', code: 'NF-040' }),
   ])
   expect(nfLogs('NF-040')).toHaveLength(1)
 })
@@ -312,8 +323,14 @@ test('browser: a failed load renders errorFallback and is not reported again as 
     errorFallback: true,
   })
   expect(await clientRender(<C descriptor={descriptor} />)).toBe('failed')
-  // The runtime reported the load failure itself (NF-029).
-  expect(events).toEqual([])
+  // The runtime reported the load failure itself (NF-029): only its fallback.
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'component:fallback',
+      reason: 'failed',
+      code: 'NF-029',
+    }),
+  ])
   expect(nfLogs('NF-040')).toHaveLength(0)
 })
 

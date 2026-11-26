@@ -34,6 +34,24 @@ export type FederationEvent =
       code: NFErrorCode
       ms: number
       status?: number
+      phase?: 'descriptor' | 'load' | 'render'
+      outcome?: 'ready' | 'browser-only' | 'refused' | 'failed' | 'fallback'
+    }
+  | {
+      /**
+       * A degraded tree rendered in place of a remote component (refused,
+       * browser-only on the server, a render error, a failed load). Never for
+       * the loading placeholder of a pending load.
+       */
+      type: 'component:fallback'
+      remote: string
+      buildId: string
+      expose: string
+      env: 'server' | 'client'
+      phase: 'render'
+      reason: 'browser-only' | 'refused' | 'failed' | 'render-error'
+      code?: NFErrorCode
+      ms?: number
     }
 
 /**
