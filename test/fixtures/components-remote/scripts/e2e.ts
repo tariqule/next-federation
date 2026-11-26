@@ -10,12 +10,15 @@
 //               only (no host has it: it uses its own copy)  port 4117
 //   links       l1, the links build (NF_LINKS: next/link, next/navigation
 //               and react-router rewired), signed       port 4121
+//   slow        s1, signed, served behind a proxy that holds server-side
+//               asset requests (preload timeout)          port 4118
 //   react18     c18, the default exposes accepting React '^18.3.0 ||
 //               ^19.0.0' (NF_REACT_RANGE), signed; NF_SUITE=react18 only
 //               (the React 18 hosts)                     port 4116
 // `node scripts/e2e.ts build <kind> <buildId>` only builds (mode-a.spec.ts
 // uses it for the redeploy remote).
 import { execFileSync } from 'node:child_process'
+import { createServer, request } from 'node:http'
 import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { serveBuilds } from '@next-federation/server/node'
@@ -35,6 +38,7 @@ type Kind =
   | 'routerMiss'
   | 'links'
   | 'react18'
+  | 'slow'
 
 /** Output folder of one remote, relative to the fixture (lane-scoped). */
 export const distOf = (kind: Kind): string =>
@@ -79,6 +83,43 @@ export function build(kind: Kind, buildId: string): void {
   }
 }
 
+/** How long the slow remote holds a server-side asset request. */
+const SLOW_HOLD_MS = 20_000
+
+/**
+ * The slow remote: the descriptor answers at once; every other request from
+ * a server (no browser User-Agent) is held SLOW_HOLD_MS, then answered 503,
+ * so a server preload always times out and never caches the module. Browser
+ * requests pass through.
+ */
+function slowProxy(target: number) {
+  return createServer((req, res) => {
+    const pass = () => {
+      const upstream = request(
+        {
+          host: '127.0.0.1',
+          port: target,
+          path: req.url,
+          method: req.method,
+          headers: req.headers,
+        },
+        (up) => {
+          res.writeHead(up.statusCode ?? 502, up.headers)
+          up.pipe(res)
+        }
+      )
+      upstream.on('error', () => res.destroy())
+      req.pipe(upstream)
+    }
+    const browser = /Mozilla/.test(req.headers['user-agent'] ?? '')
+    if (browser || req.url?.startsWith('/_nf/')) return pass()
+    const timer = setTimeout(() => {
+      res.writeHead(503).end()
+    }, SLOW_HOLD_MS)
+    res.on('close', () => clearTimeout(timer))
+  })
+}
+
 async function main(): Promise<void> {
   const [command, kind, buildId] = process.argv.slice(2)
   if (command === 'build') {
@@ -91,6 +132,7 @@ async function main(): Promise<void> {
     ['unsigned', 'u1'],
     ['routerMiss', 'rm1'],
     ['links', 'l1'],
+    ['slow', 's1'],
   ]
   if (process.env.NF_SUITE === 'react18') remotes.push(['react18', 'c18'])
   for (const [k] of remotes)
@@ -100,11 +142,16 @@ async function main(): Promise<void> {
     remotes.map(([k]) =>
       serveBuilds({
         dir: join(here, distOf(k)),
-        port: lanePort(COMPONENTS_PORTS[k]),
+        // The slow build is served on a free port behind slowProxy.
+        port: k === 'slow' ? 0 : lanePort(COMPONENTS_PORTS[k]),
       })
     )
   )
+  const slowIndex = remotes.findIndex(([k]) => k === 'slow')
+  const proxy = slowProxy(served[slowIndex]!.port)
+  proxy.listen(lanePort(COMPONENTS_PORTS.slow), '127.0.0.1')
   const close = () => {
+    proxy.close()
     void Promise.all(served.map((s) => s.close())).then(() => process.exit(0))
   }
   process.on('SIGTERM', close)

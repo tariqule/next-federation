@@ -840,3 +840,26 @@ test('B5: a components.json 404 or HTML page hints that the origin is no compone
     `${ORIGIN}/_nf/components.json answered HTTP 503.`
   )
 })
+
+test('an `events` routing key on the served file changes neither signature nor pin verification', async () => {
+  const { priv, pub } = keyPair('k1')
+  const signed = federationWith({ ssr: { publicKeys: [pub] } }).componentTarget(
+    'components'
+  )
+  const withKey = {
+    ...(await file(payload, await sign(payload, priv))),
+    events: 'abc.0',
+  }
+  const result = await verifyComponentDescriptor(signed, withKey)
+  expect(result.trust).toBe('signature')
+  expect(result.descriptor.ssr).toEqual(payload.ssr)
+  expect(result.descriptor).not.toHaveProperty('events')
+  const pinned = federationWith({
+    ssr: { pinned: { c1: await componentDescriptorDigest(payload) } },
+  }).componentTarget('components')
+  const ok = await verifyComponentDescriptor(pinned, {
+    ...(await file()),
+    events: 'abc.0',
+  } as never)
+  expect(ok.trust).toBe('pinned')
+})

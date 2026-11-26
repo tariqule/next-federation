@@ -53,7 +53,10 @@ function runtimeOf(
     load: () => client,
     serverLoad: () => server,
     serverBlock: () => null,
+    serverOutcome: () => undefined,
     registerShared: () => {},
+    refuse: () => {},
+    refusedBuild: () => undefined,
   }
 }
 
@@ -125,6 +128,11 @@ test('server: a component that throws while rendering never reaches the renderer
       code: 'NF-040',
       env: 'server',
       error: expect.objectContaining({ message: 'server boom' }),
+    }),
+    expect.objectContaining({
+      type: 'component:fallback',
+      env: 'server',
+      reason: 'render-error',
     }),
   ])
 })
@@ -218,6 +226,11 @@ test('hydrating a server render error: the browser renders it, its error goes to
       env: 'client',
       error: expect.objectContaining({ message: 'boom' }),
     }),
+    expect.objectContaining({
+      type: 'component:fallback',
+      env: 'client',
+      reason: 'render-error',
+    }),
   ])
   container.remove()
 })
@@ -296,6 +309,7 @@ test('browser: an error thrown deeper in the remote tree is reported too (compon
   expect(await clientRender(<C descriptor={descriptor} />)).toBe('failed')
   expect(events).toEqual([
     expect.objectContaining({ code: 'NF-040', env: 'client' }),
+    expect.objectContaining({ type: 'component:fallback', code: 'NF-040' }),
   ])
   expect(nfLogs('NF-040')).toHaveLength(1)
 })
@@ -309,8 +323,14 @@ test('browser: a failed load renders errorFallback and is not reported again as 
     errorFallback: true,
   })
   expect(await clientRender(<C descriptor={descriptor} />)).toBe('failed')
-  // The runtime reported the load failure itself (NF-029).
-  expect(events).toEqual([])
+  // The runtime reported the load failure itself (NF-029): only its fallback.
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'component:fallback',
+      reason: 'failed',
+      code: 'NF-029',
+    }),
+  ])
   expect(nfLogs('NF-040')).toHaveLength(0)
 })
 
@@ -335,4 +355,32 @@ test('errorFallback: fallback while loading, errorFallback on failure and for a 
   const Plain = bind(runtimeOf(fulfilled(boom)), false, events)
   expect(await clientRender(<Plain descriptor={descriptor} />)).toBe('loading')
   expect(await clientRender(<Plain descriptor={null} />)).toBe('loading')
+})
+
+test('a browser-detected NF-036 renders errorFallback and does not retry', async () => {
+  const events: ComponentEvent[] = []
+  let loads = 0
+  const reason = Object.assign(new Error('nested remotes refused'), {
+    code: 'NF-036',
+  })
+  const runtime: BindingsRuntime = {
+    ...runtimeOf(fulfilled(boom)),
+    load: () => {
+      loads++
+      return rejected(reason)
+    },
+  }
+  const C = bind(runtime, false, events, { errorFallback: true })
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  await act(async () => {
+    root.render(<C descriptor={descriptor} />)
+  })
+  const settled = loads
+  await act(() => new Promise((r) => setTimeout(r, 50)))
+  expect(container.textContent).toBe('failed')
+  expect(loads).toBe(settled)
+  await act(async () => root.unmount())
+  container.remove()
 })

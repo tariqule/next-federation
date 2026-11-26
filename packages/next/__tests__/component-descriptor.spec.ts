@@ -4,6 +4,7 @@ import type { ComponentTarget } from '@next-federation/core'
 import {
   canonicalJson,
   componentDescriptorDigest,
+  componentTrustRegistry,
 } from '@next-federation/protocol'
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
 import { cacheLife, cacheTag } from 'next/cache'
@@ -217,4 +218,51 @@ test('without process.getBuiltinModule (Node < 20.16) SSR is off, warned once', 
   }
   const lines = warn.mock.calls.map((c) => c.join(' '))
   expect(lines.filter((l) => /NF-028.*20\.16/.test(l))).toHaveLength(1)
+})
+
+test('an expired refusal no longer marks the descriptor and is deleted', async () => {
+  rs.spyOn(console, 'warn').mockImplementation(() => {})
+  respond = async () => new Response(JSON.stringify(await signedFile('c1')))
+  const at = performance.now() - 10
+  const refusedBuilds = new Map([
+    [payload('c1').base, { code: 'NF-027' as const, at, until: at + 1 }],
+  ])
+  ;(componentTrustRegistry().refusedBuilds ??= new Map()).set(
+    'components',
+    refusedBuilds
+  )
+  const d = await resolveComponentDescriptor(federation, 'components', {
+    get: legacyGet,
+  })
+  expect(d?.refused).toBeUndefined()
+  expect(refusedBuilds.has(payload('c1').base)).toBe(false)
+})
+
+test('a build this process refused comes back marked `refused`; other builds do not', async () => {
+  rs.spyOn(console, 'warn').mockImplementation(() => {})
+  respond = async () => new Response(JSON.stringify(await signedFile('c1')))
+  const plain = await resolveComponentDescriptor(federation, 'components', {
+    get: legacyGet,
+  })
+  expect(plain?.refused).toBeUndefined()
+  const registry = componentTrustRegistry()
+  const at = performance.now()
+  const refusedBuilds = new Map([
+    [payload('c1').base, { code: 'NF-027' as const, at, until: at + 60_000 }],
+  ])
+  ;(registry.refusedBuilds ??= new Map()).set('components', refusedBuilds)
+  try {
+    const marked = await resolveComponentDescriptor(federation, 'components', {
+      get: legacyGet,
+    })
+    expect(marked).toMatchObject({
+      buildId: 'c1',
+      ssr: payload('c1').ssr,
+      refused: { code: 'NF-027' },
+    })
+    // The verified descriptor itself is not changed (nor the last known one).
+    expect(plain?.refused).toBeUndefined()
+  } finally {
+    refusedBuilds.delete(payload('c1').base)
+  }
 })

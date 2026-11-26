@@ -1,5 +1,6 @@
 // Server-side only (getServerSideProps): the components remotes.
 import { defineFederation } from '@next-federation/core'
+import type { FederationEvent } from '@next-federation/core'
 import {
   COMPONENTS_PORTS,
   COMPONENTS_PUBLIC_KEY,
@@ -12,13 +13,23 @@ const trusted = {
   revalidate: 1,
 }
 
+/** Server events of componentsFederation, read by /api/nf-events (preload.spec.ts). */
+export const recordedEvents = ((
+  globalThis as { __nfRecordedEvents?: FederationEvent[] }
+).__nfRecordedEvents ??= [])
+
 export const componentsFederation = defineFederation({
+  onEvent: (event) => {
+    recordedEvents.push(event)
+  },
   remotes: {
     components: { origin: at(COMPONENTS_PORTS.signed), components: trusted },
     tampered: { origin: at(COMPONENTS_PORTS.tampered), components: trusted },
     unsigned: { origin: at(COMPONENTS_PORTS.unsigned), components: trusted },
     redeploy: { origin: at(COMPONENTS_PORTS.redeploy), components: trusted },
     down: { origin: at(COMPONENTS_PORTS.down), components: trusted },
+    // Holds server-side asset requests: preload always times out.
+    slow: { origin: at(COMPONENTS_PORTS.slow), components: trusted },
     // Built with Rspack + @module-federation/enhanced, described by nf-describe.
     rspack: { origin: at(COMPONENTS_PORTS.rspack), components: trusted },
     'rspack-unsigned': {

@@ -16,8 +16,16 @@ import * as ReactDOM from 'react-dom'
 import * as ReactDOMClient from 'react-dom/client'
 import * as JsxRuntime from 'react/jsx-runtime'
 import { createBindings } from './render.tsx'
+export type {
+  PreloadOptions,
+  PreloadRemoteComponent,
+  PreloadResult,
+  PreloadState,
+} from './preload-result.ts'
 import type { Bindings } from './render.tsx'
+import type { PreloadRemoteComponent } from './preload-result.ts'
 import { createComponentRuntime } from './runtime.ts'
+import { serverComponentEmit } from './server-events.ts'
 import type {
   ComponentEvent,
   FederationInstance,
@@ -40,8 +48,15 @@ export const COMPONENT_EVENT = 'nf:component'
 
 const isServer = typeof window === 'undefined'
 
-function emit(event: ComponentEvent): void {
-  if (typeof document === 'undefined') return
+function emit(
+  event: ComponentEvent,
+  descriptor: RemoteComponentDescriptor
+): void {
+  // Server: to the onEvent of the federation that resolved the descriptor.
+  if (typeof document === 'undefined') {
+    serverComponentEmit(event, descriptor)
+    return
+  }
   document.dispatchEvent(new CustomEvent(COMPONENT_EVENT, { detail: event }))
 }
 
@@ -99,7 +114,7 @@ export const loadRemoteModule: Bindings['loadRemoteModule'] =
  * in `getServerSideProps`, so the first render after a deploy is inline HTML.
  * Never rejects.
  */
-export const preloadRemoteComponent: Bindings['preloadRemoteComponent'] =
+export const preloadRemoteComponent: PreloadRemoteComponent =
   bindings.preloadRemoteComponent
 
 /**

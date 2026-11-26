@@ -72,6 +72,16 @@ test('parses a valid file and keeps only known fields', () => {
   ).toEqual({ ...payload, ssr: null, digest: 'd' })
 })
 
+test('a `refused` field is outside the signed payload: same digest, dropped by the file parser', async () => {
+  const withRefused = { ...payload, refused: { code: 'NF-027' } }
+  expect(await componentDescriptorDigest(withRefused)).toBe(
+    await componentDescriptorDigest(payload)
+  )
+  expect(
+    parseComponentDescriptorFile({ ...withRefused, digest: 'sha384-x' })
+  ).toEqual({ ...payload, digest: 'sha384-x' })
+})
+
 test.each([
   ['not an object', 'x'],
   ['wrong version', { ...payload, v: 2, digest: 'd' }],
@@ -491,4 +501,14 @@ test('a fallback copy of a module that only starts like React or Next.js is acce
       })
     ).not.toBeNull()
   }
+})
+
+test('an `events` routing key is outside the signed payload: same digest, dropped by the file parser', async () => {
+  const withKey = { ...payload, events: 'abc.0' }
+  expect(await componentDescriptorDigest(withKey)).toBe(
+    await componentDescriptorDigest(payload)
+  )
+  expect(
+    parseComponentDescriptorFile({ ...withKey, digest: 'sha384-x' })
+  ).toEqual({ ...payload, digest: 'sha384-x' })
 })

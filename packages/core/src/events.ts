@@ -29,11 +29,45 @@ export type FederationEvent =
       ms: number
     }
   | {
+      /** A remote component module loaded (server-side, routed by descriptor). */
+      type: 'component:load'
+      remote: string
+      buildId: string
+      expose: string
+      ms: number
+      env: 'server' | 'client'
+      phase?: 'descriptor' | 'load' | 'render'
+      outcome?: 'ready' | 'browser-only' | 'refused' | 'failed' | 'fallback'
+    }
+  | {
       type: 'component:error'
       remote: string
       code: NFErrorCode
       ms: number
       status?: number
+      /** Set for a load or render failure (server-side, routed by descriptor). */
+      buildId?: string
+      expose?: string
+      env?: 'server' | 'client'
+      error?: unknown
+      phase?: 'descriptor' | 'load' | 'render'
+      outcome?: 'ready' | 'browser-only' | 'refused' | 'failed' | 'fallback'
+    }
+  | {
+      /**
+       * A degraded tree rendered in place of a remote component (refused,
+       * browser-only on the server, a render error, a failed load). Never for
+       * the loading placeholder of a pending load.
+       */
+      type: 'component:fallback'
+      remote: string
+      buildId: string
+      expose: string
+      env: 'server' | 'client'
+      phase: 'render'
+      reason: 'browser-only' | 'refused' | 'failed' | 'render-error'
+      code?: NFErrorCode
+      ms?: number
     }
 
 /**

@@ -206,7 +206,10 @@ trust, globals and sharing rules. Do not weaken a check to make a change pass.
     waited for), the one layer that renders every build the server loader cannot isolate
     (`unlistedLayer`), and, per build base, whether this process's server loader has loaded or
     refused it (`serverReady`; an App Router `cacheComponents` regeneration that renders before
-    either keeps the components out of the static shell).
+    either keeps the components out of the static shell), and, per opaque federation key
+    (`eventRoutes`, the `events` string `getComponentDescriptor` puts on each descriptor), that
+    federation held weakly, so server-side component events reach its `onEvent`. Routes are never
+    keyed by remote name and no callback is put on a descriptor.
 - On the server, the remote code of each runtime scope sees its own `__mf_module_cache__` and
   `__mf_init__*` entries, held in the scope and never on the process-wide `globalThis`. A server
   entry that bundles its own Module Federation runtime also gets its own `__FEDERATION__`,

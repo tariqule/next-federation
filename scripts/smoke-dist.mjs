@@ -41,6 +41,9 @@ const NEXT_RUNTIME_ONLY = new Set([
   // (App Router) or `next/router` (Pages Router).
   '@next-federation/next:./dist/client/components.js',
   '@next-federation/next:./dist/pages/components.js',
+  // Registers the Pages Router modules (`next/link`, `next/router`) via
+  // register-shared.
+  '@next-federation/next:./dist/pages/server.js',
 ])
 
 // Shims a remote build aliases its router imports to. They import the real

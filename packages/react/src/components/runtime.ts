@@ -5,17 +5,23 @@
 import {
   DEFAULT_REACT_RANGE,
   HOST_REACT_MODULES,
+  REFUSAL_TTL_MS,
   componentTrustRegistry,
   isNeverFallback,
+  liveRefusal,
   isSemverVersion,
   satisfies,
 } from '@next-federation/protocol'
 import type {
+  ComponentRefusalCode,
   ComponentSharedModule,
+  RefusedBuild,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
+import { classifyOutcome, loadErrorCode } from './preload-result.ts'
+import type { ServerLoadOutcome } from './preload-result.ts'
 
 export type RemoteModule = { default: unknown; [name: string]: unknown }
 
@@ -53,6 +59,35 @@ export type FederationInstance = {
   loadRemote<T>(id: string): Promise<T | null | undefined>
 }
 
+/** Where in a component's life an event happened (optional on older events). */
+export type ComponentPhase = 'descriptor' | 'load' | 'render'
+
+/** How a load or render settled for the page (optional on older events). */
+export type ComponentOutcome =
+  | 'ready'
+  | 'browser-only'
+  | 'refused'
+  | 'failed'
+  | 'fallback'
+
+/**
+ * Fired only when a degraded tree renders in place of the component: refused,
+ * browser-only on the server, a render error, or a failed load. Never for the
+ * loading placeholder of a pending load. An error and the fallback it causes
+ * both fire: two signals for one incident.
+ */
+export type ComponentFallbackEvent = {
+  type: 'component:fallback'
+  remote: string
+  buildId: string
+  expose: string
+  env: 'server' | 'client'
+  phase: 'render'
+  reason: 'browser-only' | 'refused' | 'failed' | 'render-error'
+  code?: NFErrorCode
+  ms?: number
+}
+
 export type ComponentEvent =
   | {
       type: 'component:load'
@@ -61,6 +96,8 @@ export type ComponentEvent =
       expose: string
       ms: number
       env: 'server' | 'client'
+      phase?: ComponentPhase
+      outcome?: ComponentOutcome
     }
   | {
       type: 'component:error'
@@ -70,7 +107,12 @@ export type ComponentEvent =
       code: NFErrorCode
       error: unknown
       env: 'server' | 'client'
+      phase?: ComponentPhase
+      outcome?: ComponentOutcome
+      /** Optional in this type: handlers and fakes written before it compile. */
+      ms?: number
     }
+  | ComponentFallbackEvent
 
 export type IntegrityLookup = (
   url: string
@@ -157,7 +199,8 @@ export type RuntimeDeps = {
   importEntry?: (url: string) => Promise<unknown>
   now?: () => number
   sleep?: (ms: number) => Promise<void>
-  emit?: (event: ComponentEvent) => void
+  /** Receives each event with the descriptor it is about (server routing). */
+  emit?: (event: ComponentEvent, descriptor: RemoteComponentDescriptor) => void
   /** Browser: delays between attempts. Default [500, 1000, 2000]. */
   clientRetryDelays?: number[]
   /** Server: a failed load is retried after this many ms. Default 1000. */
@@ -167,6 +210,12 @@ export type RuntimeDeps = {
    * many ms. Default 10000. A server render must never wait forever.
    */
   loadTimeoutMs?: number
+  /**
+   * Server: a recorded build refusal (NF-027/NF-028) expires after this many
+   * ms; the next load checks the build again. Default REFUSAL_TTL_MS (5
+   * minutes). Browser refusals never expire.
+   */
+  refusalTtlMs?: number
 }
 
 /** Why the server does not render a build (it renders in the browser instead). */
@@ -203,8 +252,30 @@ export type ComponentRuntime = {
     descriptor: RemoteComponentDescriptor,
     expose: string
   ): Thenable<RemoteModule | null>
+  /**
+   * Server: why the `serverLoad` of this descriptor object and expose settled
+   * as it did; undefined while pending or never loaded.
+   */
+  serverOutcome(
+    descriptor: RemoteComponentDescriptor,
+    expose: string
+  ): ServerLoadOutcome | undefined
   /** Build ids of a container kept loaded, oldest first. */
   loadedBuilds(name: string): string[]
+  /**
+   * Records that the server refused this build's code (browser: read from
+   * the server HTML). Every later load of it rejects with `code`, no request,
+   * until the refusal expires (server only, refusalTtlMs). NF-036 is per
+   * expose: ignored.
+   */
+  refuse(
+    build: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
+    code: ComponentRefusalCode
+  ): void
+  /** Why this build's code is refused (descriptor, page or process), if it is. */
+  refusedBuild(
+    descriptor: RemoteComponentDescriptor
+  ): ComponentRefusalCode | undefined
 }
 
 const toMfShared = (shared: SharedModules): MfShared =>
@@ -676,6 +747,9 @@ export function dropInstance(instance: FederationInstance): void {
   }
 }
 
+/** Refused builds kept per remote (oldest evicted first). */
+export const MAX_REFUSED_PER_REMOTE = 256
+
 export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const now = deps.now ?? (() => performance.now())
   const sleep =
@@ -683,6 +757,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const delays = deps.clientRetryDelays ?? [500, 1000, 2000]
   const serverRetryMs = deps.serverRetryMs ?? 1000
   const loadTimeoutMs = deps.loadTimeoutMs ?? 10_000
+  const refusalTtlMs = deps.refusalTtlMs ?? REFUSAL_TTL_MS
   const env = deps.isServer ? 'server' : 'client'
 
   // container name -> base -> expose -> thenable (Map order = recency).
@@ -691,6 +766,55 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     Map<string, Map<string, Thenable<RemoteModule>>>
   >()
   const buildIds = new Map<string, string>()
+  // Builds whose code is refused (NF-027/NF-028, build facts), not loaded
+  // again by this runtime until the refusal expires (refusalTtlMs). Browser:
+  // refusals read from the server HTML. Server: process-wide, for the
+  // descriptors the server hands out (`refused`). NF-036 is never recorded
+  // per build: it is per expose (unmetShared runs before each load, and the
+  // server replays outcomes per descriptor and expose).
+  // Per remote (the host's key, never the remote's choice), then per base,
+  // oldest first: a remote that floods refusals only evicts its own oldest.
+  const refusedBases = new Map<string, Map<string, RefusedBuild>>()
+  const refusalStore = () =>
+    deps.isServer
+      ? (componentTrustRegistry().refusedBuilds ??= new Map())
+      : refusedBases
+  function refusedBuild(
+    d: RemoteComponentDescriptor
+  ): ComponentRefusalCode | undefined {
+    return (
+      d.refused?.code ?? liveRefusal(refusalStore(), d.remote, d.base, now())
+    )
+  }
+  function refuse(
+    { remote, base }: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
+    code: ComponentRefusalCode
+  ): void {
+    // Per expose, never a fact of the build (see above).
+    if (code === 'NF-036') return
+    const store = refusalStore()
+    // A live refusal keeps its time: replaying it (a load it rejected) never
+    // extends it, so the build is checked again once it expires.
+    if (liveRefusal(store, remote, base, now()) !== undefined) return
+    let builds = store.get(remote)
+    if (!builds) {
+      builds = new Map()
+      store.set(remote, builds)
+    }
+    const at = now()
+    builds.delete(base)
+    // Only the server expires a refusal: it re-checks integrity on the next
+    // load. The browser cannot check file hashes, so it keeps a refusal for
+    // the page's lifetime (a fresh server render is how it recovers).
+    builds.set(base, {
+      code,
+      at,
+      until: deps.isServer ? at + refusalTtlMs : Number.POSITIVE_INFINITY,
+    })
+    while (builds.size > MAX_REFUSED_PER_REMOTE) {
+      builds.delete(builds.keys().next().value!)
+    }
+  }
   // Server: the verified integrity map of every build kept loaded.
   const integrity = new Map<string, Record<string, string>>()
   const registered = new Map<string, string>()
@@ -854,9 +978,12 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     return instance
   }
 
-  function emit(event: ComponentEvent): void {
+  function emit(
+    event: ComponentEvent,
+    descriptor: RemoteComponentDescriptor
+  ): void {
     try {
-      deps.emit?.(event)
+      deps.emit?.(event, descriptor)
     } catch (error) {
       logger.debug('component event observer threw', error)
     }
@@ -965,14 +1092,19 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
             throw error
           }
         })
-        emit({
-          type: 'component:load',
-          remote: d.remote,
-          buildId: d.buildId,
-          expose,
-          ms: Math.round(now() - started),
-          env,
-        })
+        emit(
+          {
+            type: 'component:load',
+            remote: d.remote,
+            buildId: d.buildId,
+            expose,
+            ms: Math.round(now() - started),
+            env,
+            phase: 'load',
+            outcome: 'ready',
+          },
+          d
+        )
         return mod
       } catch (error) {
         last = error
@@ -1005,15 +1137,21 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         last
       )
     }
-    emit({
-      type: 'component:error',
-      remote: d.remote,
-      buildId: d.buildId,
-      expose,
-      code,
-      error: last,
-      env,
-    })
+    emit(
+      {
+        type: 'component:error',
+        remote: d.remote,
+        buildId: d.buildId,
+        expose,
+        code,
+        error: last,
+        env,
+        phase: 'load',
+        outcome: classifyOutcome({ kind: 'error', code, error: last }).state,
+        ms: Math.round(now() - started),
+      },
+      d
+    )
     throw isNFError(last)
       ? last
       : new NFError('NF-029', `${d.remote}:${expose} failed to load.`, {
@@ -1062,6 +1200,12 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const serverResults = new WeakMap<
     RemoteComponentDescriptor,
     Map<string, Thenable<RemoteModule | null>>
+  >()
+  // Recorded with each server result when it settles (a cooldown hit
+  // returns the same result, so it replays the same outcome).
+  const outcomes = new WeakMap<
+    Thenable<RemoteModule | null>,
+    ServerLoadOutcome
   >()
   const resolved = <T>(value: T): Thenable<T> =>
     Object.assign(Promise.resolve(value), {
@@ -1131,7 +1275,20 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     return null
   }
 
+  /** Keeps a settled server outcome; a refusal is kept per build too. */
+  function record(
+    d: RemoteComponentDescriptor,
+    result: Thenable<RemoteModule | null>,
+    outcome: ServerLoadOutcome
+  ): void {
+    outcomes.set(result, outcome)
+    const { state, code } = classifyOutcome(outcome)
+    if (state === 'refused') refuse(d, code)
+  }
+
   return {
+    refuse,
+    refusedBuild,
     registerShared(shared) {
       assertVersions(shared)
       const added = Object.keys(shared).some((name) => !provided.has(name))
@@ -1140,6 +1297,21 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         versions.set(name, version)
       }
       extraShared.push(shared)
+      // A load refused for a module the host lacked (NF-036, checked before
+      // any request) may succeed now: drop it so the next render loads again.
+      for (const builds of cache.values()) {
+        for (const exposes of builds.values()) {
+          for (const [expose, p] of exposes) {
+            if (
+              p.status === 'rejected' &&
+              isNFError(p.reason) &&
+              (p.reason as NFError).code === 'NF-036'
+            ) {
+              exposes.delete(expose)
+            }
+          }
+        }
+      }
       if (!instance) return
       if (added) {
         // A container initialised its share scope once, before this module
@@ -1154,6 +1326,20 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     },
 
     load(d, expose) {
+      const refusedCode = refusedBuild(d)
+      if (refusedCode) {
+        // Refused code is never requested again.
+        const reason = new NFError(
+          refusedCode,
+          `Build ${d.buildId} of ${d.remote} was refused by the server (${refusedCode}); it is not loaded.`
+        )
+        const p = Promise.reject(reason) as Thenable<RemoteModule>
+        p.status = 'rejected'
+        p.reason = reason
+        p.failedAt = now()
+        p.catch(() => {})
+        return p
+      }
       let builds = cache.get(d.name)
       if (!builds) {
         builds = new Map()
@@ -1245,8 +1431,11 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       }
       const ready = (state: 'loaded' | 'refused') =>
         (componentTrustRegistry().serverReady ??= new Map()).set(d.base, state)
-      if (this.serverBlock(d)) {
+      let outcome: ServerLoadOutcome | undefined
+      const preBlock = this.serverBlock(d)
+      if (preBlock) {
         result = resolved(null)
+        outcome = { kind: 'blocked', block: preBlock, code: 'NF-028' }
         ready('refused')
       } else {
         const load = this.load(d, expose)
@@ -1254,20 +1443,30 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         // in: another instance of a host module may have reached it.
         const from = loadScopes.get(load) ?? scope
         const after = (mod: RemoteModule): RemoteModule | null => {
-          const blockedNow = serverBlockIn(d, from) !== null
-          ready(blockedNow ? 'refused' : 'loaded')
-          return blockedNow ? null : mod
+          const block = serverBlockIn(d, from)
+          ready(block ? 'refused' : 'loaded')
+          outcome = block
+            ? { kind: 'blocked', block, code: 'NF-028' }
+            : { kind: 'loaded' }
+          return block ? null : mod
         }
         // A load the loader refused: recorded at once, so a static
         // regeneration is not deferred for it again.
-        const failed = (): null => {
-          if (refusal(d.base)) ready('refused')
+        const failed = (error: unknown): null => {
+          const refused = refusal(d.base)
+          if (refused) ready('refused')
+          const code = loadErrorCode(error)
+          // The loader refused this build in this layer: its reason decides.
+          outcome =
+            code === 'NF-028' && refused
+              ? { kind: 'blocked', block: refused, code }
+              : { kind: 'error', code, error }
           return null
         }
         if (load.status === 'fulfilled') {
           result = resolved(after(load.value!))
         } else if (load.status === 'rejected') {
-          result = resolved(failed())
+          result = resolved(failed(load.reason))
         } else {
           result = load.then(after, failed) as Thenable<RemoteModule | null>
           result.status = 'pending'
@@ -1276,11 +1475,15 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
             r.status = 'fulfilled'
             r.value = value
             if (value === null) r.failedAt = now()
+            if (outcome) record(d, r, outcome)
           })
         }
       }
       if (result.status === 'fulfilled' && result.value === null) {
         result.failedAt = now()
+      }
+      if (result.status === 'fulfilled' && outcome) {
+        record(d, result, outcome)
       }
       if (!perDescriptor) {
         perDescriptor = new Map()
@@ -1288,6 +1491,11 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
       }
       perDescriptor.set(expose, result)
       return result
+    },
+
+    serverOutcome(d, expose) {
+      const result = serverResults.get(d)?.get(expose)
+      return result ? outcomes.get(result) : undefined
     },
 
     loadedBuilds(name) {

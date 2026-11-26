@@ -39,16 +39,25 @@ export const loadRemoteModule: typeof base.loadRemoteModule = (
   descriptor,
   expose
 ) => base.loadRemoteModule(descriptor, expose)
-export const preloadRemoteComponent: typeof base.preloadRemoteComponent = (
-  descriptor,
-  expose
-) => base.preloadRemoteComponent(descriptor, expose)
+export const preloadRemoteComponent: base.PreloadRemoteComponent = ((
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options?: base.PreloadOptions
+) =>
+  base.preloadRemoteComponent(
+    descriptor,
+    expose,
+    options
+  )) as base.PreloadRemoteComponent
 export const registerSharedModules: typeof base.registerSharedModules = (
   shared
 ) => base.registerSharedModules(shared)
 export const COMPONENT_EVENT: string = base.COMPONENT_EVENT
 export type {
   ComponentEvent,
+  PreloadOptions,
+  PreloadResult,
+  PreloadState,
   RemoteComponentDescriptor,
   RemoteComponentOptions,
   RemoteComponentProps,

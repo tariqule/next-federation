@@ -136,6 +136,60 @@ export type RemoteComponentDescriptor = {
    * itself (a cached descriptor after a restart): `ssr` alone is never trusted.
    */
   jws?: string
+  /**
+   * Set by the server when this process refused the build's code (an
+   * integrity failure, code from other remotes): the browser never loads it.
+   * Not part of the signed payload, so never covered by verification.
+   */
+  refused?: { code: ComponentRefusalCode }
+  /**
+   * Set by the server: the opaque key of the federation that resolved this
+   * descriptor, so server-side component events reach that federation's
+   * `onEvent` (see `routeComponentEvent`). A plain string that survives a
+   * copy or serialisation; never a callback. Not part of the signed payload,
+   * so never covered by verification.
+   */
+  events?: string
+}
+
+/** Where server-side component events of one federation go (its `emit`). */
+export type ComponentEventRoute = { emit(event: object): void }
+
+/** Why a build's code was refused (never loaded on either side). */
+export type ComponentRefusalCode = 'NF-027' | 'NF-028' | 'NF-036'
+
+/**
+ * How long a recorded build refusal (NF-027/NF-028) lasts before the build is
+ * checked again: 5 minutes. Integrity is enforced on every check, so a bad
+ * build is refused again; a transient mismatch recovers without a restart.
+ */
+export const REFUSAL_TTL_MS: number = 5 * 60 * 1000
+
+/** One recorded build refusal: its code, when it was recorded and until when it holds. */
+export type RefusedBuild = {
+  code: ComponentRefusalCode
+  at: number
+  until: number
+}
+
+/**
+ * The refusal recorded for this build in `store`, if it still holds at
+ * `now`. An expired entry is deleted and reads as absent.
+ */
+export function liveRefusal(
+  store: Map<string, Map<string, RefusedBuild>> | undefined,
+  remote: string,
+  base: string,
+  now: number
+): ComponentRefusalCode | undefined {
+  const builds = store?.get(remote)
+  const entry = builds?.get(base)
+  if (!entry) return undefined
+  if (now >= entry.until) {
+    builds!.delete(base)
+    return undefined
+  }
+  return entry.code
 }
 
 /** A host's trust policy for one remote (registered by defineFederation). */
@@ -208,6 +262,26 @@ export type ComponentTrustRegistry = {
    * `cacheComponents` keep such a render out of the static shell instead.
    */
   serverReady?: Map<string, 'loaded' | 'refused'>
+  /**
+   * Per remote, then per build base (oldest first, bounded per remote): the
+   * build facts (NF-027/NF-028, never NF-036) this process refused to load
+   * (see `RemoteComponentDescriptor.refused`), for the descriptors it hands
+   * out. Each entry expires (`RefusedBuild.until`, read with `liveRefusal`).
+   */
+  refusedBuilds?: Map<string, Map<string, RefusedBuild>>
+  /**
+   * Per opaque federation key (`RemoteComponentDescriptor.events`): that
+   * federation, held weakly, which receives its descriptors' server-side
+   * component events. Never keyed by remote name.
+   */
+  eventRoutes?: Map<string, WeakRef<ComponentEventRoute>>
+  /** This process's secret (made on first use, never sent): route keys are hashes of it. */
+  eventProcessSecret?: string
+  /**
+   * How many federations this process created a route key for. Only grows,
+   * so a route key is never reused in a process.
+   */
+  eventRouteCount?: number
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')
@@ -221,6 +295,27 @@ export function verifiedKey(remote: string, digest: string): string {
 export function componentTrustRegistry(): ComponentTrustRegistry {
   const g = globalThis as Record<symbol, ComponentTrustRegistry | undefined>
   return (g[TRUST_REGISTRY] ??= { verified: new Map(), trust: new Map() })
+}
+
+/**
+ * Server only: hands a component event to the federation that resolved the
+ * descriptor (by its `events` key, so a copied or deserialised descriptor
+ * routes too). Returns false when no federation is registered for it.
+ */
+export function routeComponentEvent(
+  descriptor: { events?: string } | null | undefined,
+  event: object
+): boolean {
+  const key = descriptor?.events
+  if (typeof key !== 'string') return false
+  const routes = componentTrustRegistry().eventRoutes
+  const target = routes?.get(key)?.deref()
+  if (!target) {
+    if (routes?.has(key)) routes.delete(key)
+    return false
+  }
+  target.emit(event)
+  return true
 }
 
 /** Wall-clock seconds without `Date.now()` (cacheComponents prerenders flag it). */

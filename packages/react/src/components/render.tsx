@@ -2,13 +2,16 @@
 // the real one; tests pass a fake, with `isServer` set either way).
 import type {
   ComponentExposeAssets,
+  ComponentRefusalCode,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
-import { NFError, logger } from '@next-federation/sdk'
+import { NFError, isNFError, logger } from '@next-federation/sdk'
+import type { NFErrorCode } from '@next-federation/sdk'
 import {
   Component,
   Suspense,
   createElement,
+  useEffect,
   useId,
   useState,
   useSyncExternalStore,
@@ -24,15 +27,24 @@ import {
 } from '../react-compat.ts'
 import type {
   ComponentEvent,
+  ComponentFallbackEvent,
   ComponentRuntime,
   RemoteModule,
   SharedModules,
   Thenable,
 } from './runtime.ts'
+import { classifyClientError, classifyOutcome } from './preload-result.ts'
+import type { PreloadOptions, PreloadResult } from './preload-result.ts'
 
 export type BindingsRuntime = Pick<
   ComponentRuntime,
-  'load' | 'serverLoad' | 'serverBlock' | 'registerShared'
+  | 'load'
+  | 'serverLoad'
+  | 'serverBlock'
+  | 'serverOutcome'
+  | 'registerShared'
+  | 'refuse'
+  | 'refusedBuild'
 >
 
 export type RemoteComponentOptions = {
@@ -68,6 +80,13 @@ export type RemoteComponentProps<P> = P & {
   descriptor: RemoteComponentDescriptor | null
   fallback?: ReactNode
   errorFallback?: ReactNode
+  /**
+   * Render this component in the browser only on this response: the server
+   * sends the fallback and a mark and never loads the remote's server build.
+   * A refusal the server already knows (NF-027, NF-036) still wins. Not
+   * passed to the remote component.
+   */
+  browserOnly?: boolean
 }
 
 export type RemoteComponentType<P> = ((
@@ -75,6 +94,15 @@ export type RemoteComponentType<P> = ((
 ) => ReactNode) & {
   /** `preloadRemoteComponent` for this component's expose. */
   preload(descriptor: RemoteComponentDescriptor | null): Promise<void>
+  /** With options: waits at most `timeoutMs` and says how the load settled. */
+  preload(
+    descriptor: RemoteComponentDescriptor | null,
+    options: PreloadOptions
+  ): Promise<PreloadResult>
+  preload(
+    descriptor: RemoteComponentDescriptor | null,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult>
 }
 
 declare global {
@@ -106,6 +134,13 @@ export type RemoteProps<
 
 /** Marks, in the server HTML, a boundary the server left to the browser. */
 export const BROWSER_ONLY_ATTR = 'data-nf-browser-only'
+
+/**
+ * Marks, in the server HTML, a boundary whose build the server refused (an
+ * integrity failure, code from other remotes): the browser keeps the error
+ * fallback and never loads that build.
+ */
+export const REFUSED_ATTR = 'data-nf-refused'
 
 type BoundaryProps = { fallback: ReactNode; children: ReactNode }
 
@@ -216,13 +251,32 @@ function BrowserOnly({ fallback, children }: BoundaryProps): ReactNode {
   return hydrated ? children : fallback
 }
 
-function hasBrowserOnlyMark(id: string): boolean {
-  if (typeof document === 'undefined') return false
-  return (
-    document.querySelector(
-      `template[${BROWSER_ONLY_ATTR}="${CSS.escape(id)}"]`
-    ) !== null
+/** Carries, on a marker, the build base it is for: others are ignored. */
+const MARK_BASE_ATTR = 'data-nf-base'
+/** Carries, on a refused marker, why the server refused the build. */
+const MARK_CODE_ATTR = 'data-nf-code'
+const REFUSAL_CODES: readonly string[] = ['NF-027', 'NF-028', 'NF-036']
+
+/** The server marker of this boundary (id) for this build (base), if any. */
+function findMark(attr: string, id: string, base: string): Element | null {
+  if (typeof document === 'undefined') return null
+  return document.querySelector(
+    `template[${attr}="${CSS.escape(id)}"][${MARK_BASE_ATTR}="${CSS.escape(base)}"]`
   )
+}
+
+function hasBrowserOnlyMark(id: string, base: string): boolean {
+  return findMark(BROWSER_ONLY_ATTR, id, base) !== null
+}
+
+function refusedMarkCode(
+  id: string,
+  base: string
+): ComponentRefusalCode | undefined {
+  const code = findMark(REFUSED_ATTR, id, base)?.getAttribute(MARK_CODE_ATTR)
+  return code && REFUSAL_CODES.includes(code)
+    ? (code as ComponentRefusalCode)
+    : undefined
 }
 
 /**
@@ -271,6 +325,16 @@ export type Bindings = {
     descriptor: RemoteComponentDescriptor | null,
     expose: string
   ): Promise<void>
+  preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options: PreloadOptions
+  ): Promise<PreloadResult>
+  preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult>
   createRemoteComponent<P extends object = Record<string, unknown>>(
     options: RemoteComponentOptions
   ): RemoteComponentType<P>
@@ -283,8 +347,11 @@ export function createBindings({
 }: {
   runtime: BindingsRuntime
   isServer: boolean
-  /** Receives `component:error` for a render error (NF-040). */
-  emit?: (event: ComponentEvent) => void
+  /**
+   * Receives `component:error` for a render error (NF-040) or a refusal no
+   * load reported, and `component:fallback` for each degraded render.
+   */
+  emit?: (event: ComponentEvent, descriptor: RemoteComponentDescriptor) => void
 }): Bindings {
   // Module load failures the runtime reported itself (thrown by `use`).
   const loadFailures = new WeakSet<object>()
@@ -292,6 +359,73 @@ export function createBindings({
   const loggedOnServer = new Set<string>()
   // One renderer per component type, so its identity (and state) is stable.
   const renderers = new WeakMap<object, ComponentType<RendererProps>>()
+
+  function send(
+    event: ComponentEvent,
+    descriptor: RemoteComponentDescriptor
+  ): void {
+    try {
+      emit?.(event, descriptor)
+    } catch (observerError) {
+      logger.debug('component event observer threw', observerError)
+    }
+  }
+
+  /**
+   * `component:fallback`: a degraded tree renders in place of the component.
+   * Never for the loading placeholder of a pending load.
+   */
+  function reportFallback(
+    descriptor: RemoteComponentDescriptor,
+    expose: string,
+    reason: ComponentFallbackEvent['reason'],
+    code?: NFErrorCode
+  ): void {
+    send(
+      {
+        type: 'component:fallback',
+        remote: descriptor.remote,
+        buildId: descriptor.buildId,
+        expose,
+        env: isServer ? 'server' : 'client',
+        phase: 'render',
+        reason,
+        ...(code ? { code } : {}),
+      },
+      descriptor
+    )
+  }
+
+  /** A refusal no load reported (refused before any load), then its fallback. */
+  function reportRefused(
+    descriptor: RemoteComponentDescriptor,
+    expose: string,
+    code: ComponentRefusalCode,
+    error: boolean
+  ): void {
+    if (error) {
+      send(
+        {
+          type: 'component:error',
+          remote: descriptor.remote,
+          buildId: descriptor.buildId,
+          expose,
+          code,
+          error: new NFError(
+            code,
+            `Build ${descriptor.buildId} of ${descriptor.remote} is refused (${code}); it is not loaded.`
+          ),
+          env: isServer ? 'server' : 'client',
+          phase: 'render',
+          outcome: 'refused',
+          // Refused before any load: no time spent.
+          ms: 0,
+        },
+        descriptor
+      )
+    }
+    reportFallback(descriptor, expose, 'refused', code)
+  }
 
   /** NF-040 for an error a remote component threw while rendering. */
   function reportRenderError(
@@ -321,8 +455,8 @@ export function createBindings({
         error
       )
     }
-    try {
-      emit?.({
+    send(
+      {
         type: 'component:error',
         remote: descriptor.remote,
         buildId: descriptor.buildId,
@@ -330,10 +464,14 @@ export function createBindings({
         code: 'NF-040',
         error,
         env,
-      })
-    } catch (observerError) {
-      logger.debug('component event observer threw', observerError)
-    }
+        phase: 'render',
+        outcome: 'fallback',
+        // A render error, reported when caught: no load time involved.
+        ms: 0,
+      },
+      descriptor
+    )
+    reportFallback(descriptor, expose, 'render-error', 'NF-040')
   }
 
   /**
@@ -365,16 +503,101 @@ export function createBindings({
    * Starts loading a remote component's module ahead of rendering, for
    * example in `getServerSideProps`. Never rejects.
    */
-  async function preloadRemoteComponent(
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string
+  ): Promise<void>
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options: PreloadOptions
+  ): Promise<PreloadResult>
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult>
+  function preloadRemoteComponent(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    options?: PreloadOptions
+  ): Promise<void | PreloadResult> {
+    return options
+      ? preloadWithResult(descriptor, expose, options.timeoutMs)
+      : preloadOnly(descriptor, expose)
+  }
+
+  /** A promise of `run()`: a synchronous throw becomes a rejection. */
+  function attempt<T>(run: () => T | PromiseLike<T>): Promise<T> {
+    return new Promise<T>((resolve) => resolve(run()))
+  }
+
+  /**
+   * Races the load against `timeoutMs`. A timeout never cancels the load: it
+   * keeps running for later renders and preloads. A NaN or negative
+   * `timeoutMs` counts as 0; `Infinity` sets no timer and waits for the load
+   * to settle (the runtime's own load timeout still bounds it).
+   */
+  async function preloadWithResult(
+    descriptor: RemoteComponentDescriptor | null,
+    expose: string,
+    timeoutMs: number
+  ): Promise<PreloadResult> {
+    const start = Date.now()
+    const ms = () => Math.max(0, Date.now() - start)
+    if (!descriptor) return { state: 'no-descriptor', ms: ms() }
+    const id = {
+      remote: descriptor.remote,
+      buildId: descriptor.buildId,
+      expose,
+    }
+    // Settles to how the load went; never rejects, so a load that settles
+    // after a timeout leaves no unhandled rejection.
+    const codeOf = (error: unknown) =>
+      isNFError(error) ? error.code : 'NF-029'
+    const clientOutcome = (error: unknown) => ({
+      ...classifyClientError(error, runtime.refusedBuild(descriptor)),
+      ...id,
+    })
+    const settled: Promise<Omit<PreloadResult, 'ms'>> = isServer
+      ? attempt(() => runtime.serverLoad(descriptor, expose)).then(
+          () => {
+            const outcome = runtime.serverOutcome(descriptor, expose)
+            const { state, code } = outcome
+              ? classifyOutcome(outcome)
+              : { state: 'failed' as const, code: 'NF-029' as const }
+            return code ? { state, code, ...id } : { state: 'ready', ...id }
+          },
+          (error: unknown) => ({ state: 'failed', code: codeOf(error), ...id })
+        )
+      : attempt(() => runtime.load(descriptor, expose)).then(
+          () => ({ state: 'ready', ...id }),
+          clientOutcome
+        )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const bound = Number.isNaN(timeoutMs) ? 0 : Math.max(0, timeoutMs)
+    const timedOut = new Promise<Omit<PreloadResult, 'ms'>>((resolve) => {
+      if (bound === Number.POSITIVE_INFINITY) return
+      timer = setTimeout(() => resolve({ state: 'timeout', ...id }), bound)
+    })
+    try {
+      const result = await Promise.race([settled, timedOut])
+      return { ...result, ms: ms() } as PreloadResult
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async function preloadOnly(
     descriptor: RemoteComponentDescriptor | null,
     expose: string
   ): Promise<void> {
     if (!descriptor) return
-    if (isServer) {
-      await runtime.serverLoad(descriptor, expose)
-      return
-    }
-    await runtime.load(descriptor, expose).then(
+    await attempt(() =>
+      isServer
+        ? runtime.serverLoad(descriptor, expose)
+        : runtime.load(descriptor, expose)
+    ).then(
       () => undefined,
       () => undefined
     )
@@ -385,18 +608,45 @@ export function createBindings({
     expose,
     props,
     fallback,
+    errorFallback,
+    skipServer,
   }: {
     descriptor: RemoteComponentDescriptor
     expose: string
     props: Record<string, unknown>
     fallback: ReactNode
+    errorFallback: ReactNode
+    /** The `browserOnly` prop: the server leaves this boundary to the browser. */
+    skipServer: boolean
   }): ReactNode {
     // The same hooks on both sides, so ids below match during hydration.
     const id = useId()
     // Hydrating a boundary the server left to the browser: render exactly
     // what the server sent (a mark and the fallback), then load. No error,
     // no hydration mismatch.
-    const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id))
+    const base = descriptor.base
+    const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id, base))
+    // Hydrating a boundary the server refused: keep its error fallback for
+    // good. A build fact (NF-027/NF-028) is recorded for the build, so no
+    // boundary of this page loads it (never expired here); NF-036 is
+    // per expose and blocks this boundary only (runtime.refuse ignores it).
+    const [refusedMark] = useState(() => {
+      if (isServer) return undefined
+      const code = refusedMarkCode(id, base)
+      if (code) runtime.refuse(descriptor, code)
+      return code
+    })
+    // Refused: browser, by the server's marker, the descriptor, or an earlier
+    // build-fact marker on this page; server, by descriptor.refused or this layer's
+    // recorded outcome (an earlier refused load).
+    const refusedCode = refusedMark ?? runtime.refusedBuild(descriptor)
+    // Browser: a refused tree is reported once it is shown (effects only run
+    // for a committed tree). The server reports it where it renders it.
+    useEffect(() => {
+      if (!isServer && refusedCode) {
+        reportRefused(descriptor, expose, refusedCode, true)
+      }
+    }, [refusedCode, base, expose])
     const hydrated = useSyncExternalStore(
       subscribeNothing,
       () => true,
@@ -406,7 +656,7 @@ export function createBindings({
     // or is one the server left to the browser (it sent no stylesheet).
     const [clientMount] = useState(hydrated || marked)
     const files = exposeAssets(descriptor, expose)
-    const css = files?.css ?? []
+    const css = refusedCode ? [] : (files?.css ?? [])
     if (clientMount) {
       // Before the load below starts (see CSS_PRECEDENCE).
       for (const href of css) ensureStylesheet(href)
@@ -420,7 +670,7 @@ export function createBindings({
     }, [clientMount, cssKey])
     const markAndFallback = (
       <>
-        <template {...{ [BROWSER_ONLY_ATTR]: id }} />
+        <template {...{ [BROWSER_ONLY_ATTR]: id, [MARK_BASE_ATTR]: base }} />
         {fallback}
       </>
     )
@@ -433,7 +683,59 @@ export function createBindings({
         <Slot>{markAndFallback}</Slot>
       </>
     )
+    // The same shape again, so ids in the error fallback match too.
+    const refused = (code: ComponentRefusalCode) => (
+      <>
+        {null}
+        <Slot>
+          <template
+            {...{
+              [REFUSED_ATTR]: id,
+              [MARK_BASE_ATTR]: base,
+              [MARK_CODE_ATTR]: code,
+            }}
+          />
+          {errorFallback}
+        </Slot>
+      </>
+    )
+    /**
+     * Server: the refused or browser-only tree for a recorded outcome, and
+     * its events. A load error was already reported by the runtime; a
+     * refusal the loader blocked (no load ran) is reported here.
+     */
+    const serverDegraded = (): ReactNode => {
+      const outcome = runtime.serverOutcome(descriptor, expose)
+      const settled = outcome ? classifyOutcome(outcome) : undefined
+      if (settled?.state === 'refused') {
+        const { code } = settled
+        reportRefused(descriptor, expose, code, outcome?.kind === 'blocked')
+        return refused(code)
+      }
+      reportFallback(
+        descriptor,
+        expose,
+        settled?.state === 'failed' ? 'failed' : 'browser-only',
+        settled?.code
+      )
+      return browserOnly
+    }
+    if (refusedCode) {
+      // Reported as an error only for a descriptor-level refusal (no load
+      // ran); any other recorded code gets the fallback event alone.
+      if (isServer) {
+        reportRefused(
+          descriptor,
+          expose,
+          refusedCode,
+          descriptor.refused?.code === refusedCode
+        )
+      }
+      return refused(refusedCode)
+    }
     if (marked && !hydrated) return browserOnly
+    // A refusal recorded by an earlier load still wins; no load starts.
+    if (isServer && skipServer) return serverDegraded()
     const loading = (
       isServer
         ? runtime.serverLoad(descriptor, expose)
@@ -449,7 +751,10 @@ export function createBindings({
       loadFailures.add(loading.reason)
     }
     const mod = readThenable(loading)
-    if (!mod) return browserOnly
+    if (!mod) return serverDegraded()
+    // Hints only for a build this server loaded (never pending or refused
+    // ones). React hoists them out of the boundary.
+    if (isServer) preloadAssets(descriptor, expose)
     const Render = renderer(mod.default, isServer, renderers)
     return (
       <>
@@ -491,10 +796,11 @@ export function createBindings({
   }
 
   /**
-   * Server render of a build this server renders: modulepreload the remote
-   * entry and the expose's chunks, and preload its stylesheets, from the
-   * shell (outside Suspense), so the browser fetches them in parallel
-   * instead of manifest, then entry, then chunks.
+   * Server render of a build this server loaded: modulepreload the remote
+   * entry and the expose's chunks, and preload its stylesheets (React hoists
+   * them to the head, or to the boundary's streamed chunk), so the browser
+   * fetches them in parallel instead of manifest, then entry, then chunks.
+   * Never for a build still loading or refused.
    */
   function preloadAssets(
     descriptor: RemoteComponentDescriptor,
@@ -523,16 +829,24 @@ export function createBindings({
       descriptor,
       fallback: fallbackProp,
       errorFallback: errorFallbackProp,
+      browserOnly: browserOnlyProp,
       ...props
     }: RemoteComponentProps<P>): ReactNode {
       const fallback = fallbackProp ?? options.fallback ?? null
       const errorFallback =
         errorFallbackProp ?? options.errorFallback ?? fallback
       if (!descriptor) return errorFallback
-      if (isServer) preloadAssets(descriptor, expose)
       const onError = (error: unknown) => {
         if (typeof error === 'object' && error !== null) {
-          if (loadFailures.has(error)) return
+          // The runtime reported the load error; the fallback is ours.
+          if (loadFailures.has(error)) {
+            const { state, code } = classifyClientError(
+              error,
+              runtime.refusedBuild(descriptor)
+            )
+            reportFallback(descriptor, expose, state, code)
+            return
+          }
         }
         reportRenderError(descriptor, expose, error)
       }
@@ -548,11 +862,18 @@ export function createBindings({
               expose={expose}
               props={props as Record<string, unknown>}
               fallback={fallback}
+              errorFallback={errorFallback}
+              skipServer={browserOnlyProp === true}
             />
           </Suspense>
         </Boundary>
       )
       // An unverified build has no server rendering: render it after hydration.
+      if (isServer && !descriptor.ssr) {
+        const code = descriptor.refused?.code
+        if (code) reportRefused(descriptor, expose, code, true)
+        else reportFallback(descriptor, expose, 'browser-only')
+      }
       return descriptor.ssr ? (
         tree
       ) : (
@@ -560,8 +881,15 @@ export function createBindings({
       )
     }
     RemoteComponent.displayName = `RemoteComponent(${expose})`
-    RemoteComponent.preload = (descriptor: RemoteComponentDescriptor | null) =>
-      preloadRemoteComponent(descriptor, expose)
+    RemoteComponent.preload = ((
+      descriptor: RemoteComponentDescriptor | null,
+      options?: PreloadOptions
+    ) =>
+      preloadRemoteComponent(
+        descriptor,
+        expose,
+        options
+      )) as RemoteComponentType<P>['preload']
     return RemoteComponent
   }
 

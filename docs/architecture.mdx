@@ -98,7 +98,7 @@ Server rendering runs fetched code in the host's server process, so the host doe
 1. **The descriptor is verified.** It carries an ES256 signature that matches a public key you configured, or your configuration pins the build id to its digest. `unsafe-dev` skips verification and works only in `development` or `test`.
 2. **Every file matches its sha384** from the descriptor, checked before evaluation.
 
-The host never writes the code to disk. A build whose manifest lists further remotes, or has no checkable manifest, renders in the browser only. Details are in [Remote components](guides/remote-components/overview.mdx).
+The host never writes the code to disk. A build whose manifest lists further remotes, or has no checkable manifest, is refused and renders its error fallback. Details are in [Remote components](guides/remote-components/overview.mdx).
 
 ## What the host trusts
 

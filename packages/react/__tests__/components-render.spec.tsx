@@ -8,7 +8,11 @@ import { act } from 'react'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
-import { BROWSER_ONLY_ATTR, createBindings } from '../src/components/render.tsx'
+import {
+  BROWSER_ONLY_ATTR,
+  REFUSED_ATTR,
+  createBindings,
+} from '../src/components/render.tsx'
 import type { BindingsRuntime } from '../src/components/render.tsx'
 import type { RemoteModule } from '../src/components/runtime.ts'
 import {
@@ -330,5 +334,388 @@ describe('stylesheets and modulepreload (descriptor assets)', () => {
     await act(async () => root.unmount())
     container.remove()
     for (const l of document.querySelectorAll('link')) l.remove()
+  })
+})
+
+describe('refused builds (server integrity failure)', () => {
+  const refusedRuntime = (): BindingsRuntime => ({
+    ...fakeRuntime(null),
+    serverOutcome: () => ({
+      kind: 'error',
+      code: 'NF-027',
+      error: new Error('integrity'),
+    }),
+  })
+  const withAssets = (): RemoteComponentDescriptor => ({
+    ...descriptor(true),
+    assets: {
+      entry: 'http://127.0.0.1:4110/b/c1/remoteEntry.js',
+      exposes: {
+        './Counter': {
+          css: ['http://127.0.0.1:4110/b/c1/assets/Counter-r.css'],
+          js: ['http://127.0.0.1:4110/b/c1/assets/Counter-r.js'],
+        },
+      },
+    },
+  })
+  const bind = (runtime: BindingsRuntime, isServer: boolean) =>
+    createBindings({ runtime, isServer }).createRemoteComponent<{
+      start?: number
+    }>({
+      expose: './Counter',
+      fallback: <i data-testid="fallback">unavailable</i>,
+      errorFallback: <b data-testid="error">refused</b>,
+    })
+
+  test('server render of an NF-027 build emits the refused marker and errorFallback, not the browser-only marker', () => {
+    const C = bind(refusedRuntime(), true)
+    const html = renderToString(<C descriptor={descriptor(true)} />)
+    expect(html).toContain(`<template ${REFUSED_ATTR}=`)
+    expect(html).toContain('refused')
+    expect(html).not.toContain('unavailable')
+    expect(html).not.toContain(BROWSER_ONLY_ATTR)
+  })
+
+  test('no modulepreload links for a refused boundary', async () => {
+    const runtime = refusedRuntime()
+    const b = createBindings({ runtime, isServer: true })
+    const C = b.createRemoteComponent({
+      expose: './Counter',
+      errorFallback: <b>refused</b>,
+    })
+    await b.preloadRemoteComponent(withAssets(), './Counter')
+    const html = renderToString(<C descriptor={withAssets()} />)
+    expect(html).not.toContain('modulepreload')
+    expect(html).not.toContain('Counter-r')
+  })
+
+  async function hydrateRefused(clientStart: number) {
+    const Server = bind(refusedRuntime(), true)
+    let loads = 0
+    const Client = bind(
+      {
+        ...fakeRuntime(null),
+        load: () => {
+          loads++
+          return fulfilled(mod)
+        },
+      },
+      false
+    )
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} start={2} />
+      </main>
+    )
+    const container = document.createElement('div')
+    container.innerHTML = raw
+    document.body.appendChild(container)
+    const recoverable: unknown[] = []
+    const consoleError = rs.spyOn(console, 'error').mockImplementation(() => {})
+    await act(async () => {
+      hydrateRoot(
+        container,
+        <main>
+          <Client descriptor={descriptor(true)} start={clientStart} />
+        </main>,
+        { onRecoverableError: (e) => recoverable.push(e) }
+      )
+    })
+    await act(async () => {})
+    await act(() => new Promise((r) => setTimeout(r, 20)))
+    const errors = consoleError.mock.calls
+    consoleError.mockRestore()
+    const text = container.textContent
+    container.remove()
+    return { text, loads, recoverable, errors }
+  }
+
+  test('hydrating a refused marker keeps errorFallback and never calls runtime.load', async () => {
+    const r = await hydrateRefused(2)
+    expect(r.text).toBe('refused')
+    expect(r.loads).toBe(0)
+    expect(r.recoverable).toEqual([])
+  })
+
+  test('hydrating a refused marker with a different client prop logs no hydration warning', async () => {
+    const r = await hydrateRefused(7)
+    expect(r.text).toBe('refused')
+    expect(r.loads).toBe(0)
+    expect(r.recoverable).toEqual([])
+    expect(r.errors).toEqual([])
+  })
+
+  test('no modulepreload for a refusal learned while rendering (no prior preload)', async () => {
+    // The load is still running when the shell renders.
+    let settled = false
+    let settle!: (v: null) => void
+    const pending = Object.assign(
+      new Promise<null>((r) => (settle = r)).then((v) => {
+        settled = true
+        Object.assign(pending, { status: 'fulfilled', value: v })
+        return v
+      }),
+      { status: 'pending' as const }
+    )
+    const C = bind(
+      {
+        ...refusedRuntime(),
+        serverLoad: () => pending as never,
+        serverOutcome: () =>
+          settled
+            ? { kind: 'error', code: 'NF-027', error: new Error('integrity') }
+            : undefined,
+      },
+      true
+    )
+    setTimeout(() => settle(null), 5)
+    const { prerender } = await import('react-dom/static')
+    const { prelude } = await prerender(<C descriptor={withAssets()} />)
+    const html = await new Response(prelude).text()
+    expect(html).toContain(`<template ${REFUSED_ATTR}=`)
+    expect(html).not.toContain('modulepreload')
+    expect(html).not.toContain('Counter-r')
+  })
+
+  test('hints still go out for a build the server loaded', () => {
+    const C = bind(fakeRuntime(mod), true)
+    const html = renderToString(<C descriptor={withAssets()} />)
+    expect(html).toContain('rel="modulepreload"')
+    expect(html).toContain('Counter-r.js')
+  })
+
+  const counting = () => {
+    const runtime = fakeRuntime(null)
+    const counter = { loads: 0 }
+    return {
+      counter,
+      runtime: {
+        ...runtime,
+        load: () => {
+          counter.loads++
+          return fulfilled(mod)
+        },
+      } satisfies BindingsRuntime,
+    }
+  }
+
+  test('a client-only mount of a refused descriptor never loads and shows errorFallback', async () => {
+    const { runtime, counter } = counting()
+    const C = bind(runtime, false)
+    const { createRoot } = await import('react-dom/client')
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    const root = createRoot(el)
+    await act(async () => {
+      root.render(
+        <C descriptor={{ ...withAssets(), refused: { code: 'NF-027' } }} />
+      )
+    })
+    expect(el.textContent).toBe('refused')
+    expect(counter.loads).toBe(0)
+    expect(document.querySelector('link[href*="Counter-r"]')).toBeNull()
+    await act(async () => root.unmount())
+    el.remove()
+  })
+
+  test('after hydrating a refused marker, new and remounted boundaries of that build never load', async () => {
+    const Server = bind(refusedRuntime(), true)
+    const { runtime, counter } = counting()
+    const Client = bind(runtime, false)
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} />
+      </main>
+    )
+    const el = document.createElement('div')
+    el.innerHTML = raw
+    document.body.appendChild(el)
+    let root!: ReturnType<typeof hydrateRoot>
+    await act(async () => {
+      root = hydrateRoot(
+        el,
+        <main>
+          <Client descriptor={descriptor(true)} />
+        </main>
+      )
+    })
+    // A second instance (a client navigation), then a remount of both.
+    await act(async () => {
+      root.render(
+        <main>
+          <Client descriptor={descriptor(true)} />
+          <Client descriptor={descriptor(true)} />
+        </main>
+      )
+    })
+    await act(async () => root.render(<main />))
+    await act(async () => {
+      root.render(
+        <main>
+          <Client key="again" descriptor={descriptor(true)} />
+        </main>
+      )
+    })
+    expect(el.textContent).toBe('refused')
+    expect(counter.loads).toBe(0)
+    await act(async () => root.unmount())
+    el.remove()
+  })
+
+  test('a refused marker for another build (mismatching base) is ignored', async () => {
+    const Server = bind(refusedRuntime(), true)
+    const { runtime, counter } = counting()
+    const Client = bind(runtime, false)
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} />
+      </main>
+    ).replace(
+      `data-nf-base="${descriptor(true).base}"`,
+      'data-nf-base="http://127.0.0.1:4110/b/other/"'
+    )
+    expect(raw).toContain('b/other/')
+    const el = document.createElement('div')
+    el.innerHTML = raw
+    document.body.appendChild(el)
+    rs.spyOn(console, 'error').mockImplementation(() => {})
+    let root!: ReturnType<typeof hydrateRoot>
+    await act(async () => {
+      root = hydrateRoot(
+        el,
+        <main>
+          <Client descriptor={descriptor(true)} />
+        </main>,
+        { onRecoverableError: () => {} }
+      )
+    })
+    await act(async () => {})
+    expect(runtime.refusedBuild(descriptor(true))).toBeUndefined()
+    expect(counter.loads).toBeGreaterThan(0)
+    await act(async () => root.unmount())
+    rs.restoreAllMocks()
+    el.remove()
+  })
+
+  test('an unsigned (unverified) build still renders in the browser', async () => {
+    const r = await serverThenHydrate(mod, false)
+    expect(r.html).not.toContain(REFUSED_ATTR)
+    expect(r.text).toBe('count 2')
+    expect(r.recoverable).toEqual([])
+  })
+})
+
+describe('browserOnly prop', () => {
+  const bind = (runtime: BindingsRuntime, isServer: boolean) =>
+    createBindings({ runtime, isServer }).createRemoteComponent<{
+      start?: number
+      browserOnly?: boolean
+    }>({
+      expose: './Counter',
+      fallback: <i data-testid="fallback">unavailable</i>,
+      errorFallback: <b data-testid="error">refused</b>,
+    })
+
+  test('browserOnly on the server renders the browser-only marker without calling runtime.serverLoad', () => {
+    let serverLoads = 0
+    const C = bind(
+      {
+        ...fakeRuntime(mod),
+        serverLoad: () => {
+          serverLoads++
+          return fulfilled(mod)
+        },
+      },
+      true
+    )
+    const html = renderToString(<C descriptor={descriptor(true)} browserOnly />)
+    expect(serverLoads).toBe(0)
+    expect(html).toContain(`<template ${BROWSER_ONLY_ATTR}=`)
+    expect(html).toContain('unavailable')
+    expect(html).not.toContain('count')
+    expect(html).not.toContain('modulepreload')
+  })
+
+  test('browserOnly hydrates and the browser loads the component', async () => {
+    const Server = bind(fakeRuntime(mod), true)
+    let loads = 0
+    const Client = bind(
+      {
+        ...fakeRuntime(null),
+        load: () => {
+          loads++
+          return fulfilled(mod)
+        },
+      },
+      false
+    )
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} start={2} browserOnly />
+      </main>
+    )
+    const container = document.createElement('div')
+    container.innerHTML = raw
+    document.body.appendChild(container)
+    const recoverable: unknown[] = []
+    await act(async () => {
+      hydrateRoot(
+        container,
+        <main>
+          <Client descriptor={descriptor(true)} start={2} browserOnly />
+        </main>,
+        { onRecoverableError: (e) => recoverable.push(e) }
+      )
+    })
+    await act(async () => {})
+    expect(container.textContent).toBe('count 2')
+    expect(loads).toBeGreaterThan(0)
+    expect(recoverable).toEqual([])
+    container.remove()
+  })
+
+  test('browserOnly is not passed to the remote component', async () => {
+    const seen: Record<string, unknown>[] = []
+    const Spy = (p: Record<string, unknown>) => {
+      seen.push(p)
+      return <span>spy</span>
+    }
+    const spyMod: RemoteModule = { default: Spy }
+    const C = bind(
+      { ...fakeRuntime(null), load: () => fulfilled(spyMod) },
+      false
+    )
+    const { createRoot } = await import('react-dom/client')
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    const root = createRoot(el)
+    await act(async () => {
+      root.render(<C descriptor={descriptor(true)} start={3} browserOnly />)
+    })
+    expect(seen.length).toBeGreaterThan(0)
+    for (const p of seen) {
+      expect('browserOnly' in p).toBe(false)
+      expect(p.start).toBe(3)
+    }
+    await act(async () => root.unmount())
+    el.remove()
+  })
+
+  test('browserOnly does not override a known refusal', () => {
+    const C = bind(
+      {
+        ...fakeRuntime(null),
+        serverOutcome: () => ({
+          kind: 'error',
+          code: 'NF-027',
+          error: new Error('integrity'),
+        }),
+      },
+      true
+    )
+    const html = renderToString(<C descriptor={descriptor(true)} browserOnly />)
+    expect(html).toContain(`<template ${REFUSED_ATTR}=`)
+    expect(html).toContain('refused')
+    expect(html).not.toContain(BROWSER_ONLY_ATTR)
   })
 })

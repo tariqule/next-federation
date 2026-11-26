@@ -187,14 +187,21 @@ for (const host of HOSTS) {
           host.router === 'app' ? 'pages-nav-fallback' : 'nav-fallback'
         const missing =
           host.router === 'app' ? 'next/router' : 'next/navigation'
+        // NF-036 is per exposed module: the server refuses this boundary
+        // only (one refused marker), never the other modules of its build.
+        const body = await serverHtml(host.page)
+        const refused = body.match(/data-nf-code="NF-036"/g) ?? []
         const { all } = watch(page)
         await page.goto(host.page)
-        // The refused load is logged, then its boundary settles on one
-        // fallback (while it settles, the Suspense fallback shows next to
-        // the hidden server HTML).
-        await expect
-          .poll(() => all.join('\n'), { timeout: 15_000 })
-          .toMatch(new RegExp(`NF-036[\\s\\S]*"${missing}"`))
+        if (refused.length === 0) {
+          // Not refused on the server (a browser-only render): the browser
+          // logs the refused load.
+          await expect
+            .poll(() => all.join('\n'), { timeout: 15_000 })
+            .toMatch(new RegExp(`NF-036[\\s\\S]*"${missing}"`))
+        } else {
+          expect(refused).toHaveLength(1)
+        }
         await expect(page.getByTestId(fallback)).toHaveCount(1)
         await expect(page.getByTestId(fallback)).toBeVisible()
       })

@@ -283,8 +283,14 @@ it('a failed load renders the fallback and reports the same NF code as React 19'
   // Assertions as in components-render-errors.spec.tsx ("browser: a failed
   // load renders errorFallback and is not reported again as a render error").
   expect(el.textContent).toBe('failed')
-  // The runtime reported the load failure itself (NF-029).
-  expect(events).toEqual([])
+  // The runtime reported the load failure itself (NF-029): only its fallback.
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'component:fallback',
+      reason: 'failed',
+      code: 'NF-029',
+    }),
+  ])
   expect(nfLogs('NF-040')).toHaveLength(0)
 })
 
@@ -338,7 +344,9 @@ it('a build requiring react ^19.0.0 on a host registering react 18.3.1 renders t
   expect(String(nf036[0])).toContain('^19.0.0')
   expect(String(nf036[0])).toContain('18.3.1')
   // The boundary only renders the fallback: no render error (NF-040).
-  expect(bindingEvents).toEqual([])
+  expect(bindingEvents).toEqual([
+    expect.objectContaining({ type: 'component:fallback', code: 'NF-036' }),
+  ])
   const nf040 = consoleError.mock.calls.filter((args: unknown[]) =>
     args.some((a) => typeof a === 'string' && a.includes('NF-040'))
   )
@@ -397,7 +405,9 @@ it('a build whose descriptor lists no React range counts as react ^19.0.0: fallb
   expect(nf036).toHaveLength(1)
   expect(String(nf036[0])).toContain('"react" "^19.0.0"')
   expect(String(nf036[0])).toContain('18.3.1')
-  expect(bindingEvents).toEqual([])
+  expect(bindingEvents).toEqual([
+    expect.objectContaining({ type: 'component:fallback', code: 'NF-036' }),
+  ])
 })
 
 it("a build listing react '^18.3.0 || ^19.0.0' renders on React 18.3.1", async () => {
@@ -463,4 +473,53 @@ it('a server-rendered instance unmounts while a client-mounted sibling with the 
   expect(inlineLinks(el)).toHaveLength(0)
   expect(headLinks()).toEqual([copy])
   expect(copy!.isConnected).toBe(true)
+})
+
+it('a refused build: the server sends the refused marker and errorFallback; hydration keeps it and never loads', async () => {
+  const Server = bind(
+    {
+      ...fakeRuntime(null),
+      serverOutcome: () => ({
+        kind: 'error',
+        code: 'NF-027',
+        error: new Error('integrity'),
+      }),
+    },
+    true,
+    [],
+    { errorFallback: true }
+  )
+  let loads = 0
+  const Client = bind(
+    {
+      ...fakeRuntime(null),
+      load: () => {
+        loads++
+        return fulfilled(mod)
+      },
+    },
+    false,
+    [],
+    { errorFallback: true }
+  )
+  const html = await serverHtml(
+    <main>
+      <Server descriptor={styled()} start={2} />
+    </main>
+  )
+  expect(html).toContain('data-nf-refused=')
+  expect(html).not.toContain('data-nf-browser-only')
+  expect(html).not.toContain('modulepreload')
+  const el = container(html)
+  const { logged, recoverable } = await hydrate(
+    el,
+    <main>
+      <Client descriptor={styled()} start={7} />
+    </main>
+  )
+  expect(el.textContent).toBe('failed')
+  expect(loads).toBe(0)
+  expect(logged).toEqual([])
+  expect(recoverable).toEqual([])
+  expect(headLinks()).toHaveLength(0)
 })

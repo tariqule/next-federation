@@ -608,3 +608,24 @@ describe('replaceFolder: the previous types survive a failed swap', () => {
     expect(await readFile(join(folder, 'a.d.ts'), 'utf8')).toBe('new')
   })
 })
+
+test('a served descriptor carrying an `events` routing key still syncs (signed and pinned)', async () => {
+  const { priv, pub } = keyPair()
+  const p = payload()
+  const file = await publish(p, priv)
+  routes['/_nf/components.json'] = {
+    body: JSON.stringify({ ...file, events: 'abc.0' }),
+  }
+  const signed = await syncRemoteTypes({
+    federation: federation({ publicKeys: [pub] }),
+    outDir,
+  })
+  expect(signed[0]).toMatchObject({ status: 'written', trust: 'signature' })
+  const pinned = await syncRemoteTypes({
+    federation: federation({
+      pinned: { c1: await componentDescriptorDigest(p) },
+    }),
+    outDir,
+  })
+  expect(pinned[0]).toMatchObject({ trust: 'pinned' })
+})

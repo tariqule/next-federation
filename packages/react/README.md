@@ -69,7 +69,7 @@ Creates the browser `TokenClient` that `IslandMount` uses. `options`: `endpoint`
 
 ### createRemoteComponent(options)
 
-Binds an exposed client component of a components remote, in a `'use client'` module. The result has a `preload(descriptor)` method.
+Binds an exposed client component of a components remote, in a `'use client'` module. The result has a `preload(descriptor, options?)` method and takes a `browserOnly` prop.
 
 ```tsx
 'use client'
@@ -92,13 +92,26 @@ export const Cart = createRemoteComponent<{ items: number }>({
 
 The component takes your props plus `descriptor` (`RemoteComponentDescriptor | null`), `fallback` and `errorFallback`. Pass `descriptor` from `getComponentDescriptor` or `fetchDescriptorInBrowser`. In Next.js, import from `@next-federation/next/components` instead.
 
+`browserOnly` renders `fallback` on the server and loads the component in the browser, on this response only. It never overrides a refused build, and the remote does not receive it. Use it for a `timeout` result only when policy permits.
+
 ### loadRemoteModule(descriptor, expose)
 
 Loads an exposed module of a remote build, cached per build.
 
-### preloadRemoteComponent(descriptor, expose)
+### preloadRemoteComponent(descriptor, expose, options?)
 
-Starts loading a module early. It never rejects.
+Starts loading a module early. It never rejects. Without `options` it resolves `void`. With `{ timeoutMs }` it resolves a `PreloadResult`, discriminated on `state`:
+
+| `state`         | Meaning                                                                             |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `ready`         | The server loaded the module and its default export. React has not rendered it.     |
+| `browser-only`  | Policy permits the browser, and the server will not render it here. Has `code`.     |
+| `refused`       | Integrity, verification or a shared module (`NF-036`) failed. Has `code`.           |
+| `failed`        | A transient server load failure (`NF-029`), retried after the cooldown. Has `code`. |
+| `timeout`       | This caller stopped waiting. The shared load continues.                             |
+| `no-descriptor` | The descriptor was `null`.                                                          |
+
+Results carry `remote`, `buildId`, `expose` and `ms` (no `remote`, `buildId` or `expose` on `no-descriptor`). `timeoutMs` bounds only this caller. Above the runtime's load timeout the result is `failed`. A server preload is not callable from an App Router Server Component, and a request timeout must not decide what `getStaticProps`, ISR or a cached shell stores. See [Preload result and events](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/preload-and-events.mdx).
 
 ### fetchDescriptorInBrowser(url, options?)
 
@@ -125,7 +138,7 @@ Gives remote links this host's router. Call it once at module scope. Without it,
 
 ### COMPONENT_EVENT
 
-`'nf:component'`, the `document` event for each load and failure. Detail: `ComponentEvent`.
+`'nf:component'`, the `document` event for each load, failure and degraded render. Detail: `ComponentEvent` (`component:load`, `component:error`, `component:fallback`), with optional `phase` and `outcome`. `component:fallback` fires only for a degraded render, never the loading placeholder. A handler that switches over the type without a `default` branch needs a `component:fallback` case. See [Preload result and events](https://github.com/tariqule/next-federation/blob/main/docs/guides/remote-components/preload-and-events.mdx).
 
 ### provideHostReact()
 
@@ -139,7 +152,7 @@ provideHostReact()
 
 ### Types
 
-`FederationErrorBoundaryProps`, `IslandMountProps`, `IslandClientEvent`, `TokenClient`, `RemoteComponentOptions`, `RemoteComponentProps`, `RemoteComponentType`, `RemoteProps`, `RemoteComponentDescriptor`, `ComponentEvent`, `RemoteModule`, `SharedModules`, `NavigationHooks`.
+`FederationErrorBoundaryProps`, `IslandMountProps`, `IslandClientEvent`, `TokenClient`, `RemoteComponentOptions`, `RemoteComponentProps`, `RemoteComponentType`, `RemoteProps`, `RemoteComponentDescriptor`, `ComponentEvent`, `PreloadResult`, `PreloadOptions`, `PreloadState`, `RemoteModule`, `SharedModules`, `NavigationHooks`.
 
 ## Learn more
 

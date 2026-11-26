@@ -132,7 +132,7 @@ page, its URL and the sidebar order.
   `caching` (+ `caching-reference`), `identity` (+ `identity-reference`), `csp`,
   `migrating-from-nextjs-mf`. A `-reference` page holds the detail its guide links to.
 - **Remote Components** (`guides/remote-components/`): `overview`, `vite-remote`, `rspack-remote`,
-  `host-configuration`, `stylesheets`, `sharing-modules`, `links`, `reference`, `security`, `types`,
+  `host-configuration`, `stylesheets`, `sharing-modules`, `links`, `reference`, `preload-and-events`, `security`, `types`,
   `sharing-from-a-next-app`.
 - **Deployment**: `deployment` (overview), `self-hosted-skew`, `deploying-a-remote-on-vercel`.
 - **API Reference**: one page per package, from its README (`api/<package>`).
@@ -156,7 +156,7 @@ is split, or its detail moves to a reference page.
 | `caching-reference`                                       | 1200                 |
 | `identity-reference`                                      | 1000                 |
 | `server-actions-reference`                                | 800                  |
-| `remote-components/reference`, `security` and `types`     | 1500                 |
+| `remote-components/reference`, `preload-and-events`, `security` and `types` | 1500 |
 | `architecture`                                            | 1200                 |
 | `limits`                                                  | 1800                 |
 
