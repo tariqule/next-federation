@@ -1,5 +1,6 @@
 import { createInstance } from '@module-federation/runtime'
 import { componentTrustRegistry } from '@next-federation/protocol'
+import { NFError } from '@next-federation/sdk'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import {
   MAX_SCOPES,
@@ -1823,4 +1824,45 @@ test('a new MF instance while a load awaits its manifest check: the next load st
     { entry: descriptor('c1').manifest }
   )
   expect(errors).not.toHaveBeenCalled()
+})
+
+describe('refused builds', () => {
+  test('browser: a build recorded refused rejects with its code, no request', async () => {
+    const { runtime, instance } = setup({ isServer: false })
+    runtime.refuse(descriptor('r1').base, 'NF-036')
+    const p = runtime.load(descriptor('r1'), './Counter')
+    expect(p.status).toBe('rejected')
+    await expect(p).rejects.toMatchObject({ code: 'NF-036' })
+    expect(instance.loads).toEqual([])
+    expect(instance.registrations).toEqual([])
+    // Other builds still load.
+    await runtime.load(descriptor('r2'), './Counter')
+    expect(instance.loads).toHaveLength(1)
+  })
+
+  test('a descriptor carrying `refused` is never loaded, on either side', async () => {
+    for (const isServer of [false, true]) {
+      const { runtime, instance } = setup({ isServer })
+      const d = descriptor('r3', { refused: { code: 'NF-027' } })
+      await expect(runtime.load(d, './Counter')).rejects.toMatchObject({
+        code: 'NF-027',
+      })
+      expect(instance.loads).toEqual([])
+    }
+  })
+
+  test('server: a refused load is recorded process-wide for the descriptors it hands out', async () => {
+    const ctx = setup()
+    ctx.instance.loadRemote = async () => {
+      throw new NFError('NF-027', 'a chunk failed its integrity check')
+    }
+    const d = descriptor('r4')
+    expect(await ctx.runtime.serverLoad(d, './Counter')).toBeNull()
+    expect(ctx.runtime.serverOutcome(d, './Counter')).toMatchObject({
+      kind: 'error',
+      code: 'NF-027',
+    })
+    expect(componentTrustRegistry().refusedBuilds?.get(d.base)).toBe('NF-027')
+    componentTrustRegistry().refusedBuilds?.delete(d.base)
+  })
 })

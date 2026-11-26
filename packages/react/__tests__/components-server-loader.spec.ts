@@ -241,6 +241,15 @@ describe('fix round 1: server-side trust', () => {
     ).toBe(false)
   })
 
+  test('a `refused` field is outside the trusted payload: the descriptor stays trusted', () => {
+    const digest = `sha384-${createHash('sha384').update(canonicalOf(d())).digest('base64')}`
+    componentTrustRegistry().verified.set(
+      verifiedKey('trusted-remote', digest),
+      'signature'
+    )
+    expect(isTrustedDescriptor(d({ refused: { code: 'NF-027' } }))).toBe(true)
+  })
+
   test('the assets (stylesheets, chunks) are covered: a changed stylesheet URL is not trusted', () => {
     const assets = {
       entry: 'http://127.0.0.1:1/b/t1/remoteEntry.js',

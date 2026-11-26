@@ -2,6 +2,7 @@
 // the real one; tests pass a fake, with `isServer` set either way).
 import type {
   ComponentExposeAssets,
+  ComponentRefusalCode,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
@@ -34,7 +35,13 @@ import type { PreloadOptions, PreloadResult } from './preload-result.ts'
 
 export type BindingsRuntime = Pick<
   ComponentRuntime,
-  'load' | 'serverLoad' | 'serverBlock' | 'serverOutcome' | 'registerShared'
+  | 'load'
+  | 'serverLoad'
+  | 'serverBlock'
+  | 'serverOutcome'
+  | 'registerShared'
+  | 'refuse'
+  | 'refusedBuild'
 >
 
 export type RemoteComponentOptions = {
@@ -234,19 +241,32 @@ function BrowserOnly({ fallback, children }: BoundaryProps): ReactNode {
   return hydrated ? children : fallback
 }
 
-function hasMark(attr: string, id: string): boolean {
-  if (typeof document === 'undefined') return false
-  return (
-    document.querySelector(`template[${attr}="${CSS.escape(id)}"]`) !== null
+/** Carries, on a marker, the build base it is for: others are ignored. */
+const MARK_BASE_ATTR = 'data-nf-base'
+/** Carries, on a refused marker, why the server refused the build. */
+const MARK_CODE_ATTR = 'data-nf-code'
+const REFUSAL_CODES: readonly string[] = ['NF-027', 'NF-028', 'NF-036']
+
+/** The server marker of this boundary (id) for this build (base), if any. */
+function findMark(attr: string, id: string, base: string): Element | null {
+  if (typeof document === 'undefined') return null
+  return document.querySelector(
+    `template[${attr}="${CSS.escape(id)}"][${MARK_BASE_ATTR}="${CSS.escape(base)}"]`
   )
 }
 
-function hasBrowserOnlyMark(id: string): boolean {
-  return hasMark(BROWSER_ONLY_ATTR, id)
+function hasBrowserOnlyMark(id: string, base: string): boolean {
+  return findMark(BROWSER_ONLY_ATTR, id, base) !== null
 }
 
-function hasRefusedMark(id: string): boolean {
-  return hasMark(REFUSED_ATTR, id)
+function refusedMarkCode(
+  id: string,
+  base: string
+): ComponentRefusalCode | undefined {
+  const code = findMark(REFUSED_ATTR, id, base)?.getAttribute(MARK_CODE_ATTR)
+  return code && REFUSAL_CODES.includes(code)
+    ? (code as ComponentRefusalCode)
+    : undefined
 }
 
 /**
@@ -506,10 +526,19 @@ export function createBindings({
     // Hydrating a boundary the server left to the browser: render exactly
     // what the server sent (a mark and the fallback), then load. No error,
     // no hydration mismatch.
-    const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id))
+    const base = descriptor.base
+    const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id, base))
     // Hydrating a boundary whose build the server refused: keep its error
-    // fallback for good, and never load that build.
-    const [refusedMark] = useState(() => !isServer && hasRefusedMark(id))
+    // fallback for good, and record the refusal so no boundary of this page
+    // ever loads that build.
+    const [refusedMark] = useState(() => {
+      if (isServer) return undefined
+      const code = refusedMarkCode(id, base)
+      if (code) runtime.refuse(base, code)
+      return code
+    })
+    // Refused by the server (marker, descriptor, or recorded earlier).
+    const refusedCode = refusedMark ?? runtime.refusedBuild(descriptor)
     const hydrated = useSyncExternalStore(
       subscribeNothing,
       () => true,
@@ -519,7 +548,7 @@ export function createBindings({
     // or is one the server left to the browser (it sent no stylesheet).
     const [clientMount] = useState(hydrated || marked)
     const files = exposeAssets(descriptor, expose)
-    const css = files?.css ?? []
+    const css = refusedCode ? [] : (files?.css ?? [])
     if (clientMount) {
       // Before the load below starts (see CSS_PRECEDENCE).
       for (const href of css) ensureStylesheet(href)
@@ -533,7 +562,7 @@ export function createBindings({
     }, [clientMount, cssKey])
     const markAndFallback = (
       <>
-        <template {...{ [BROWSER_ONLY_ATTR]: id }} />
+        <template {...{ [BROWSER_ONLY_ATTR]: id, [MARK_BASE_ATTR]: base }} />
         {fallback}
       </>
     )
@@ -547,16 +576,22 @@ export function createBindings({
       </>
     )
     // The same shape again, so ids in the error fallback match too.
-    const refused = (
+    const refused = (code: ComponentRefusalCode) => (
       <>
         {null}
         <Slot>
-          <template {...{ [REFUSED_ATTR]: id }} />
+          <template
+            {...{
+              [REFUSED_ATTR]: id,
+              [MARK_BASE_ATTR]: base,
+              [MARK_CODE_ATTR]: code,
+            }}
+          />
           {errorFallback}
         </Slot>
       </>
     )
-    if (refusedMark) return refused
+    if (refusedCode) return refused(refusedCode)
     if (marked && !hydrated) return browserOnly
     const loading = (
       isServer
@@ -577,10 +612,14 @@ export function createBindings({
       const outcome = isServer
         ? runtime.serverOutcome(descriptor, expose)
         : undefined
-      return outcome && classifyOutcome(outcome).state === 'refused'
-        ? refused
+      const refusal = outcome ? classifyOutcome(outcome) : undefined
+      return refusal?.state === 'refused' && refusal.code
+        ? refused(refusal.code as ComponentRefusalCode)
         : browserOnly
     }
+    // Hints only for a build this server loaded (never pending or refused
+    // ones). React hoists them out of the boundary.
+    if (isServer) preloadAssets(descriptor, expose)
     const Render = renderer(mod.default, isServer, renderers)
     return (
       <>
@@ -622,20 +661,17 @@ export function createBindings({
   }
 
   /**
-   * Server render of a build this server renders: modulepreload the remote
-   * entry and the expose's chunks, and preload its stylesheets, from the
-   * shell (outside Suspense), so the browser fetches them in parallel
-   * instead of manifest, then entry, then chunks.
+   * Server render of a build this server loaded: modulepreload the remote
+   * entry and the expose's chunks, and preload its stylesheets (React hoists
+   * them to the head, or to the boundary's streamed chunk), so the browser
+   * fetches them in parallel instead of manifest, then entry, then chunks.
+   * Never for a build still loading or refused.
    */
   function preloadAssets(
     descriptor: RemoteComponentDescriptor,
     expose: string
   ): void {
     if (!descriptor.ssr || runtime.serverBlock(descriptor)) return
-    // A build already known refused is never fetched. A refusal found later
-    // (the load still running) cannot take back hints already sent.
-    const outcome = runtime.serverOutcome(descriptor, expose)
-    if (outcome && classifyOutcome(outcome).state === 'refused') return
     const files = exposeAssets(descriptor, expose)
     if (!files) return
     for (const href of files.css) preloadStyle(href)
@@ -664,7 +700,6 @@ export function createBindings({
       const errorFallback =
         errorFallbackProp ?? options.errorFallback ?? fallback
       if (!descriptor) return errorFallback
-      if (isServer) preloadAssets(descriptor, expose)
       const onError = (error: unknown) => {
         if (typeof error === 'object' && error !== null) {
           if (loadFailures.has(error)) return

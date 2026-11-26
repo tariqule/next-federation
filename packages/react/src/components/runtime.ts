@@ -11,11 +11,13 @@ import {
   satisfies,
 } from '@next-federation/protocol'
 import type {
+  ComponentRefusalCode,
   ComponentSharedModule,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
+import { classifyOutcome } from './preload-result.ts'
 import type { ServerLoadOutcome } from './preload-result.ts'
 
 export type RemoteModule = { default: unknown; [name: string]: unknown }
@@ -214,6 +216,15 @@ export type ComponentRuntime = {
   ): ServerLoadOutcome | undefined
   /** Build ids of a container kept loaded, oldest first. */
   loadedBuilds(name: string): string[]
+  /**
+   * Records that the server refused this build's code (browser: read from
+   * the server HTML). Every later load of it rejects with `code`, no request.
+   */
+  refuse(base: string, code: ComponentRefusalCode): void
+  /** Why this build's code is refused (descriptor, page or process), if it is. */
+  refusedBuild(
+    descriptor: RemoteComponentDescriptor
+  ): ComponentRefusalCode | undefined
 }
 
 const toMfShared = (shared: SharedModules): MfShared =>
@@ -700,6 +711,23 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     Map<string, Map<string, Thenable<RemoteModule>>>
   >()
   const buildIds = new Map<string, string>()
+  // Browser: builds whose code the server refused, by base, never loaded
+  // by this page. The server keeps its own retry rules (a cooldown) and
+  // records refusals process-wide for the descriptors it hands out
+  // (`refused`), which every runtime honours.
+  const refusedBases = new Map<string, ComponentRefusalCode>()
+  function refusedBuild(
+    d: RemoteComponentDescriptor
+  ): ComponentRefusalCode | undefined {
+    return d.refused?.code ?? refusedBases.get(d.base)
+  }
+  function refuse(base: string, code: ComponentRefusalCode): void {
+    const known = deps.isServer
+      ? (componentTrustRegistry().refusedBuilds ??= new Map())
+      : refusedBases
+    if (known.size >= 1000) known.clear()
+    known.set(base, code)
+  }
   // Server: the verified integrity map of every build kept loaded.
   const integrity = new Map<string, Record<string, string>>()
   const registered = new Map<string, string>()
@@ -1163,7 +1191,21 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     return null
   }
 
+  /** Keeps a settled server outcome; a refusal is kept per build too. */
+  function record(
+    d: RemoteComponentDescriptor,
+    result: Thenable<RemoteModule | null>,
+    outcome: ServerLoadOutcome
+  ): void {
+    outcomes.set(result, outcome)
+    const { state, code } = classifyOutcome(outcome)
+    if (state === 'refused' && code)
+      refuse(d.base, code as ComponentRefusalCode)
+  }
+
   return {
+    refuse,
+    refusedBuild,
     registerShared(shared) {
       assertVersions(shared)
       const added = Object.keys(shared).some((name) => !provided.has(name))
@@ -1186,6 +1228,20 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     },
 
     load(d, expose) {
+      const refusedCode = refusedBuild(d)
+      if (refusedCode) {
+        // Refused code is never requested again.
+        const reason = new NFError(
+          refusedCode,
+          `Build ${d.buildId} of ${d.remote} was refused by the server (${refusedCode}); it is not loaded.`
+        )
+        const p = Promise.reject(reason) as Thenable<RemoteModule>
+        p.status = 'rejected'
+        p.reason = reason
+        p.failedAt = now()
+        p.catch(() => {})
+        return p
+      }
       let builds = cache.get(d.name)
       if (!builds) {
         builds = new Map()
@@ -1321,7 +1377,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
             r.status = 'fulfilled'
             r.value = value
             if (value === null) r.failedAt = now()
-            if (outcome) outcomes.set(r, outcome)
+            if (outcome) record(d, r, outcome)
           })
         }
       }
@@ -1329,7 +1385,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         result.failedAt = now()
       }
       if (result.status === 'fulfilled' && outcome) {
-        outcomes.set(result, outcome)
+        record(d, result, outcome)
       }
       if (!perDescriptor) {
         perDescriptor = new Map()

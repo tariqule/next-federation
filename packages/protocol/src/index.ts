@@ -65,6 +65,7 @@ export type {
   ComponentBuildTypes,
   ComponentTypesIndex,
   ComponentTrustKind,
+  ComponentRefusalCode,
   ComponentTrustPolicy,
   ComponentInitLock,
   ComponentTrustRegistry,

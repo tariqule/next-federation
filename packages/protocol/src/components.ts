@@ -136,7 +136,16 @@ export type RemoteComponentDescriptor = {
    * itself (a cached descriptor after a restart): `ssr` alone is never trusted.
    */
   jws?: string
+  /**
+   * Set by the server when this process refused the build's code (an
+   * integrity failure, code from other remotes): the browser never loads it.
+   * Not part of the signed payload, so never covered by verification.
+   */
+  refused?: { code: ComponentRefusalCode }
 }
+
+/** Why a build's code was refused (never loaded on either side). */
+export type ComponentRefusalCode = 'NF-027' | 'NF-028' | 'NF-036'
 
 /** A host's trust policy for one remote (registered by defineFederation). */
 export type ComponentTrustPolicy = {
@@ -208,6 +217,11 @@ export type ComponentTrustRegistry = {
    * `cacheComponents` keep such a render out of the static shell instead.
    */
   serverReady?: Map<string, 'loaded' | 'refused'>
+  /**
+   * Per build base: the code this process refused to load (see
+   * `RemoteComponentDescriptor.refused`), for the descriptors it hands out.
+   */
+  refusedBuilds?: Map<string, ComponentRefusalCode>
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')

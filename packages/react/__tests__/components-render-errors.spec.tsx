@@ -55,6 +55,8 @@ function runtimeOf(
     serverBlock: () => null,
     serverOutcome: () => undefined,
     registerShared: () => {},
+    refuse: () => {},
+    refusedBuild: () => undefined,
   }
 }
 

@@ -6,6 +6,7 @@
 import type { ComponentTarget, Federation } from '@next-federation/core'
 import { fetchVerifiedComponentDescriptor } from '@next-federation/core/components'
 import type { VerifiedDescriptorResult } from '@next-federation/core/components'
+import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { canLoadServerCode } from '@next-federation/react/components/server-loader'
 import { logger } from '@next-federation/sdk'
@@ -25,6 +26,19 @@ export type ComponentDescriptorOptions = {
 // down (its build's assets are retained by nf-serve). Not a cache: every
 // call fetches (through Next's caches), so Next always sees the fetch.
 const lastKnown = new Map<string, RemoteComponentDescriptor>()
+
+/**
+ * The descriptor, marked `refused` when this server process refused the
+ * build's code (recorded by its remote component runtime): the browser then
+ * never loads it, from any boundary or navigation. Outside the signed
+ * payload, so verification and pinning never see it.
+ */
+function withRefusal(
+  descriptor: RemoteComponentDescriptor
+): RemoteComponentDescriptor {
+  const code = componentTrustRegistry().refusedBuilds?.get(descriptor.base)
+  return code ? { ...descriptor, refused: { code } } : descriptor
+}
 
 /** @internal Shared by the App Router and Pages Router entries. */
 export async function resolveComponentDescriptor(
@@ -54,7 +68,7 @@ export async function resolveComponentDescriptor(
       result.code,
       `${result.detail} ${kept ? `Rendering the last known build "${kept.buildId}".` : 'Rendering the fallback.'}`
     )
-    return kept
+    return kept && withRefusal(kept)
   }
   const { verified } = result
   let { descriptor } = verified
@@ -81,5 +95,5 @@ export async function resolveComponentDescriptor(
     ssr: descriptor.ssr !== null,
     ms: result.ms,
   })
-  return descriptor
+  return withRefusal(descriptor)
 }

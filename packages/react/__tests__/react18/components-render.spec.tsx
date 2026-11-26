@@ -464,3 +464,52 @@ it('a server-rendered instance unmounts while a client-mounted sibling with the 
   expect(headLinks()).toEqual([copy])
   expect(copy!.isConnected).toBe(true)
 })
+
+it('a refused build: the server sends the refused marker and errorFallback; hydration keeps it and never loads', async () => {
+  const Server = bind(
+    {
+      ...fakeRuntime(null),
+      serverOutcome: () => ({
+        kind: 'error',
+        code: 'NF-027',
+        error: new Error('integrity'),
+      }),
+    },
+    true,
+    [],
+    { errorFallback: true }
+  )
+  let loads = 0
+  const Client = bind(
+    {
+      ...fakeRuntime(null),
+      load: () => {
+        loads++
+        return fulfilled(mod)
+      },
+    },
+    false,
+    [],
+    { errorFallback: true }
+  )
+  const html = await serverHtml(
+    <main>
+      <Server descriptor={styled()} start={2} />
+    </main>
+  )
+  expect(html).toContain('data-nf-refused=')
+  expect(html).not.toContain('data-nf-browser-only')
+  expect(html).not.toContain('modulepreload')
+  const el = container(html)
+  const { logged, recoverable } = await hydrate(
+    el,
+    <main>
+      <Client descriptor={styled()} start={7} />
+    </main>
+  )
+  expect(el.textContent).toBe('failed')
+  expect(loads).toBe(0)
+  expect(logged).toEqual([])
+  expect(recoverable).toEqual([])
+  expect(headLinks()).toHaveLength(0)
+})

@@ -445,6 +445,158 @@ describe('refused builds (server integrity failure)', () => {
     expect(r.errors).toEqual([])
   })
 
+  test('no modulepreload for a refusal learned while rendering (no prior preload)', async () => {
+    // The load is still running when the shell renders.
+    let settled = false
+    let settle!: (v: null) => void
+    const pending = Object.assign(
+      new Promise<null>((r) => (settle = r)).then((v) => {
+        settled = true
+        Object.assign(pending, { status: 'fulfilled', value: v })
+        return v
+      }),
+      { status: 'pending' as const }
+    )
+    const C = bind(
+      {
+        ...refusedRuntime(),
+        serverLoad: () => pending as never,
+        serverOutcome: () =>
+          settled
+            ? { kind: 'error', code: 'NF-027', error: new Error('integrity') }
+            : undefined,
+      },
+      true
+    )
+    setTimeout(() => settle(null), 5)
+    const { prerender } = await import('react-dom/static')
+    const { prelude } = await prerender(<C descriptor={withAssets()} />)
+    const html = await new Response(prelude).text()
+    expect(html).toContain(`<template ${REFUSED_ATTR}=`)
+    expect(html).not.toContain('modulepreload')
+    expect(html).not.toContain('Counter-r')
+  })
+
+  test('hints still go out for a build the server loaded', () => {
+    const C = bind(fakeRuntime(mod), true)
+    const html = renderToString(<C descriptor={withAssets()} />)
+    expect(html).toContain('rel="modulepreload"')
+    expect(html).toContain('Counter-r.js')
+  })
+
+  const counting = () => {
+    const runtime = fakeRuntime(null)
+    const counter = { loads: 0 }
+    return {
+      counter,
+      runtime: {
+        ...runtime,
+        load: () => {
+          counter.loads++
+          return fulfilled(mod)
+        },
+      } satisfies BindingsRuntime,
+    }
+  }
+
+  test('a client-only mount of a refused descriptor never loads and shows errorFallback', async () => {
+    const { runtime, counter } = counting()
+    const C = bind(runtime, false)
+    const { createRoot } = await import('react-dom/client')
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    const root = createRoot(el)
+    await act(async () => {
+      root.render(
+        <C descriptor={{ ...withAssets(), refused: { code: 'NF-027' } }} />
+      )
+    })
+    expect(el.textContent).toBe('refused')
+    expect(counter.loads).toBe(0)
+    expect(document.querySelector('link[href*="Counter-r"]')).toBeNull()
+    await act(async () => root.unmount())
+    el.remove()
+  })
+
+  test('after hydrating a refused marker, new and remounted boundaries of that build never load', async () => {
+    const Server = bind(refusedRuntime(), true)
+    const { runtime, counter } = counting()
+    const Client = bind(runtime, false)
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} />
+      </main>
+    )
+    const el = document.createElement('div')
+    el.innerHTML = raw
+    document.body.appendChild(el)
+    let root!: ReturnType<typeof hydrateRoot>
+    await act(async () => {
+      root = hydrateRoot(
+        el,
+        <main>
+          <Client descriptor={descriptor(true)} />
+        </main>
+      )
+    })
+    // A second instance (a client navigation), then a remount of both.
+    await act(async () => {
+      root.render(
+        <main>
+          <Client descriptor={descriptor(true)} />
+          <Client descriptor={descriptor(true)} />
+        </main>
+      )
+    })
+    await act(async () => root.render(<main />))
+    await act(async () => {
+      root.render(
+        <main>
+          <Client key="again" descriptor={descriptor(true)} />
+        </main>
+      )
+    })
+    expect(el.textContent).toBe('refused')
+    expect(counter.loads).toBe(0)
+    await act(async () => root.unmount())
+    el.remove()
+  })
+
+  test('a refused marker for another build (mismatching base) is ignored', async () => {
+    const Server = bind(refusedRuntime(), true)
+    const { runtime, counter } = counting()
+    const Client = bind(runtime, false)
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} />
+      </main>
+    ).replace(
+      `data-nf-base="${descriptor(true).base}"`,
+      'data-nf-base="http://127.0.0.1:4110/b/other/"'
+    )
+    expect(raw).toContain('b/other/')
+    const el = document.createElement('div')
+    el.innerHTML = raw
+    document.body.appendChild(el)
+    rs.spyOn(console, 'error').mockImplementation(() => {})
+    let root!: ReturnType<typeof hydrateRoot>
+    await act(async () => {
+      root = hydrateRoot(
+        el,
+        <main>
+          <Client descriptor={descriptor(true)} />
+        </main>,
+        { onRecoverableError: () => {} }
+      )
+    })
+    await act(async () => {})
+    expect(runtime.refusedBuild(descriptor(true))).toBeUndefined()
+    expect(counter.loads).toBeGreaterThan(0)
+    await act(async () => root.unmount())
+    rs.restoreAllMocks()
+    el.remove()
+  })
+
   test('an unsigned (unverified) build still renders in the browser', async () => {
     const r = await serverThenHydrate(mod, false)
     expect(r.html).not.toContain(REFUSED_ATTR)

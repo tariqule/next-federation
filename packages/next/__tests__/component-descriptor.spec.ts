@@ -4,6 +4,7 @@ import type { ComponentTarget } from '@next-federation/core'
 import {
   canonicalJson,
   componentDescriptorDigest,
+  componentTrustRegistry,
 } from '@next-federation/protocol'
 import type { ComponentBuildDescriptor } from '@next-federation/protocol'
 import { cacheLife, cacheTag } from 'next/cache'
@@ -217,4 +218,29 @@ test('without process.getBuiltinModule (Node < 20.16) SSR is off, warned once', 
   }
   const lines = warn.mock.calls.map((c) => c.join(' '))
   expect(lines.filter((l) => /NF-028.*20\.16/.test(l))).toHaveLength(1)
+})
+
+test('a build this process refused comes back marked `refused`; other builds do not', async () => {
+  rs.spyOn(console, 'warn').mockImplementation(() => {})
+  respond = async () => new Response(JSON.stringify(await signedFile('c1')))
+  const plain = await resolveComponentDescriptor(federation, 'components', {
+    get: legacyGet,
+  })
+  expect(plain?.refused).toBeUndefined()
+  const refusedBuilds = (componentTrustRegistry().refusedBuilds ??= new Map())
+  refusedBuilds.set(payload('c1').base, 'NF-036')
+  try {
+    const marked = await resolveComponentDescriptor(federation, 'components', {
+      get: legacyGet,
+    })
+    expect(marked).toMatchObject({
+      buildId: 'c1',
+      ssr: payload('c1').ssr,
+      refused: { code: 'NF-036' },
+    })
+    // The verified descriptor itself is not changed (nor the last known one).
+    expect(plain?.refused).toBeUndefined()
+  } finally {
+    refusedBuilds.delete(payload('c1').base)
+  }
 })
