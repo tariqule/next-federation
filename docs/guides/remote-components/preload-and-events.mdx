@@ -30,7 +30,7 @@ Event names and fields are unchanged: `component:load`, `component:error` and `c
 - **A caller timeout emits nothing.** A server `browser-only` fallback followed by a browser `component:load` is expected for an unsigned build.
 - **Delivery:** the browser dispatches `nf:component` on `document`. The server calls the `onEvent` of the federation that resolved the descriptor, never by remote name, and nothing reaches the browser. A remount or dev StrictMode can repeat browser `refused` events.
 - **Shared builds:** when two federations share a cached build, only the first gets the `load` event. Render events, including fallback, reach each.
-- **Routing across processes** works when they create federations in the same order. Identical-config federations created in a different order can misroute.
+- **Other processes:** events for descriptors cached by another process are not routed (they are still logged).
 - **Exhaustive handlers** without a `default` branch need a `component:fallback` case. The core `FederationEvent` also gains `component:load`.
 
 ## Next steps

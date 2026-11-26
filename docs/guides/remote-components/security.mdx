@@ -21,9 +21,10 @@ A descriptor that was not verified in this process, or no longer fits the origin
 
 ### Refused builds
 
-A build the host refuses (`NF-027`, `NF-028` for nested remotes or an uncheckable manifest, `NF-036` for a shared module the host cannot provide) renders `errorFallback` on the server and after hydration. The browser never requests an `NF-027` or `NF-028` build. Before this release, the browser loaded a build after a server integrity failure.
+A build the host refuses (`NF-027`, `NF-028` for nested remotes or an uncheckable manifest, `NF-036` for a shared module the host cannot provide) renders `errorFallback` on the server and after hydration. The browser does not request an `NF-027` or `NF-028` build while the refusal lasts. Before this release, the browser loaded a build after a server integrity failure.
 
-- **The server remembers.** A process keeps `NF-027` and `NF-028` refusals per remote, bounded, and marks later descriptors for them `refused`. `NF-036` refusals stay in the layer that refused (an App Router page can still load a build the Pages Router refused) and lift when the host registers shared modules.
+- **The server remembers, for a while.** A process keeps `NF-027` and `NF-028` refusals per remote, bounded, and marks later descriptors for them `refused`. A refusal expires after 5 minutes, then the build is checked again: a bad build is refused again, and a transient CDN mismatch recovers without a restart.
+- **`NF-036` is per exposed module.** Only the exposed module that needs the missing shared module is refused. Other modules of the same build still load, and that module loads once the host registers what it needs.
 - **Browser-only is different.** An unsigned build the policy allows renders `fallback` on the server and loads in the browser, and `component:load` fires there. That is expected, not an incident.
 - **A verified descriptor is not a verified browser.** The browser does not check every file the build loads. Full browser asset verification is a separate follow-up.
 
