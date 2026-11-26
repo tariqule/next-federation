@@ -9,25 +9,9 @@
 // navigation off it is dropped. `next/navigation` is not provided here: a
 // remote that imports it renders its fallback (NF-036).
 import * as base from '@next-federation/react/components'
-import * as NextLink from 'next/link'
-import * as NextRouter from 'next/router'
-import { ROUTER_SHARE_NAME, ROUTER_VERSION } from '@next-federation/router'
-import {
-  guardNextLink,
-  guardNextRouter,
-} from '@next-federation/router/next-host'
-import { hostNextVersion } from '../client/next-version.ts'
-import { nextPagesRouterModule } from './router-module.tsx'
+import { registerPagesShared } from './register-shared.ts'
 
-const version = hostNextVersion()
-base.registerSharedModules({
-  'next/link': { version, module: guardNextLink(NextLink) },
-  'next/router': { version, module: guardNextRouter(NextRouter) },
-  [ROUTER_SHARE_NAME]: {
-    version: ROUTER_VERSION,
-    module: nextPagesRouterModule,
-  },
-})
+registerPagesShared()
 
 // Own functions, not re-exports: a bundler may resolve a re-export of a
 // side-effect-free package straight to its source and never run this module
@@ -41,16 +25,36 @@ export const loadRemoteModule: typeof base.loadRemoteModule = (
   descriptor,
   expose
 ) => base.loadRemoteModule(descriptor, expose)
-export const preloadRemoteComponent: typeof base.preloadRemoteComponent = (
-  descriptor,
-  expose
-) => base.preloadRemoteComponent(descriptor, expose)
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string
+): Promise<void>
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options: base.PreloadOptions
+): Promise<base.PreloadResult>
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options?: base.PreloadOptions
+): Promise<void | base.PreloadResult>
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options?: base.PreloadOptions
+): Promise<void | base.PreloadResult> {
+  return base.preloadRemoteComponent(descriptor, expose, options)
+}
 export const registerSharedModules: typeof base.registerSharedModules = (
   shared
 ) => base.registerSharedModules(shared)
 export const COMPONENT_EVENT: string = base.COMPONENT_EVENT
 export type {
   ComponentEvent,
+  PreloadOptions,
+  PreloadResult,
+  PreloadState,
   RemoteComponentDescriptor,
   RemoteComponentOptions,
   RemoteComponentProps,

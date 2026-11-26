@@ -39,16 +39,36 @@ export const loadRemoteModule: typeof base.loadRemoteModule = (
   descriptor,
   expose
 ) => base.loadRemoteModule(descriptor, expose)
-export const preloadRemoteComponent: typeof base.preloadRemoteComponent = (
-  descriptor,
-  expose
-) => base.preloadRemoteComponent(descriptor, expose)
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string
+): Promise<void>
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options: base.PreloadOptions
+): Promise<base.PreloadResult>
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options?: base.PreloadOptions
+): Promise<void | base.PreloadResult>
+export function preloadRemoteComponent(
+  descriptor: base.RemoteComponentDescriptor | null,
+  expose: string,
+  options?: base.PreloadOptions
+): Promise<void | base.PreloadResult> {
+  return base.preloadRemoteComponent(descriptor, expose, options)
+}
 export const registerSharedModules: typeof base.registerSharedModules = (
   shared
 ) => base.registerSharedModules(shared)
 export const COMPONENT_EVENT: string = base.COMPONENT_EVENT
 export type {
   ComponentEvent,
+  PreloadOptions,
+  PreloadResult,
+  PreloadState,
   RemoteComponentDescriptor,
   RemoteComponentOptions,
   RemoteComponentProps,

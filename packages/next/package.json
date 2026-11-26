@@ -23,7 +23,8 @@
   "type": "module",
   "sideEffects": [
     "./dist/client/components.js",
-    "./dist/pages/components.js"
+    "./dist/pages/components.js",
+    "./dist/pages/server.js"
   ],
   "repository": {
     "type": "git",

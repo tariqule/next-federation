@@ -5,8 +5,9 @@ import * as NextLink from 'next/link'
 import * as NextNavigation from 'next/navigation'
 import * as NextRouter from 'next/router'
 
-const { registered } = rs.hoisted(() => ({
+const { registered, preloaded } = rs.hoisted(() => ({
   registered: [] as Array<Record<string, { version: string; module: unknown }>>,
+  preloaded: [] as unknown[][],
 }))
 rs.mock('@next-federation/react/components', () => ({
   registerSharedModules: (shared: (typeof registered)[number]) => {
@@ -14,7 +15,10 @@ rs.mock('@next-federation/react/components', () => ({
   },
   createRemoteComponent: () => null,
   loadRemoteModule: () => null,
-  preloadRemoteComponent: () => null,
+  preloadRemoteComponent: (...args: unknown[]) => {
+    preloaded.push(args)
+    return Promise.resolve({ state: 'ready' })
+  },
   COMPONENT_EVENT: 'nf:component',
 }))
 
@@ -39,6 +43,7 @@ function expectGuarded(
 
 beforeEach(() => {
   registered.length = 0
+  preloaded.length = 0
   rs.resetModules()
 })
 afterEach(() => {
@@ -88,4 +93,20 @@ test('without withNextFederation (no NF_NEXT_VERSION) the entry fails with NF-01
     code: 'NF-017',
   })
   expect(registered).toHaveLength(0)
+})
+
+const entries = {
+  'client/components': () => import('../src/client/components.tsx'),
+  'pages/components': () => import('../src/pages/components.tsx'),
+  'pages/server': () => import('../src/pages/server.ts'),
+}
+describe.each(Object.entries(entries))('%s preload', (_name, load) => {
+  test('forwards the options and returns the result', async () => {
+    rs.stubEnv('NF_NEXT_VERSION', '16.4.6')
+    const { preloadRemoteComponent } = await load()
+    const options = { timeoutMs: 5 }
+    const result = await preloadRemoteComponent(null, './Counter', options)
+    expect(result).toEqual({ state: 'ready' })
+    expect(preloaded).toEqual([[null, './Counter', options]])
+  })
 })
