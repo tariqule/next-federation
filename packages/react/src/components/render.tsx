@@ -534,7 +534,7 @@ export function createBindings({
     const [refusedMark] = useState(() => {
       if (isServer) return undefined
       const code = refusedMarkCode(id, base)
-      if (code) runtime.refuse(base, code)
+      if (code) runtime.refuse(descriptor, code)
       return code
     })
     // Refused by the server (marker, descriptor, or recorded earlier).

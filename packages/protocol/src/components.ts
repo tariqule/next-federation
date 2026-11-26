@@ -218,10 +218,11 @@ export type ComponentTrustRegistry = {
    */
   serverReady?: Map<string, 'loaded' | 'refused'>
   /**
-   * Per build base: the code this process refused to load (see
-   * `RemoteComponentDescriptor.refused`), for the descriptors it hands out.
+   * Per remote, then per build base (oldest first, bounded per remote): the
+   * code this process refused to load (see `RemoteComponentDescriptor.refused`),
+   * for the descriptors it hands out.
    */
-  refusedBuilds?: Map<string, ComponentRefusalCode>
+  refusedBuilds?: Map<string, Map<string, ComponentRefusalCode>>
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')

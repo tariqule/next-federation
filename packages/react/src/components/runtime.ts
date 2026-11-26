@@ -220,7 +220,10 @@ export type ComponentRuntime = {
    * Records that the server refused this build's code (browser: read from
    * the server HTML). Every later load of it rejects with `code`, no request.
    */
-  refuse(base: string, code: ComponentRefusalCode): void
+  refuse(
+    build: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
+    code: ComponentRefusalCode
+  ): void
   /** Why this build's code is refused (descriptor, page or process), if it is. */
   refusedBuild(
     descriptor: RemoteComponentDescriptor
@@ -696,6 +699,9 @@ export function dropInstance(instance: FederationInstance): void {
   }
 }
 
+/** Refused builds kept per remote (oldest evicted first). */
+export const MAX_REFUSED_PER_REMOTE = 256
+
 export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const now = deps.now ?? (() => performance.now())
   const sleep =
@@ -715,18 +721,41 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   // by this page. The server keeps its own retry rules (a cooldown) and
   // records refusals process-wide for the descriptors it hands out
   // (`refused`), which every runtime honours.
-  const refusedBases = new Map<string, ComponentRefusalCode>()
+  // Per remote (the host's key, never the remote's choice), then per base,
+  // oldest first: a remote that floods refusals only evicts its own oldest.
+  const refusedBases = new Map<string, Map<string, ComponentRefusalCode>>()
+  const refusalStore = () =>
+    deps.isServer
+      ? (componentTrustRegistry().refusedBuilds ??= new Map())
+      : refusedBases
   function refusedBuild(
     d: RemoteComponentDescriptor
   ): ComponentRefusalCode | undefined {
-    return d.refused?.code ?? refusedBases.get(d.base)
+    return d.refused?.code ?? refusedBases.get(d.remote)?.get(d.base)
   }
-  function refuse(base: string, code: ComponentRefusalCode): void {
-    const known = deps.isServer
-      ? (componentTrustRegistry().refusedBuilds ??= new Map())
-      : refusedBases
-    if (known.size >= 1000) known.clear()
-    known.set(base, code)
+  function refuse(
+    { remote, base }: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
+    code: ComponentRefusalCode
+  ): void {
+    const store = refusalStore()
+    let builds = store.get(remote)
+    if (!builds) {
+      builds = new Map()
+      store.set(remote, builds)
+    }
+    builds.delete(base)
+    builds.set(base, code)
+    while (builds.size > MAX_REFUSED_PER_REMOTE) {
+      builds.delete(builds.keys().next().value!)
+    }
+  }
+  /** NF-036 refusals: a module registered since may satisfy the build. */
+  function forgetSharedRefusals(): void {
+    for (const builds of refusalStore().values()) {
+      for (const [base, code] of builds) {
+        if (code === 'NF-036') builds.delete(base)
+      }
+    }
   }
   // Server: the verified integrity map of every build kept loaded.
   const integrity = new Map<string, Record<string, string>>()
@@ -1199,8 +1228,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   ): void {
     outcomes.set(result, outcome)
     const { state, code } = classifyOutcome(outcome)
-    if (state === 'refused' && code)
-      refuse(d.base, code as ComponentRefusalCode)
+    if (state === 'refused' && code) refuse(d, code as ComponentRefusalCode)
   }
 
   return {
@@ -1214,6 +1242,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         versions.set(name, version)
       }
       extraShared.push(shared)
+      forgetSharedRefusals()
       if (!instance) return
       if (added) {
         // A container initialised its share scope once, before this module

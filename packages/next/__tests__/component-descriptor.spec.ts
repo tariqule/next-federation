@@ -227,8 +227,9 @@ test('a build this process refused comes back marked `refused`; other builds do 
     get: legacyGet,
   })
   expect(plain?.refused).toBeUndefined()
-  const refusedBuilds = (componentTrustRegistry().refusedBuilds ??= new Map())
-  refusedBuilds.set(payload('c1').base, 'NF-036')
+  const registry = componentTrustRegistry()
+  const refusedBuilds = new Map([[payload('c1').base, 'NF-036' as const]])
+  ;(registry.refusedBuilds ??= new Map()).set('components', refusedBuilds)
   try {
     const marked = await resolveComponentDescriptor(federation, 'components', {
       get: legacyGet,

@@ -36,7 +36,9 @@ const lastKnown = new Map<string, RemoteComponentDescriptor>()
 function withRefusal(
   descriptor: RemoteComponentDescriptor
 ): RemoteComponentDescriptor {
-  const code = componentTrustRegistry().refusedBuilds?.get(descriptor.base)
+  const code = componentTrustRegistry()
+    .refusedBuilds?.get(descriptor.remote)
+    ?.get(descriptor.base)
   return code ? { ...descriptor, refused: { code } } : descriptor
 }
 

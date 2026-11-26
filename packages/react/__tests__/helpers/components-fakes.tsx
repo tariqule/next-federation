@@ -34,7 +34,7 @@ export const descriptor = (ssr: boolean): RemoteComponentDescriptor => ({
 export function fakeRuntime(server: RemoteModule | null): BindingsRuntime {
   const refused = new Map<string, ComponentRefusalCode>()
   return {
-    refuse: (base, code) => void refused.set(base, code),
+    refuse: ({ base }, code) => void refused.set(base, code),
     refusedBuild: (d) => d.refused?.code ?? refused.get(d.base),
     load: () => fulfilled(mod),
     serverLoad: () => fulfilled(server),

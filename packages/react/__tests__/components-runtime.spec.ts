@@ -3,6 +3,7 @@ import { componentTrustRegistry } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import {
+  MAX_REFUSED_PER_REMOTE,
   MAX_SCOPES,
   createComponentRuntime,
   hostSharesPlugin,
@@ -1829,7 +1830,7 @@ test('a new MF instance while a load awaits its manifest check: the next load st
 describe('refused builds', () => {
   test('browser: a build recorded refused rejects with its code, no request', async () => {
     const { runtime, instance } = setup({ isServer: false })
-    runtime.refuse(descriptor('r1').base, 'NF-036')
+    runtime.refuse(descriptor('r1'), 'NF-036')
     const p = runtime.load(descriptor('r1'), './Counter')
     expect(p.status).toBe('rejected')
     await expect(p).rejects.toMatchObject({ code: 'NF-036' })
@@ -1862,7 +1863,63 @@ describe('refused builds', () => {
       kind: 'error',
       code: 'NF-027',
     })
-    expect(componentTrustRegistry().refusedBuilds?.get(d.base)).toBe('NF-027')
-    componentTrustRegistry().refusedBuilds?.delete(d.base)
+    expect(
+      componentTrustRegistry().refusedBuilds?.get('components')?.get(d.base)
+    ).toBe('NF-027')
+    componentTrustRegistry().refusedBuilds?.get('components')?.delete(d.base)
+  })
+})
+
+describe('refusal stores are bounded per remote', () => {
+  for (const isServer of [false, true]) {
+    test(`${isServer ? 'server' : 'browser'}: a flood from one remote evicts only its own oldest refusals`, async () => {
+      const { runtime, instance } = setup({ isServer })
+      const other = descriptor('o1', { remote: 'other' })
+      runtime.refuse(other, 'NF-027')
+      const first = descriptor('f0')
+      runtime.refuse(first, 'NF-027')
+      for (let i = 1; i <= MAX_REFUSED_PER_REMOTE; i++) {
+        runtime.refuse(descriptor(`f${i}`), 'NF-027')
+      }
+      const newest = descriptor(`f${MAX_REFUSED_PER_REMOTE}`)
+      const store = isServer
+        ? componentTrustRegistry().refusedBuilds!
+        : undefined
+      if (store) {
+        expect(store.get('components')!.size).toBe(MAX_REFUSED_PER_REMOTE)
+        expect(store.get('components')!.has(first.base)).toBe(false)
+        expect(store.get('components')!.get(newest.base)).toBe('NF-027')
+        expect(store.get('other')!.get(other.base)).toBe('NF-027')
+        store.delete('components')
+        store.delete('other')
+      } else {
+        expect(runtime.refusedBuild(other)).toBe('NF-027')
+        expect(runtime.refusedBuild(newest)).toBe('NF-027')
+        expect(runtime.refusedBuild(descriptor('f1'))).toBe('NF-027')
+        expect(runtime.refusedBuild(first)).toBeUndefined()
+        await expect(runtime.load(other, './Counter')).rejects.toMatchObject({
+          code: 'NF-027',
+        })
+        expect(instance.loads).toEqual([])
+      }
+    })
+  }
+
+  test('registerShared lifts NF-036 refusals; NF-027 ones stay', async () => {
+    const { runtime, instance } = setup({ isServer: false })
+    const shared = descriptor('s1')
+    const tampered = descriptor('s2')
+    runtime.refuse(shared, 'NF-036')
+    runtime.refuse(tampered, 'NF-027')
+    runtime.registerShared({
+      'components-context': { version: '1.0.0', module: {} },
+    })
+    expect(runtime.refusedBuild(shared)).toBeUndefined()
+    await runtime.load(shared, './Counter')
+    expect(instance.loads).toHaveLength(1)
+    await expect(runtime.load(tampered, './Counter')).rejects.toMatchObject({
+      code: 'NF-027',
+    })
+    expect(instance.loads).toHaveLength(1)
   })
 })
