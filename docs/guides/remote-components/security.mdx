@@ -7,7 +7,7 @@ Server rendering runs a remote's server code inside the host's server process, w
 
 ## Integrity (server rendering)
 
-The host evaluates remote server code only for a build it can verify. It renders every other build in the browser only (`NF-028`, logged once per build). There are three ways to verify:
+The host evaluates remote server code only for a build it can verify. An unsigned build the policy allows renders in the browser only (`NF-028`, logged once per build). A failed check refuses the build (see [Refused builds](#refused-builds)). There are three ways to verify:
 
 1. **Signed descriptor** (recommended): the remote signs its descriptor with an ES256 key.
 2. **Pinned builds:** the host lists allowed `buildId` and digest pairs, for teams that deploy both together.
@@ -17,13 +17,13 @@ Two optional checks: `components.name` (the expected container name) and `compon
 
 A descriptor whose `digest` does not match its payload, or whose `iat` is more than 60 seconds in the future, is refused (`NF-027`). Each server file the host fetches must match its sha384 in the verified descriptor before anything runs. A mismatch refuses the build (`NF-027`). The same happens for a key not in `publicKeys`, fields that differ from the signed payload, a pinned digest that differs, or a server file the descriptor does not list. Nothing is evaluated.
 
-A descriptor that was not verified in this process, or no longer fits the origin, `components.name` or `ssr.maxAge`, renders in the browser only (`NF-028`).
+A descriptor that was not verified in this process, or no longer fits the origin, `components.name` or `ssr.maxAge`, renders in the browser only (`NF-028`) when the policy allows. A failed check is refused: `errorFallback`, and the browser never loads it.
 
 ### Refused builds
 
-A build the host refuses (`NF-027`, `NF-028` for nested remotes or an uncheckable manifest, `NF-036` for a shared module the host cannot provide) renders `errorFallback` on the server and after hydration. The browser never requests it. Before this release, the browser loaded a build after a server integrity failure.
+A build the host refuses (`NF-027`, `NF-028` for nested remotes or an uncheckable manifest, `NF-036` for a shared module the host cannot provide) renders `errorFallback` on the server and after hydration. The browser never requests an `NF-027` or `NF-028` build. Before this release, the browser loaded a build after a server integrity failure.
 
-- **The server remembers.** A process keeps refused builds per remote, bounded, and marks later descriptors for them `refused`. `NF-036` refusals clear when the host registers shared modules.
+- **The server remembers.** A process keeps `NF-027` and `NF-028` refusals per remote, bounded, and marks later descriptors for them `refused`. `NF-036` refusals stay in the layer that refused (an App Router page can still load a build the Pages Router refused) and lift when the host registers shared modules.
 - **Browser-only is different.** An unsigned build the policy allows renders `fallback` on the server and loads in the browser, and `component:load` fires there. That is expected, not an incident.
 - **A verified descriptor is not a verified browser.** The browser does not check every file the build loads. Full browser asset verification is a separate follow-up.
 

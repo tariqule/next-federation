@@ -2,7 +2,7 @@
 
 ## Why This Error Occurred
 
-A remote component imports a module its remote lists in `shared` as host-provided, and the host does not provide it or provides a version outside `requiredVersion`. The host refuses the build: it renders `errorFallback` on the server and after hydration, never requests it in the browser, and answers `200`. The refusal clears when the host registers shared modules.
+A remote component imports a module its remote lists in `shared` as host-provided, and the host does not provide it or provides a version outside `requiredVersion`. The host refuses the build in that router layer: it renders `errorFallback` on the server and after hydration and answers `200`. Other layers decide separately. It lifts when the host registers shared modules.
 
 ## Possible Ways to Fix It
 

@@ -9,14 +9,14 @@ Decide a response's cache header from a typed preload result, and observe each l
 
 `Cart.preload(descriptor)` is unchanged. `Cart.preload(descriptor, { timeoutMs })` resolves a `PreloadResult` and never rejects. Every entry's `preloadRemoteComponent` takes the same options. It is not callable from an App Router Server Component, because the entry is a client module. Use `getServerSideProps` ([Pages Router](host-configuration.mdx#decide-the-cache-header-before-sending-html)) to decide a cache header before the HTML.
 
-| `state`         | Meaning                                                                                      | Renders                                |
-| --------------- | -------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `ready`         | The server loaded the module and its default export. React has not rendered it.              | On the server.                         |
-| `browser-only`  | Policy permits the browser and the server will not render it here (`NF-028`, `NF-030`).      | `fallback`, then the browser.          |
-| `refused`       | Integrity or verification failed (`NF-027`, `NF-028` nested), or a shared module (`NF-036`). | `errorFallback`, also after hydration. |
-| `failed`        | A transient server load failure (`NF-029`). The server retries after the cooldown.           | `fallback`, then the browser retries.  |
-| `timeout`       | This caller stopped waiting. The shared load continues.                                      | Your choice: omit, or `browserOnly`.   |
-| `no-descriptor` | The descriptor was `null`.                                                                   | `fallback`.                            |
+| `state`         | Meaning                                                                                                                | Renders                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `ready`         | The server loaded the module and its default export, not every browser file ([security](security.mdx#refused-builds)). | On the server.                         |
+| `browser-only`  | Policy permits the browser (an unsigned build, `NF-028`) and the server will not render it (`NF-030`).                 | `fallback`, then the browser.          |
+| `refused`       | Integrity or verification failed (`NF-027`, `NF-028` nested), or a shared module (`NF-036`).                           | `errorFallback`, also after hydration. |
+| `failed`        | A transient server load failure (`NF-029`). The server retries after the cooldown.                                     | `fallback`, then the browser retries.  |
+| `timeout`       | This caller stopped waiting. The shared load continues.                                                                | Your choice: omit, or `browserOnly`.   |
+| `no-descriptor` | The descriptor was `null`.                                                                                             | `fallback`.                            |
 
 `ms` is this caller's wait, and `code` accompanies `browser-only`, `refused` and `failed`. `timeoutMs` bounds only this caller. A `timeoutMs` above the runtime's load timeout yields `failed` (`NF-029`), and a later preload in the cooldown replays `failed`. In the browser, only `ready`, `refused` (`NF-036`), `failed`, `timeout` and `no-descriptor` arise.
 
