@@ -30,12 +30,19 @@ function setup(overrides: Partial<RuntimeDeps> = {}) {
   const fail = new Set<string>()
   let current = ''
   let clock = 0
+  type Scope = {
+    globals: Record<string, unknown>
+    blocked: Map<string, ServerBlock>
+  }
+  let scope: Scope | undefined
+  const hooks: { onLoad?: (scope: Scope, entry: string) => void } = {}
   const instance: FederationInstance = {
     registerRemotes(remotes) {
       current = remotes[0]!.entry
     },
     registerShared() {},
     async loadRemote() {
+      hooks.onLoad?.(scope!, current)
       if (fail.has(current)) throw new Error(`down: ${current}`)
       return { default: () => null, entry: current } as never
     },
@@ -45,7 +52,10 @@ function setup(overrides: Partial<RuntimeDeps> = {}) {
     react: fakeReact,
     hostShared: { react: { version: '19.3.1', module: fakeReact } },
     createInstance: () => instance,
-    serverPlugin: () => ({ name: 'test-server-plugin' }),
+    serverPlugin: (_integrityFor, s) => {
+      scope = s as unknown as Scope
+      return { name: 'test-server-plugin' }
+    },
     canLoadServerCode: () => true,
     isTrusted: () => true,
     now: () => clock,
@@ -53,7 +63,7 @@ function setup(overrides: Partial<RuntimeDeps> = {}) {
     emit: () => {},
     ...overrides,
   })
-  return { runtime, fail, tick: (ms: number) => (clock += ms) }
+  return { runtime, fail, hooks, tick: (ms: number) => (clock += ms) }
 }
 
 beforeEach(() => {
@@ -148,6 +158,43 @@ describe('serverOutcome records why a load returned null', () => {
     })
   })
 
+  test('a loader refusal during the load records its block reason: refused', async () => {
+    const { runtime, hooks } = setup()
+    const d = descriptor('c1')
+    hooks.onLoad = (scope) => {
+      // The server loader refuses a manifest that lists remotes of its own.
+      scope.blocked.set(d.base, 'nested-remotes')
+      throw new Error('refused by the loader')
+    }
+    expect(await runtime.serverLoad(d, './Counter')).toBeNull()
+    const outcome = runtime.serverOutcome(d, './Counter')
+    expect(outcome).toEqual({
+      kind: 'blocked',
+      block: 'nested-remotes',
+      code: 'NF-028',
+    })
+    expect(classifyOutcome(outcome!)).toEqual({
+      state: 'refused',
+      code: 'NF-028',
+    })
+  })
+
+  test('a post-load block records the block reason', async () => {
+    const { runtime, hooks } = setup()
+    const d = descriptor('c1')
+    const otherReact = { useState: () => 'other', version: '19.3.1' }
+    hooks.onLoad = (scope) => {
+      // Another React reached this runtime's share cache during the load.
+      scope.globals.__mf_module_cache__ = { share: { react: otherReact } }
+    }
+    expect(await runtime.serverLoad(d, './Counter')).toBeNull()
+    expect(runtime.serverOutcome(d, './Counter')).toEqual({
+      kind: 'blocked',
+      block: 'react',
+      code: 'NF-028',
+    })
+  })
+
   test('a pre-load block records the block reason', async () => {
     const { runtime } = setup({ isTrusted: () => false })
     const d = descriptor('c1')
@@ -172,4 +219,8 @@ test('a cooldown hit replays the stored outcome', async () => {
     kind: 'error',
     code: 'NF-029',
   })
+  fail.clear()
+  tick(500) // serverRetryMs (1000) since the failure
+  expect(await runtime.serverLoad(d, './Counter')).not.toBeNull()
+  expect(runtime.serverOutcome(d, './Counter')).toEqual({ kind: 'loaded' })
 })
