@@ -1,5 +1,27 @@
 # @next-federation/react
 
+## 0.3.0
+
+### Minor Changes
+
+- 096e505: Typed preload result, refusals honoured through hydration, `browserOnly` and lifecycle events for remote components.
+  
+  - `Component.preload(descriptor, { timeoutMs })` and `preloadRemoteComponent(descriptor, expose, { timeoutMs })` resolve a `PreloadResult` (`ready`, `browser-only`, `refused`, `failed`, `timeout`, `no-descriptor`). `preload(descriptor)` is unchanged.
+  - Components take a `browserOnly` prop. It never overrides a refusal.
+  - Component events gain optional `phase` and `outcome`, and a new `component:fallback` event. Server events reach the `onEvent` of the federation that resolved the descriptor, in the same process.
+  - Importing `@next-federation/next/pages/server` now registers the Pages Router modules (`next/link`, `next/router`).
+  
+  **Behaviour change:** a build refused for integrity or trust (`NF-027`, `NF-028` for nested remotes or an uncheckable manifest) now renders `errorFallback` on the server and after hydration, and is not requested by the browser. On the server the refusal expires after 5 minutes, then the build is checked again; the browser keeps it until a fresh server render. An `NF-036` refusal applies only to the exposed module that needs the missing shared module. Before, the browser loaded a build after a server integrity failure.
+  
+  **Type-level changes:** the `ComponentEvent` union gains `component:fallback`, and the core `FederationEvent` union gains `component:load` and `component:fallback`. A handler that switches over `type` without a `default` branch needs a new case. `RemoteComponentDescriptor` gains optional `refused` and `events`, and the protocol registry types gain optional fields.
+
+### Patch Changes
+
+- Updated dependencies [096e505]
+  - @next-federation/protocol@0.3.0
+  - @next-federation/router@0.3.0
+  - @next-federation/sdk@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes
