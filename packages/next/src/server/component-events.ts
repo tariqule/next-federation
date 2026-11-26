@@ -9,18 +9,46 @@ import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 
 const keys = new WeakMap<Federation, string>()
 
-// Distinct per process (a cached descriptor from an earlier process must not
-// route to another federation), without randomness a prerender would flag.
-const processId = Math.round(performance.timeOrigin * 1000).toString(36)
+/** FNV-1a (32 bit), base 36: a short, stable hash (not a secret). */
+function hash(text: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
+}
 
+/** The federation's config identity: its remote names and component origins. */
+function configHash(federation: Federation): string {
+  const parts = [...federation.remotes].sort().map((name) => {
+    try {
+      return `${name} ${new URL(federation.componentTarget(name).descriptorUrl).origin}`
+    } catch {
+      return name
+    }
+  })
+  return hash(parts.join('\n'))
+}
+
+/**
+ * `<config hash>.<index>`: the index counts the federations with that config
+ * this process created (it only grows, so a key is never reused in a
+ * process). Deterministic, so a descriptor cached in a shared cache routes in
+ * another process to the federation created with the same config at the same
+ * position. Residual: processes that create identical-config federations in
+ * a different order could route between them.
+ */
 function eventsKey(federation: Federation): string {
-  let key = keys.get(federation)
   const registry = componentTrustRegistry()
   const routes = (registry.eventRoutes ??= new Map())
+  let key = keys.get(federation)
   if (key === undefined) {
-    let n = routes.size
-    while (routes.has(`${processId}.${n}`)) n++
-    key = `${processId}.${n}`
+    const counts = (registry.eventRouteCounts ??= new Map())
+    const config = configHash(federation)
+    const index = counts.get(config) ?? 0
+    counts.set(config, index + 1)
+    key = `${config}.${index}`
     keys.set(federation, key)
   }
   if (routes.get(key)?.deref() !== federation) {

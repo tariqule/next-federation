@@ -52,9 +52,7 @@ beforeEach(() => {
   eventsB.length = 0
   globalThis.fetch = (async (url: string) =>
     new Response(
-      JSON.stringify(
-        await file(url.startsWith(ORIGIN_A) ? ORIGIN_A : ORIGIN_B, 'c1')
-      )
+      JSON.stringify(await file(new URL(url).origin, 'c1'))
     )) as typeof fetch
 })
 afterEach(() => {
@@ -173,5 +171,68 @@ test('the `events` key is outside the signed payload: same digest, dropped by th
   const a = await resolve(fedA)
   for (const key of componentTrustRegistry().verified.keys()) {
     expect(key).not.toContain(a.events!)
+  }
+})
+
+test('interleaved requests: each federation reuses its own cached descriptor and receives only its own events', async () => {
+  const a = await resolve(fedA)
+  const b = await resolve(fedB)
+  loadEvent(a)
+  loadEvent(b)
+  refusedEvents(a)
+  loadEvent(b)
+  loadEvent(a)
+  expect(types(eventsA)).toEqual([
+    'component:load',
+    'component:error',
+    'component:fallback',
+    'component:load',
+  ])
+  expect(types(eventsB)).toEqual(['component:load', 'component:load'])
+})
+
+test('a route key is never reused in a process, even after its route is deleted', async () => {
+  const config = {
+    remotes: {
+      cart: { origin: 'http://127.0.0.1:4122', components: { ssr: false } },
+    },
+  } as const
+  const gone: FederationEvent[] = []
+  const first = defineFederation({ ...config, onEvent: (e) => gone.push(e) })
+  const old = await resolve(first)
+  // The route of a collected federation is dropped.
+  componentTrustRegistry().eventRoutes!.delete(old.events!)
+  const got: FederationEvent[] = []
+  const second = defineFederation({ ...config, onEvent: (e) => got.push(e) })
+  const fresh = await resolve(second)
+  expect(fresh.events).not.toBe(old.events)
+  got.length = 0
+  loadEvent(old)
+  expect(got).toEqual([])
+})
+
+test('a descriptor cached by another process routes to the federation created there with the same config', async () => {
+  const cached = JSON.parse(
+    JSON.stringify(await resolve(fedA))
+  ) as RemoteComponentDescriptor
+  // Another process: a fresh registry, the same config created first.
+  const slot = Symbol.for('nf.components.verified')
+  const g = globalThis as Record<symbol, unknown>
+  const saved = g[slot]
+  delete g[slot]
+  try {
+    const there: FederationEvent[] = []
+    const fedThere = defineFederation({
+      remotes: { cart: { origin: ORIGIN_A, components: { ssr: false } } },
+      onEvent: (e) => there.push(e),
+    })
+    const own = await resolve(fedThere)
+    expect(own.events).toBe(cached.events)
+    eventsA.length = 0
+    loadEvent(cached)
+    expect(types(there)).toEqual(['component:load'])
+    expect(types(eventsA)).toEqual([])
+  } finally {
+    g[slot] = saved
   }
 })

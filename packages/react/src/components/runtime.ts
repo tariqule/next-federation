@@ -106,7 +106,7 @@ export type ComponentEvent =
       env: 'server' | 'client'
       phase?: ComponentPhase
       outcome?: ComponentOutcome
-      ms?: number
+      ms: number
     }
   | ComponentFallbackEvent
 
@@ -1126,6 +1126,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         env,
         phase: 'load',
         outcome: classifyOutcome({ kind: 'error', code, error: last }).state,
+        ms: Math.round(now() - started),
       },
       d
     )

@@ -43,8 +43,7 @@ export type FederationEvent =
       type: 'component:error'
       remote: string
       code: NFErrorCode
-      /** Absent for a descriptor failure, which has no load or render time. */
-      ms?: number
+      ms: number
       status?: number
       /** Set for a load or render failure (server-side, routed by descriptor). */
       buildId?: string

@@ -418,6 +418,8 @@ export function createBindings({
           env: isServer ? 'server' : 'client',
           phase: 'render',
           outcome: 'refused',
+          // Refused before any load: no time spent.
+          ms: 0,
         },
         descriptor
       )
@@ -464,6 +466,8 @@ export function createBindings({
         env,
         phase: 'render',
         outcome: 'fallback',
+        // A render error, reported when caught: no load time involved.
+        ms: 0,
       },
       descriptor
     )

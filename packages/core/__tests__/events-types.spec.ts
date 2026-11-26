@@ -29,3 +29,15 @@ test('a FederationEvent handler written against the old union with a default bra
     onEvent({ type: 'component:error', remote: 'r', code: 'NF-029', ms: 3 })
   ).toBe('r NF-029 3')
 })
+
+// Checked by tsc: `ms` stays a required number on component:error.
+test('component:error keeps ms as a number', () => {
+  function timing(e: FederationEvent): number {
+    if (e.type !== 'component:error') return 0
+    const ms: number = e.ms
+    return ms
+  }
+  expect(
+    timing({ type: 'component:error', remote: 'r', code: 'NF-029', ms: 4 })
+  ).toBe(4)
+})

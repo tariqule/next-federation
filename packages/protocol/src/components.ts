@@ -240,6 +240,11 @@ export type ComponentTrustRegistry = {
    * component events. Never keyed by remote name.
    */
   eventRoutes?: Map<string, WeakRef<ComponentEventRoute>>
+  /**
+   * Per federation config hash: how many federations with that config this
+   * process created. Only grows, so a route key is never reused in a process.
+   */
+  eventRouteCounts?: Map<string, number>
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')
