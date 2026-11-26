@@ -212,27 +212,47 @@ test('a route key is never reused in a process, even after its route is deleted'
 })
 
 test('a descriptor cached by another process routes to the federation created there with the same config', async () => {
-  const cached = JSON.parse(
-    JSON.stringify(await resolve(fedA))
-  ) as RemoteComponentDescriptor
-  // Another process: a fresh registry, the same config created first.
   const slot = Symbol.for('nf.components.verified')
   const g = globalThis as Record<symbol, unknown>
   const saved = g[slot]
-  delete g[slot]
-  try {
-    const there: FederationEvent[] = []
-    const fedThere = defineFederation({
-      remotes: { cart: { origin: ORIGIN_A, components: { ssr: false } } },
-      onEvent: (e) => there.push(e),
+  const realOrigin = performance.timeOrigin
+  const config = {
+    remotes: {
+      cart: { origin: 'http://127.0.0.1:4123', components: { ssr: false } },
+    },
+  } as const
+  /** A fresh "process": its own clock origin, registry and module copies. */
+  async function processWith(timeOrigin: number) {
+    Object.defineProperty(performance, 'timeOrigin', {
+      value: timeOrigin,
+      configurable: true,
     })
-    const own = await resolve(fedThere)
-    expect(own.events).toBe(cached.events)
-    eventsA.length = 0
+    delete g[slot]
+    rs.resetModules()
+    const mod =
+      (await import('../src/server/component-descriptor.ts')) as typeof import('../src/server/component-descriptor.ts')
+    const got: FederationEvent[] = []
+    const fed = defineFederation({ ...config, onEvent: (e) => got.push(e) })
+    const d = (await mod.resolveComponentDescriptor(fed, 'cart', {
+      get: legacyGet,
+    })) as RemoteComponentDescriptor
+    return { got, d }
+  }
+  try {
+    const a = await processWith(1_000)
+    const cached = JSON.parse(JSON.stringify(a.d)) as RemoteComponentDescriptor
+    const b = await processWith(9_999_999)
+    expect(cached.events).toMatch(/^[0-9a-z]+\.\d+$/)
+    expect(b.d.events).toBe(cached.events)
+    a.got.length = 0
     loadEvent(cached)
-    expect(types(there)).toEqual(['component:load'])
-    expect(types(eventsA)).toEqual([])
+    expect(types(b.got)).toEqual(['component:load'])
+    expect(types(a.got)).toEqual([])
   } finally {
+    Object.defineProperty(performance, 'timeOrigin', {
+      value: realOrigin,
+      configurable: true,
+    })
     g[slot] = saved
   }
 })
