@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/server",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Server runtime for next-federation island remotes: the island request handler, identity verification, HTML cleanup and the nf-serve build server.",
   "license": "MIT",
   "author": "tariqule",

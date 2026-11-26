@@ -1,6 +1,6 @@
 {
   "name": "@next-federation/router",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Internal plumbing for next-federation: the router shims remote builds rewire their links to, and the host router modules. Not for direct import (only its ./build helpers go in a remote's config).",
   "license": "MIT",
   "author": "tariqule",

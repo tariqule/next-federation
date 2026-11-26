@@ -1,5 +1,13 @@
 # @next-federation/server
 
+## 0.3.0
+
+### Patch Changes
+
+- Updated dependencies [096e505]
+  - @next-federation/protocol@0.3.0
+  - @next-federation/sdk@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes
