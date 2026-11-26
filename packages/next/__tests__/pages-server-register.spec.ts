@@ -40,7 +40,7 @@ afterEach(() => {
 test('importing only pages/server registers next/link and next/router', async () => {
   const { preloadRemoteComponent } = await import('../src/pages/server.ts')
   const result = await preloadRemoteComponent(descriptor, './NavLink', {
-    timeoutMs: 50,
+    timeoutMs: 60_000,
   })
   expect(result.state).not.toBe('refused')
   expect(result).not.toMatchObject({ code: 'NF-036' })
@@ -51,8 +51,22 @@ test('importing pages/components as well does not register twice', async () => {
   await import('../src/pages/components.tsx')
   const { preloadRemoteComponent } = await import('../src/pages/server.ts')
   const result = await preloadRemoteComponent(descriptor, './NavLink', {
-    timeoutMs: 50,
+    timeoutMs: 60_000,
   })
   expect(result.state).not.toBe('refused')
   expect(result).not.toMatchObject({ code: 'NF-036' })
+})
+
+// Each Next layer bundles its own copy of `@next-federation/react/components`
+// (one runtime per layer), modelled here by a module reset between imports.
+test('an App Router layer runtime does not get the Pages registration', async () => {
+  await import('../src/pages/server.ts')
+  rs.resetModules()
+  const { preloadRemoteComponent } =
+    await import('../src/client/components.tsx')
+  const result = await preloadRemoteComponent(descriptor, './NavLink', {
+    timeoutMs: 60_000,
+  })
+  // next/router is never provided to App Router remotes.
+  expect(result).toMatchObject({ state: 'refused', code: 'NF-036' })
 })

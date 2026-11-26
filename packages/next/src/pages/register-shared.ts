@@ -7,6 +7,14 @@
 // NF-036 refusal from a preload. Calling it again is a no-op.
 // `next/navigation` is not provided here: a remote that imports it renders
 // its fallback (NF-036).
+// Mixed hosts: this lands only in the runtime of the layer that imports it.
+// Next bundles each layer (Pages server, App Router SSR, RSC) as its own
+// module graph, so each gets its own copy of
+// `@next-federation/react/components` and its own runtime; withFederation
+// keeps next-federation packages out of `serverExternalPackages` (NF-002),
+// so no layer shares a Node-required copy. Importing this entry from an App
+// Router module would register the Pages router there: import it from Pages
+// code only.
 import * as base from '@next-federation/react/components'
 import * as NextLink from 'next/link'
 import * as NextRouter from 'next/router'
