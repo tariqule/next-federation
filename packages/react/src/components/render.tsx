@@ -33,7 +33,7 @@ import type {
   SharedModules,
   Thenable,
 } from './runtime.ts'
-import { classifyOutcome } from './preload-result.ts'
+import { classifyClientError, classifyOutcome } from './preload-result.ts'
 import type { PreloadOptions, PreloadResult } from './preload-result.ts'
 
 export type BindingsRuntime = Pick<
@@ -534,7 +534,9 @@ export function createBindings({
 
   /**
    * Races the load against `timeoutMs`. A timeout never cancels the load: it
-   * keeps running for later renders and preloads.
+   * keeps running for later renders and preloads. A NaN or negative
+   * `timeoutMs` counts as 0; `Infinity` sets no timer and waits for the load
+   * to settle (the runtime's own load timeout still bounds it).
    */
   async function preloadWithResult(
     descriptor: RemoteComponentDescriptor | null,
@@ -553,6 +555,10 @@ export function createBindings({
     // after a timeout leaves no unhandled rejection.
     const codeOf = (error: unknown) =>
       isNFError(error) ? error.code : 'NF-029'
+    const clientOutcome = (error: unknown) => ({
+      ...classifyClientError(error, runtime.refusedBuild(descriptor)),
+      ...id,
+    })
     const settled: Promise<Omit<PreloadResult, 'ms'>> = isServer
       ? attempt(() => runtime.serverLoad(descriptor, expose)).then(
           () => {
@@ -566,18 +572,13 @@ export function createBindings({
         )
       : attempt(() => runtime.load(descriptor, expose)).then(
           () => ({ state: 'ready', ...id }),
-          (error: unknown) => {
-            const code = codeOf(error)
-            return {
-              state: code === 'NF-036' ? 'refused' : 'failed',
-              code,
-              ...id,
-            }
-          }
+          clientOutcome
         )
     let timer: ReturnType<typeof setTimeout> | undefined
+    const bound = Number.isNaN(timeoutMs) ? 0 : Math.max(0, timeoutMs)
     const timedOut = new Promise<Omit<PreloadResult, 'ms'>>((resolve) => {
-      timer = setTimeout(() => resolve({ state: 'timeout', ...id }), timeoutMs)
+      if (bound === Number.POSITIVE_INFINITY) return
+      timer = setTimeout(() => resolve({ state: 'timeout', ...id }), bound)
     })
     try {
       const result = await Promise.race([settled, timedOut])
@@ -705,8 +706,8 @@ export function createBindings({
     const serverDegraded = (): ReactNode => {
       const outcome = runtime.serverOutcome(descriptor, expose)
       const settled = outcome ? classifyOutcome(outcome) : undefined
-      if (settled?.state === 'refused' && settled.code) {
-        const code = settled.code as ComponentRefusalCode
+      if (settled?.state === 'refused') {
+        const { code } = settled
         reportRefused(descriptor, expose, code, outcome?.kind === 'blocked')
         return refused(code)
       }
@@ -838,14 +839,11 @@ export function createBindings({
         if (typeof error === 'object' && error !== null) {
           // The runtime reported the load error; the fallback is ours.
           if (loadFailures.has(error)) {
-            const code = isNFError(error) ? error.code : 'NF-029'
-            const refusal = code === 'NF-027' || code === 'NF-036'
-            reportFallback(
-              descriptor,
-              expose,
-              refusal ? 'refused' : 'failed',
-              code
+            const { state, code } = classifyClientError(
+              error,
+              runtime.refusedBuild(descriptor)
             )
+            reportFallback(descriptor, expose, state, code)
             return
           }
         }

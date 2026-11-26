@@ -17,7 +17,7 @@ import type {
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
 import type { NFErrorCode } from '@next-federation/sdk'
-import { classifyOutcome } from './preload-result.ts'
+import { classifyOutcome, loadErrorCode } from './preload-result.ts'
 import type { ServerLoadOutcome } from './preload-result.ts'
 
 export type RemoteModule = { default: unknown; [name: string]: unknown }
@@ -106,7 +106,8 @@ export type ComponentEvent =
       env: 'server' | 'client'
       phase?: ComponentPhase
       outcome?: ComponentOutcome
-      ms: number
+      /** Optional in this type: handlers and fakes written before it compile. */
+      ms?: number
     }
   | ComponentFallbackEvent
 
@@ -768,7 +769,15 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   function refusedBuild(
     d: RemoteComponentDescriptor
   ): ComponentRefusalCode | undefined {
-    return d.refused?.code ?? refusedBases.get(d.remote)?.get(d.base)
+    return (
+      d.refused?.code ??
+      refusedBases.get(d.remote)?.get(d.base) ??
+      // Server: a build refused process-wide after this descriptor resolved
+      // (a concurrent request, a descriptor the host kept).
+      (deps.isServer
+        ? componentTrustRegistry().refusedBuilds?.get(d.remote)?.get(d.base)
+        : undefined)
+    )
   }
   function refuse(
     { remote, base }: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
@@ -1138,23 +1147,6 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         })
   }
 
-  /**
-   * The NF code of a rejected load. An unmet shared module (NF-036) keeps its
-   * own code under the NF-028 wrapping of a build the loader refused.
-   */
-  function loadErrorCode(error: unknown): NFErrorCode {
-    if (!isNFError(error)) return 'NF-029'
-    const { code, cause } = error as NFError
-    if (
-      code === 'NF-028' &&
-      isNFError(cause) &&
-      (cause as NFError).code === 'NF-036'
-    ) {
-      return 'NF-036'
-    }
-    return code
-  }
-
   function thenable(promise: Promise<RemoteModule>): Thenable<RemoteModule> {
     const t = promise as Thenable<RemoteModule>
     t.status = 'pending'
@@ -1279,7 +1271,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   ): void {
     outcomes.set(result, outcome)
     const { state, code } = classifyOutcome(outcome)
-    if (state === 'refused' && code) refuse(d, code as ComponentRefusalCode)
+    if (state === 'refused') refuse(d, code)
   }
 
   return {

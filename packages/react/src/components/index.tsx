@@ -18,10 +18,12 @@ import * as JsxRuntime from 'react/jsx-runtime'
 import { createBindings } from './render.tsx'
 export type {
   PreloadOptions,
+  PreloadRemoteComponent,
   PreloadResult,
   PreloadState,
 } from './preload-result.ts'
 import type { Bindings } from './render.tsx'
+import type { PreloadRemoteComponent } from './preload-result.ts'
 import { createComponentRuntime } from './runtime.ts'
 import { serverComponentEmit } from './server-events.ts'
 import type {
@@ -112,7 +114,7 @@ export const loadRemoteModule: Bindings['loadRemoteModule'] =
  * in `getServerSideProps`, so the first render after a deploy is inline HTML.
  * Never rejects.
  */
-export const preloadRemoteComponent: Bindings['preloadRemoteComponent'] =
+export const preloadRemoteComponent: PreloadRemoteComponent =
   bindings.preloadRemoteComponent
 
 /**

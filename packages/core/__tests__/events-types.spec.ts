@@ -41,3 +41,14 @@ test('component:error keeps ms as a number', () => {
     timing({ type: 'component:error', remote: 'r', code: 'NF-029', ms: 4 })
   ).toBe(4)
 })
+
+// Checked by tsc: `ms` on component:error stays required here, as before.
+test('a core component:error without ms does not compile', () => {
+  // @ts-expect-error ms is required on the core event
+  const e: FederationEvent = {
+    type: 'component:error',
+    remote: 'r',
+    code: 'NF-029',
+  }
+  expect(e.type).toBe('component:error')
+})

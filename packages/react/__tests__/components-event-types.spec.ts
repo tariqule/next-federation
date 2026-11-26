@@ -35,3 +35,19 @@ test('a handler written against the old union with a default branch still compil
     })
   ).toBe('r b ./X 1 client')
 })
+
+// Checked by tsc: fakes built before component:error carried ms still compile.
+test('a React component:error without ms compiles; with ms too', () => {
+  const without: ComponentEvent = {
+    type: 'component:error',
+    remote: 'r',
+    buildId: 'b',
+    expose: './X',
+    code: 'NF-029',
+    error: new Error('x'),
+    env: 'client',
+  }
+  const withMs: ComponentEvent = { ...without, ms: 3 }
+  expect(without.type).toBe('component:error')
+  expect(withMs.type === 'component:error' && withMs.ms).toBe(3)
+})

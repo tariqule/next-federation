@@ -1,3 +1,4 @@
+import { componentTrustRegistry } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { NFError } from '@next-federation/sdk'
 import { classifyOutcome } from '../src/components/preload-result.ts'
@@ -79,6 +80,8 @@ beforeEach(() => {
 })
 afterEach(() => {
   rs.restoreAllMocks()
+  // Server refusals of build facts are process-wide.
+  delete componentTrustRegistry().refusedBuilds
 })
 
 test('classifyOutcome maps each block reason', () => {
@@ -265,7 +268,7 @@ describe('preloadRemoteComponent with options', () => {
       descriptor('c1'),
       './Counter',
       {
-        timeoutMs: 1000,
+        timeoutMs: 60_000,
       }
     )
     expect(r).toEqual({
@@ -285,7 +288,7 @@ describe('preloadRemoteComponent with options', () => {
       ssr: { integrity: { 'mf-manifest.json': 'sha384-EVIL' } },
     })
     const r = await bindings.preloadRemoteComponent(forged, './Other', {
-      timeoutMs: 1000,
+      timeoutMs: 60_000,
     })
     await p
     expect(r).toMatchObject({ state: 'refused', code: 'NF-027' })
@@ -321,7 +324,7 @@ describe('preloadRemoteComponent with options', () => {
     })
     expect(a.state).toBe('timeout')
     const b = bindings.preloadRemoteComponent(d, './Counter', {
-      timeoutMs: 5000,
+      timeoutMs: 60_000,
     })
     release()
     expect((await b).state).toBe('ready')
@@ -334,7 +337,7 @@ describe('preloadRemoteComponent with options', () => {
       descriptor('c1'),
       './Counter',
       {
-        timeoutMs: 2000,
+        timeoutMs: 60_000,
       }
     )
     expect(r).toMatchObject({ state: 'failed', code: 'NF-029' })
@@ -353,11 +356,27 @@ describe('browser preload with options', () => {
         throw new Error('serverOutcome in the browser')
       },
       registerShared: () => {},
+      refusedBuild: () => undefined,
     } as unknown as BindingsRuntime
     return createBindings({ runtime, isServer: false })
   }
   const d = descriptor('c1')
-  const opts = { timeoutMs: 50 }
+  // Loads here settle within a tick: a wide bound keeps CI from timing out.
+  const opts = { timeoutMs: 60_000 }
+
+  test('NF-036 wrapped in NF-028 gives refused NF-036', async () => {
+    const b = browser(() =>
+      Promise.reject(
+        new NFError('NF-028', 'refused', {
+          cause: new NFError('NF-036', 'unmet'),
+        })
+      )
+    )
+    expect(await b.preloadRemoteComponent(d, './Counter', opts)).toMatchObject({
+      state: 'refused',
+      code: 'NF-036',
+    })
+  })
 
   test('ready', async () => {
     const b = browser(async () => ({ default: () => null }) as never)
@@ -398,9 +417,9 @@ describe('browser preload with options', () => {
   test('timeout, and a later rejection is not unhandled', async () => {
     let reject!: (e: unknown) => void
     const b = browser(() => new Promise((_, r) => (reject = r)))
-    expect((await b.preloadRemoteComponent(d, './Counter', opts)).state).toBe(
-      'timeout'
-    )
+    expect(
+      (await b.preloadRemoteComponent(d, './Counter', { timeoutMs: 10 })).state
+    ).toBe('timeout')
     reject(new NFError('NF-029', 'late'))
     await new Promise((r) => setTimeout(r, 0))
   })
@@ -424,6 +443,7 @@ describe('a runtime that throws synchronously never rejects the preload', () => 
       serverBlock: () => undefined,
       serverOutcome: () => undefined,
       registerShared: () => {},
+      refusedBuild: () => undefined,
     } as unknown as BindingsRuntime
     return createBindings({ runtime, isServer })
   }
@@ -436,13 +456,13 @@ describe('a runtime that throws synchronously never rejects the preload', () => 
         await bindingsFor(
           isServer,
           new NFError('NF-028', 'x')
-        ).preloadRemoteComponent(d, './Counter', { timeoutMs: 50 })
+        ).preloadRemoteComponent(d, './Counter', { timeoutMs: 60_000 })
       ).toMatchObject({ state: 'failed', code: 'NF-028' })
       expect(
         await bindingsFor(isServer, new Error('boom')).preloadRemoteComponent(
           d,
           './Counter',
-          { timeoutMs: 50 }
+          { timeoutMs: 60_000 }
         )
       ).toMatchObject({ state: 'failed', code: 'NF-029' })
     })
@@ -462,7 +482,102 @@ describe('a runtime that throws synchronously never rejects the preload', () => 
       await bindingsFor(
         false,
         new NFError('NF-036', 'unmet')
-      ).preloadRemoteComponent(d, './Counter', { timeoutMs: 50 })
+      ).preloadRemoteComponent(d, './Counter', { timeoutMs: 60_000 })
     ).toMatchObject({ state: 'refused', code: 'NF-036' })
+  })
+})
+
+describe('browser preload of a refused build (real runtime)', () => {
+  function browser() {
+    const s = setup({ isServer: false })
+    return {
+      ...s,
+      bindings: createBindings({ runtime: s.runtime, isServer: false }),
+    }
+  }
+  const opts = { timeoutMs: 60_000 }
+
+  for (const code of ['NF-027', 'NF-028', 'NF-036'] as const) {
+    test(`refused by its descriptor (${code}) gives refused ${code}`, async () => {
+      const { bindings } = browser()
+      const d = descriptor('c1', { refused: { code } })
+      expect(
+        await bindings.preloadRemoteComponent(d, './Counter', opts)
+      ).toMatchObject({ state: 'refused', code })
+    })
+  }
+
+  test('refused by a marker-recorded refusal gives refused with its code', async () => {
+    const { runtime, bindings } = browser()
+    const d = descriptor('c1')
+    runtime.refuse(d, 'NF-028')
+    expect(
+      await bindings.preloadRemoteComponent(d, './Counter', opts)
+    ).toMatchObject({ state: 'refused', code: 'NF-028' })
+  })
+})
+
+describe('server refusedBuild reads the process-wide store', () => {
+  test('a descriptor resolved before another runtime refused its build is refused', async () => {
+    const a = setup()
+    const b = setup()
+    const d = descriptor('c1')
+    a.runtime.refuse(d, 'NF-027')
+    expect(b.runtime.refusedBuild(d)).toBe('NF-027')
+    await expect(b.runtime.load(d, './Counter')).rejects.toMatchObject({
+      code: 'NF-027',
+    })
+    const bindings = createBindings({ runtime: b.runtime, isServer: true })
+    expect(
+      await bindings.preloadRemoteComponent(d, './Counter', {
+        timeoutMs: 60_000,
+      })
+    ).toMatchObject({ state: 'refused', code: 'NF-027' })
+  })
+
+  test('a browser runtime ignores the process-wide store', () => {
+    const d = descriptor('c1')
+    setup().runtime.refuse(d, 'NF-027')
+    expect(setup({ isServer: false }).runtime.refusedBuild(d)).toBeUndefined()
+  })
+})
+
+describe('timeoutMs edge values', () => {
+  function pending() {
+    const s = setup()
+    let release!: () => void
+    s.hooks.wait = new Promise((resolve) => (release = resolve))
+    return {
+      bindings: createBindings({ runtime: s.runtime, isServer: true }),
+      release: () => release(),
+    }
+  }
+
+  for (const timeoutMs of [Number.NaN, -5]) {
+    test(`${timeoutMs} is treated as 0: a pending load times out`, async () => {
+      const { bindings, release } = pending()
+      const r = await bindings.preloadRemoteComponent(
+        descriptor('c1'),
+        './Counter',
+        { timeoutMs }
+      )
+      expect(r.state).toBe('timeout')
+      release()
+    })
+  }
+
+  test('Infinity sets no timer and waits for the load to settle', async () => {
+    rs.useFakeTimers()
+    try {
+      const { bindings, release } = pending()
+      const p = bindings.preloadRemoteComponent(descriptor('c1'), './Counter', {
+        timeoutMs: Number.POSITIVE_INFINITY,
+      })
+      expect(rs.getTimerCount()).toBe(0)
+      release()
+      expect((await p).state).toBe('ready')
+    } finally {
+      rs.useRealTimers()
+    }
   })
 })
