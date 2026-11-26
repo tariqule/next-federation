@@ -158,6 +158,40 @@ export type ComponentEventRoute = { emit(event: object): void }
 /** Why a build's code was refused (never loaded on either side). */
 export type ComponentRefusalCode = 'NF-027' | 'NF-028' | 'NF-036'
 
+/**
+ * How long a recorded build refusal (NF-027/NF-028) lasts before the build is
+ * checked again: 5 minutes. Integrity is enforced on every check, so a bad
+ * build is refused again; a transient mismatch recovers without a restart.
+ */
+export const REFUSAL_TTL_MS: number = 5 * 60 * 1000
+
+/** One recorded build refusal: its code, when it was recorded and until when it holds. */
+export type RefusedBuild = {
+  code: ComponentRefusalCode
+  at: number
+  until: number
+}
+
+/**
+ * The refusal recorded for this build in `store`, if it still holds at
+ * `now`. An expired entry is deleted and reads as absent.
+ */
+export function liveRefusal(
+  store: Map<string, Map<string, RefusedBuild>> | undefined,
+  remote: string,
+  base: string,
+  now: number
+): ComponentRefusalCode | undefined {
+  const builds = store?.get(remote)
+  const entry = builds?.get(base)
+  if (!entry) return undefined
+  if (now >= entry.until) {
+    builds!.delete(base)
+    return undefined
+  }
+  return entry.code
+}
+
 /** A host's trust policy for one remote (registered by defineFederation). */
 export type ComponentTrustPolicy = {
   publicKeys: Array<{
@@ -230,21 +264,24 @@ export type ComponentTrustRegistry = {
   serverReady?: Map<string, 'loaded' | 'refused'>
   /**
    * Per remote, then per build base (oldest first, bounded per remote): the
-   * code this process refused to load (see `RemoteComponentDescriptor.refused`),
-   * for the descriptors it hands out.
+   * build facts (NF-027/NF-028, never NF-036) this process refused to load
+   * (see `RemoteComponentDescriptor.refused`), for the descriptors it hands
+   * out. Each entry expires (`RefusedBuild.until`, read with `liveRefusal`).
    */
-  refusedBuilds?: Map<string, Map<string, ComponentRefusalCode>>
+  refusedBuilds?: Map<string, Map<string, RefusedBuild>>
   /**
    * Per opaque federation key (`RemoteComponentDescriptor.events`): that
    * federation, held weakly, which receives its descriptors' server-side
    * component events. Never keyed by remote name.
    */
   eventRoutes?: Map<string, WeakRef<ComponentEventRoute>>
+  /** Made once per process (clock origin and pid): the prefix of every route key it issues. */
+  eventProcessId?: string
   /**
-   * Per federation config hash: how many federations with that config this
-   * process created. Only grows, so a route key is never reused in a process.
+   * How many federations this process created a route key for. Only grows,
+   * so a route key is never reused in a process.
    */
-  eventRouteCounts?: Map<string, number>
+  eventRouteCount?: number
 }
 
 const TRUST_REGISTRY = Symbol.for('nf.components.verified')

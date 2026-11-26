@@ -6,7 +6,7 @@
 import type { ComponentTarget, Federation } from '@next-federation/core'
 import { fetchVerifiedComponentDescriptor } from '@next-federation/core/components'
 import type { VerifiedDescriptorResult } from '@next-federation/core/components'
-import { componentTrustRegistry } from '@next-federation/protocol'
+import { componentTrustRegistry, liveRefusal } from '@next-federation/protocol'
 import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 import { canLoadServerCode } from '@next-federation/react/components/server-loader'
 import { logger } from '@next-federation/sdk'
@@ -31,16 +31,21 @@ const lastKnown = new Map<string, RemoteComponentDescriptor>()
 /**
  * The descriptor, marked `refused` when this server process refused the
  * build's code for a build fact (NF-027/NF-028, recorded by its remote
- * component runtimes; NF-036 stays in the refusing layer): the browser then
- * never loads it, from any boundary or navigation. Outside the signed
+ * component runtimes; NF-036 is per expose, never recorded per build): the
+ * browser then does not load it, from any boundary or navigation, until the
+ * refusal expires (REFUSAL_TTL_MS, 5 minutes). Outside the signed
  * payload, so verification and pinning never see it.
  */
 function withRefusal(
   descriptor: RemoteComponentDescriptor
 ): RemoteComponentDescriptor {
-  const code = componentTrustRegistry()
-    .refusedBuilds?.get(descriptor.remote)
-    ?.get(descriptor.base)
+  // The runtimes record with performance.now (one clock per process).
+  const code = liveRefusal(
+    componentTrustRegistry().refusedBuilds,
+    descriptor.remote,
+    descriptor.base,
+    performance.now()
+  )
   return code ? { ...descriptor, refused: { code } } : descriptor
 }
 

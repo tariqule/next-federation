@@ -5,14 +5,17 @@
 import {
   DEFAULT_REACT_RANGE,
   HOST_REACT_MODULES,
+  REFUSAL_TTL_MS,
   componentTrustRegistry,
   isNeverFallback,
+  liveRefusal,
   isSemverVersion,
   satisfies,
 } from '@next-federation/protocol'
 import type {
   ComponentRefusalCode,
   ComponentSharedModule,
+  RefusedBuild,
   RemoteComponentDescriptor,
 } from '@next-federation/protocol'
 import { NFError, isNFError, logger } from '@next-federation/sdk'
@@ -207,6 +210,11 @@ export type RuntimeDeps = {
    * many ms. Default 10000. A server render must never wait forever.
    */
   loadTimeoutMs?: number
+  /**
+   * A recorded build refusal (NF-027/NF-028) expires after this many ms;
+   * the next load checks the build again. Default REFUSAL_TTL_MS (5 minutes).
+   */
+  refusalTtlMs?: number
 }
 
 /** Why the server does not render a build (it renders in the browser instead). */
@@ -255,7 +263,8 @@ export type ComponentRuntime = {
   loadedBuilds(name: string): string[]
   /**
    * Records that the server refused this build's code (browser: read from
-   * the server HTML). Every later load of it rejects with `code`, no request.
+   * the server HTML). Every later load of it rejects with `code`, no request,
+   * until the refusal expires (refusalTtlMs). NF-036 is per expose: ignored.
    */
   refuse(
     build: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
@@ -746,6 +755,7 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
   const delays = deps.clientRetryDelays ?? [500, 1000, 2000]
   const serverRetryMs = deps.serverRetryMs ?? 1000
   const loadTimeoutMs = deps.loadTimeoutMs ?? 10_000
+  const refusalTtlMs = deps.refusalTtlMs ?? REFUSAL_TTL_MS
   const env = deps.isServer ? 'server' : 'client'
 
   // container name -> base -> expose -> thenable (Map order = recency).
@@ -754,53 +764,46 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
     Map<string, Map<string, Thenable<RemoteModule>>>
   >()
   const buildIds = new Map<string, string>()
-  // Builds whose code is refused, never loaded again by this runtime.
-  // Browser: every refusal read from the server HTML. Server: NF-036 only,
-  // a fact of this layer's shared modules (another layer may provide them),
-  // lifted by registerShared. Build facts (NF-027/NF-028) go process-wide
-  // instead, for the descriptors the server hands out (`refused`).
+  // Builds whose code is refused (NF-027/NF-028, build facts), not loaded
+  // again by this runtime until the refusal expires (refusalTtlMs). Browser:
+  // refusals read from the server HTML. Server: process-wide, for the
+  // descriptors the server hands out (`refused`). NF-036 is never recorded
+  // per build: it is per expose (unmetShared runs before each load, and the
+  // server replays outcomes per descriptor and expose).
   // Per remote (the host's key, never the remote's choice), then per base,
   // oldest first: a remote that floods refusals only evicts its own oldest.
-  const refusedBases = new Map<string, Map<string, ComponentRefusalCode>>()
-  const refusalStore = (code: ComponentRefusalCode) =>
-    deps.isServer && code !== 'NF-036'
+  const refusedBases = new Map<string, Map<string, RefusedBuild>>()
+  const refusalStore = () =>
+    deps.isServer
       ? (componentTrustRegistry().refusedBuilds ??= new Map())
       : refusedBases
   function refusedBuild(
     d: RemoteComponentDescriptor
   ): ComponentRefusalCode | undefined {
     return (
-      d.refused?.code ??
-      refusedBases.get(d.remote)?.get(d.base) ??
-      // Server: a build refused process-wide after this descriptor resolved
-      // (a concurrent request, a descriptor the host kept).
-      (deps.isServer
-        ? componentTrustRegistry().refusedBuilds?.get(d.remote)?.get(d.base)
-        : undefined)
+      d.refused?.code ?? liveRefusal(refusalStore(), d.remote, d.base, now())
     )
   }
   function refuse(
     { remote, base }: Pick<RemoteComponentDescriptor, 'remote' | 'base'>,
     code: ComponentRefusalCode
   ): void {
-    const store = refusalStore(code)
+    // Per expose, never a fact of the build (see above).
+    if (code === 'NF-036') return
+    const store = refusalStore()
+    // A live refusal keeps its time: replaying it (a load it rejected) never
+    // extends it, so the build is checked again once it expires.
+    if (liveRefusal(store, remote, base, now()) !== undefined) return
     let builds = store.get(remote)
     if (!builds) {
       builds = new Map()
       store.set(remote, builds)
     }
+    const at = now()
     builds.delete(base)
-    builds.set(base, code)
+    builds.set(base, { code, at, until: at + refusalTtlMs })
     while (builds.size > MAX_REFUSED_PER_REMOTE) {
       builds.delete(builds.keys().next().value!)
-    }
-  }
-  /** NF-036 refusals (this runtime's own): a module registered since may satisfy the build. */
-  function forgetSharedRefusals(): void {
-    for (const builds of refusedBases.values()) {
-      for (const [base, code] of builds) {
-        if (code === 'NF-036') builds.delete(base)
-      }
     }
   }
   // Server: the verified integrity map of every build kept loaded.
@@ -1285,7 +1288,21 @@ export function createComponentRuntime(deps: RuntimeDeps): ComponentRuntime {
         versions.set(name, version)
       }
       extraShared.push(shared)
-      forgetSharedRefusals()
+      // A load refused for a module the host lacked (NF-036, checked before
+      // any request) may succeed now: drop it so the next render loads again.
+      for (const builds of cache.values()) {
+        for (const exposes of builds.values()) {
+          for (const [expose, p] of exposes) {
+            if (
+              p.status === 'rejected' &&
+              isNFError(p.reason) &&
+              (p.reason as NFError).code === 'NF-036'
+            ) {
+              exposes.delete(expose)
+            }
+          }
+        }
+      }
       if (!instance) return
       if (added) {
         // A container initialised its share scope once, before this module

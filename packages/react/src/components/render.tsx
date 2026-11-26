@@ -626,9 +626,10 @@ export function createBindings({
     // no hydration mismatch.
     const base = descriptor.base
     const [marked] = useState(() => !isServer && hasBrowserOnlyMark(id, base))
-    // Hydrating a boundary whose build the server refused: keep its error
-    // fallback for good, and record the refusal so no boundary of this page
-    // ever loads that build.
+    // Hydrating a boundary the server refused: keep its error fallback for
+    // good. A build fact (NF-027/NF-028) is recorded for the build, so no
+    // boundary of this page loads it until the refusal expires; NF-036 is
+    // per expose and blocks this boundary only (runtime.refuse ignores it).
     const [refusedMark] = useState(() => {
       if (isServer) return undefined
       const code = refusedMarkCode(id, base)
@@ -636,7 +637,7 @@ export function createBindings({
       return code
     })
     // Refused: browser, by the server's marker, the descriptor, or an earlier
-    // marker on this page; server, by descriptor.refused or this layer's
+    // build-fact marker on this page; server, by descriptor.refused or this layer's
     // recorded outcome (an earlier refused load).
     const refusedCode = refusedMark ?? runtime.refusedBuild(descriptor)
     // Browser: a refused tree is reported once it is shown (effects only run

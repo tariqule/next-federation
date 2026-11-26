@@ -1830,10 +1830,10 @@ test('a new MF instance while a load awaits its manifest check: the next load st
 describe('refused builds', () => {
   test('browser: a build recorded refused rejects with its code, no request', async () => {
     const { runtime, instance } = setup({ isServer: false })
-    runtime.refuse(descriptor('r1'), 'NF-036')
+    runtime.refuse(descriptor('r1'), 'NF-028')
     const p = runtime.load(descriptor('r1'), './Counter')
     expect(p.status).toBe('rejected')
-    await expect(p).rejects.toMatchObject({ code: 'NF-036' })
+    await expect(p).rejects.toMatchObject({ code: 'NF-028' })
     expect(instance.loads).toEqual([])
     expect(instance.registrations).toEqual([])
     // Other builds still load.
@@ -1865,6 +1865,7 @@ describe('refused builds', () => {
     })
     expect(
       componentTrustRegistry().refusedBuilds?.get('components')?.get(d.base)
+        ?.code
     ).toBe('NF-027')
     componentTrustRegistry().refusedBuilds?.get('components')?.delete(d.base)
   })
@@ -1888,8 +1889,8 @@ describe('refusal stores are bounded per remote', () => {
       if (store) {
         expect(store.get('components')!.size).toBe(MAX_REFUSED_PER_REMOTE)
         expect(store.get('components')!.has(first.base)).toBe(false)
-        expect(store.get('components')!.get(newest.base)).toBe('NF-027')
-        expect(store.get('other')!.get(other.base)).toBe('NF-027')
+        expect(store.get('components')!.get(newest.base)?.code).toBe('NF-027')
+        expect(store.get('other')!.get(other.base)?.code).toBe('NF-027')
         store.delete('components')
         store.delete('other')
       } else {
@@ -1904,59 +1905,116 @@ describe('refusal stores are bounded per remote', () => {
       }
     })
   }
-
-  test('registerShared lifts NF-036 refusals; NF-027 ones stay', async () => {
-    const { runtime, instance } = setup({ isServer: false })
-    const shared = descriptor('s1')
-    const tampered = descriptor('s2')
-    runtime.refuse(shared, 'NF-036')
-    runtime.refuse(tampered, 'NF-027')
-    runtime.registerShared({
-      'components-context': { version: '1.0.0', module: {} },
-    })
-    expect(runtime.refusedBuild(shared)).toBeUndefined()
-    await runtime.load(shared, './Counter')
-    expect(instance.loads).toHaveLength(1)
-    await expect(runtime.load(tampered, './Counter')).rejects.toMatchObject({
-      code: 'NF-027',
-    })
-    expect(instance.loads).toHaveLength(1)
-  })
 })
 
-describe('NF-036 refusals stay in their own layer', () => {
-  test('server: a Pages layer NF-036 is never stamped process-wide; another layer still loads', async () => {
-    const pages = setup()
-    pages.runtime.refuse(descriptor('m1'), 'NF-036')
-    const d = descriptor('m1')
+describe('NF-036 is per expose, never per build', () => {
+  const pagesOnly = (buildId: string) =>
+    descriptor(buildId, {
+      shared: {
+        'next/router': {
+          requiredVersion: false,
+          fallback: false,
+          exposes: ['./PagesNav'],
+        },
+      },
+    })
+
+  test('server: one expose refused with NF-036, another expose of the same build still loads', async () => {
+    const { runtime } = setup()
+    const d = pagesOnly('x1')
+    expect(await runtime.serverLoad(d, './PagesNav')).toBeNull()
+    expect(runtime.serverOutcome(d, './PagesNav')).toMatchObject({
+      code: 'NF-036',
+    })
+    expect(runtime.refusedBuild(d)).toBeUndefined()
     expect(
       componentTrustRegistry().refusedBuilds?.get('components')?.get(d.base)
     ).toBeUndefined()
-    // The same layer keeps refusing it until shared modules change.
-    expect(pages.runtime.refusedBuild(d)).toBe('NF-036')
-    const app = setup()
-    expect(app.runtime.refusedBuild(d)).toBeUndefined()
-    expect(await app.runtime.serverLoad(d, './Counter')).not.toBeNull()
+    expect(await runtime.serverLoad(d, './Counter')).toMatchObject({
+      entry: d.manifest,
+    })
   })
 
-  test('server: registerShared in one layer keeps NF-027 entries and other layers NF-036 state', () => {
-    const a = setup()
-    const b = setup()
-    const tampered = descriptor('m2')
-    const shared = descriptor('m3')
-    a.runtime.refuse(tampered, 'NF-027')
-    b.runtime.refuse(shared, 'NF-036')
-    a.runtime.registerShared({ 'late-x': { version: '1.0.0', module: {} } })
-    expect(
-      componentTrustRegistry()
-        .refusedBuilds?.get('components')
-        ?.get(tampered.base)
-    ).toBe('NF-027')
-    expect(b.runtime.refusedBuild(shared)).toBe('NF-036')
-    b.runtime.registerShared({ 'late-y': { version: '1.0.0', module: {} } })
-    expect(b.runtime.refusedBuild(shared)).toBeUndefined()
-    componentTrustRegistry()
-      .refusedBuilds?.get('components')
-      ?.delete(tampered.base)
+  test('browser: one expose refused with NF-036, another expose of the same build still loads', async () => {
+    const { runtime, instance } = setup({ isServer: false })
+    const d = pagesOnly('x2')
+    await expect(runtime.load(d, './PagesNav')).rejects.toMatchObject({
+      code: 'NF-036',
+    })
+    expect(runtime.refusedBuild(d)).toBeUndefined()
+    await expect(runtime.load(d, './Counter')).resolves.toMatchObject({
+      entry: d.manifest,
+    })
+    expect(instance.loads).toHaveLength(1)
+  })
+
+  test('refuse() never records NF-036 for the build, on either side', () => {
+    for (const isServer of [false, true]) {
+      const { runtime } = setup({ isServer })
+      const d = descriptor('x3')
+      runtime.refuse(d, 'NF-036')
+      expect(runtime.refusedBuild(d)).toBeUndefined()
+      expect(
+        componentTrustRegistry().refusedBuilds?.get('components')?.get(d.base)
+      ).toBeUndefined()
+    }
+  })
+
+  test('browser: a later registerShared lets the refused expose load', async () => {
+    const { runtime } = setup({ isServer: false })
+    const d = pagesOnly('x4')
+    await expect(runtime.load(d, './PagesNav')).rejects.toMatchObject({
+      code: 'NF-036',
+    })
+    runtime.registerShared({ 'next/router': { version: '16.0.0', module: {} } })
+    await expect(runtime.load(d, './PagesNav')).resolves.toMatchObject({
+      entry: d.manifest,
+    })
+  })
+})
+
+describe('build refusals expire', () => {
+  const TTL = 5 * 60 * 1000
+  for (const isServer of [false, true]) {
+    test(`${isServer ? 'server' : 'browser'}: refused within the TTL (default 5 minutes), loaded again after it`, async () => {
+      const { runtime, instance, tick } = setup({ isServer })
+      const d = descriptor('t1')
+      runtime.refuse(d, 'NF-027')
+      tick(TTL - 1)
+      expect(runtime.refusedBuild(d)).toBe('NF-027')
+      await expect(runtime.load(d, './Counter')).rejects.toMatchObject({
+        code: 'NF-027',
+      })
+      expect(instance.loads).toEqual([])
+      tick(1)
+      expect(runtime.refusedBuild(d)).toBeUndefined()
+      if (isServer) {
+        expect(
+          componentTrustRegistry().refusedBuilds?.get('components')?.has(d.base)
+        ).toBe(false)
+      }
+      await runtime.load(d, './Counter')
+      expect(instance.loads).toHaveLength(1)
+    })
+  }
+
+  test('server: after the TTL a still failing build is attempted and refused again', async () => {
+    const ctx = setup({ refusalTtlMs: 2000 })
+    let attempts = 0
+    ctx.instance.loadRemote = async () => {
+      attempts++
+      throw new NFError('NF-027', 'a chunk failed its integrity check')
+    }
+    const d = descriptor('t2')
+    expect(await ctx.runtime.serverLoad(d, './Counter')).toBeNull()
+    expect(attempts).toBe(1)
+    ctx.tick(1999)
+    expect(await ctx.runtime.serverLoad({ ...d }, './Counter')).toBeNull()
+    expect(attempts).toBe(1)
+    ctx.tick(1)
+    expect(await ctx.runtime.serverLoad({ ...d }, './Counter')).toBeNull()
+    expect(attempts).toBe(2)
+    expect(ctx.runtime.refusedBuild(d)).toBe('NF-027')
+    componentTrustRegistry().refusedBuilds?.get('components')?.delete(d.base)
   })
 })
