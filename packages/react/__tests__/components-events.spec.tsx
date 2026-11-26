@@ -333,3 +333,109 @@ test('a caller timeout emits nothing', async () => {
   expect(result.state).toBe('timeout')
   expect(events).toEqual([])
 })
+
+test("server: an unverified (ssr null) build emits fallback 'browser-only'; a refused one emits 'refused'", async () => {
+  const unverified: RemoteComponentDescriptor = {
+    ...descriptor,
+    ssr: null,
+  }
+  const plain = bind(fakeRuntime(), true)
+  await serverHtml(<plain.C descriptor={unverified} />)
+  expect(plain.events).toEqual([
+    {
+      type: 'component:fallback',
+      ...id,
+      env: 'server',
+      phase: 'render',
+      reason: 'browser-only',
+    },
+  ])
+  const refused = bind(fakeRuntime(), true)
+  await serverHtml(
+    <refused.C descriptor={{ ...unverified, refused: { code: 'NF-027' } }} />
+  )
+  expect(refused.events).toEqual([
+    expect.objectContaining({ type: 'component:error', code: 'NF-027' }),
+    expect.objectContaining({
+      type: 'component:fallback',
+      reason: 'refused',
+      code: 'NF-027',
+    }),
+  ])
+})
+
+test("browser: a load refused with NF-027 or NF-036 emits fallback reason 'refused'", async () => {
+  for (const code of ['NF-027', 'NF-036'] as const) {
+    const error = new NFError(code, 'refused')
+    const { C, events } = bind(
+      fakeRuntime({ load: () => rejected(error) }),
+      false
+    )
+    ;(await clientRender(<C descriptor={descriptor} />)).done()
+    expect(events).toEqual([
+      {
+        type: 'component:fallback',
+        ...id,
+        env: 'client',
+        phase: 'render',
+        reason: 'refused',
+        code,
+      },
+    ])
+  }
+})
+
+test('server: a loader-blocked refusal (no load ran) emits component:error and fallback', async () => {
+  const { C, events } = bind(
+    fakeRuntime({
+      serverLoad: () => fulfilled(null),
+      serverOutcome: () => ({
+        kind: 'blocked',
+        block: 'nested-remotes',
+        code: 'NF-027',
+      }),
+    }),
+    true
+  )
+  expect(await serverHtml(<C descriptor={descriptor} />)).toContain('failed')
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'component:error',
+      ...id,
+      env: 'server',
+      code: 'NF-027',
+      phase: 'render',
+      outcome: 'refused',
+    }),
+    {
+      type: 'component:fallback',
+      ...id,
+      env: 'server',
+      phase: 'render',
+      reason: 'refused',
+      code: 'NF-027',
+    },
+  ])
+})
+
+test('server: a load that failed with NF-027 (the runtime reported it) emits only fallback refused', async () => {
+  const error = new NFError('NF-027', 'integrity')
+  const { C, events } = bind(
+    fakeRuntime({
+      serverLoad: () => fulfilled(null),
+      serverOutcome: () => ({ kind: 'error', code: 'NF-027', error }),
+    }),
+    true
+  )
+  expect(await serverHtml(<C descriptor={descriptor} />)).toContain('failed')
+  expect(events).toEqual([
+    {
+      type: 'component:fallback',
+      ...id,
+      env: 'server',
+      phase: 'render',
+      reason: 'refused',
+      code: 'NF-027',
+    },
+  ])
+})

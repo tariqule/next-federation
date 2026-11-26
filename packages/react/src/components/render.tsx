@@ -691,7 +691,8 @@ export function createBindings({
       return browserOnly
     }
     if (refusedCode) {
-      // A refusal recorded by a load in this process was reported by it.
+      // Reported as an error only for a descriptor-level refusal (no load
+      // ran); any other recorded code gets the fallback event alone.
       if (isServer) {
         reportRefused(
           descriptor,
@@ -842,7 +843,9 @@ export function createBindings({
       )
       // An unverified build has no server rendering: render it after hydration.
       if (isServer && !descriptor.ssr) {
-        reportFallback(descriptor, expose, 'browser-only')
+        const code = descriptor.refused?.code
+        if (code) reportRefused(descriptor, expose, code, true)
+        else reportFallback(descriptor, expose, 'browser-only')
       }
       return descriptor.ssr ? (
         tree
