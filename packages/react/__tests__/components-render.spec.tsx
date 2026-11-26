@@ -604,3 +604,118 @@ describe('refused builds (server integrity failure)', () => {
     expect(r.recoverable).toEqual([])
   })
 })
+
+describe('browserOnly prop', () => {
+  const bind = (runtime: BindingsRuntime, isServer: boolean) =>
+    createBindings({ runtime, isServer }).createRemoteComponent<{
+      start?: number
+      browserOnly?: boolean
+    }>({
+      expose: './Counter',
+      fallback: <i data-testid="fallback">unavailable</i>,
+      errorFallback: <b data-testid="error">refused</b>,
+    })
+
+  test('browserOnly on the server renders the browser-only marker without calling runtime.serverLoad', () => {
+    let serverLoads = 0
+    const C = bind(
+      {
+        ...fakeRuntime(mod),
+        serverLoad: () => {
+          serverLoads++
+          return fulfilled(mod)
+        },
+      },
+      true
+    )
+    const html = renderToString(<C descriptor={descriptor(true)} browserOnly />)
+    expect(serverLoads).toBe(0)
+    expect(html).toContain(`<template ${BROWSER_ONLY_ATTR}=`)
+    expect(html).toContain('unavailable')
+    expect(html).not.toContain('count')
+    expect(html).not.toContain('modulepreload')
+  })
+
+  test('browserOnly hydrates and the browser loads the component', async () => {
+    const Server = bind(fakeRuntime(mod), true)
+    let loads = 0
+    const Client = bind(
+      {
+        ...fakeRuntime(null),
+        load: () => {
+          loads++
+          return fulfilled(mod)
+        },
+      },
+      false
+    )
+    const raw = renderToString(
+      <main>
+        <Server descriptor={descriptor(true)} start={2} browserOnly />
+      </main>
+    )
+    const container = document.createElement('div')
+    container.innerHTML = raw
+    document.body.appendChild(container)
+    const recoverable: unknown[] = []
+    await act(async () => {
+      hydrateRoot(
+        container,
+        <main>
+          <Client descriptor={descriptor(true)} start={2} browserOnly />
+        </main>,
+        { onRecoverableError: (e) => recoverable.push(e) }
+      )
+    })
+    await act(async () => {})
+    expect(container.textContent).toBe('count 2')
+    expect(loads).toBeGreaterThan(0)
+    expect(recoverable).toEqual([])
+    container.remove()
+  })
+
+  test('browserOnly is not passed to the remote component', async () => {
+    const seen: Record<string, unknown>[] = []
+    const Spy = (p: Record<string, unknown>) => {
+      seen.push(p)
+      return <span>spy</span>
+    }
+    const spyMod: RemoteModule = { default: Spy }
+    const C = bind(
+      { ...fakeRuntime(null), load: () => fulfilled(spyMod) },
+      false
+    )
+    const { createRoot } = await import('react-dom/client')
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    const root = createRoot(el)
+    await act(async () => {
+      root.render(<C descriptor={descriptor(true)} start={3} browserOnly />)
+    })
+    expect(seen.length).toBeGreaterThan(0)
+    for (const p of seen) {
+      expect('browserOnly' in p).toBe(false)
+      expect(p.start).toBe(3)
+    }
+    await act(async () => root.unmount())
+    el.remove()
+  })
+
+  test('browserOnly does not override a known refusal', () => {
+    const C = bind(
+      {
+        ...fakeRuntime(null),
+        serverOutcome: () => ({
+          kind: 'error',
+          code: 'NF-027',
+          error: new Error('integrity'),
+        }),
+      },
+      true
+    )
+    const html = renderToString(<C descriptor={descriptor(true)} browserOnly />)
+    expect(html).toContain(`<template ${REFUSED_ATTR}=`)
+    expect(html).toContain('refused')
+    expect(html).not.toContain(BROWSER_ONLY_ATTR)
+  })
+})

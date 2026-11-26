@@ -77,6 +77,13 @@ export type RemoteComponentProps<P> = P & {
   descriptor: RemoteComponentDescriptor | null
   fallback?: ReactNode
   errorFallback?: ReactNode
+  /**
+   * Render this component in the browser only on this response: the server
+   * sends the fallback and a mark and never loads the remote's server build.
+   * A refusal the server already knows (NF-027, NF-036) still wins. Not
+   * passed to the remote component.
+   */
+  browserOnly?: boolean
 }
 
 export type RemoteComponentType<P> = ((
@@ -514,12 +521,15 @@ export function createBindings({
     props,
     fallback,
     errorFallback,
+    skipServer,
   }: {
     descriptor: RemoteComponentDescriptor
     expose: string
     props: Record<string, unknown>
     fallback: ReactNode
     errorFallback: ReactNode
+    /** The `browserOnly` prop: the server leaves this boundary to the browser. */
+    skipServer: boolean
   }): ReactNode {
     // The same hooks on both sides, so ids below match during hydration.
     const id = useId()
@@ -593,6 +603,14 @@ export function createBindings({
     )
     if (refusedCode) return refused(refusedCode)
     if (marked && !hydrated) return browserOnly
+    if (isServer && skipServer) {
+      // A refusal recorded by an earlier load still wins; no load starts.
+      const outcome = runtime.serverOutcome(descriptor, expose)
+      const refusal = outcome ? classifyOutcome(outcome) : undefined
+      return refusal?.state === 'refused' && refusal.code
+        ? refused(refusal.code as ComponentRefusalCode)
+        : browserOnly
+    }
     const loading = (
       isServer
         ? runtime.serverLoad(descriptor, expose)
@@ -694,6 +712,7 @@ export function createBindings({
       descriptor,
       fallback: fallbackProp,
       errorFallback: errorFallbackProp,
+      browserOnly: browserOnlyProp,
       ...props
     }: RemoteComponentProps<P>): ReactNode {
       const fallback = fallbackProp ?? options.fallback ?? null
@@ -719,6 +738,7 @@ export function createBindings({
               props={props as Record<string, unknown>}
               fallback={fallback}
               errorFallback={errorFallback}
+              skipServer={browserOnlyProp === true}
             />
           </Suspense>
         </Boundary>
