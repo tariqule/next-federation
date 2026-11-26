@@ -517,11 +517,6 @@ export function createBindings({
     expose: string,
     options?: PreloadOptions
   ): Promise<void | PreloadResult>
-  /** A promise of `run()`: a synchronous throw becomes a rejection. */
-  function attempt<T>(run: () => T | PromiseLike<T>): Promise<T> {
-    return new Promise<T>((resolve) => resolve(run()))
-  }
-
   function preloadRemoteComponent(
     descriptor: RemoteComponentDescriptor | null,
     expose: string,
@@ -530,6 +525,11 @@ export function createBindings({
     return options
       ? preloadWithResult(descriptor, expose, options.timeoutMs)
       : preloadOnly(descriptor, expose)
+  }
+
+  /** A promise of `run()`: a synchronous throw becomes a rejection. */
+  function attempt<T>(run: () => T | PromiseLike<T>): Promise<T> {
+    return new Promise<T>((resolve) => resolve(run()))
   }
 
   /**
@@ -551,7 +551,8 @@ export function createBindings({
     }
     // Settles to how the load went; never rejects, so a load that settles
     // after a timeout leaves no unhandled rejection.
-    const codeOf = (error: unknown) => (isNFError(error) ? error.code : 'NF-029')
+    const codeOf = (error: unknown) =>
+      isNFError(error) ? error.code : 'NF-029'
     const settled: Promise<Omit<PreloadResult, 'ms'>> = isServer
       ? attempt(() => runtime.serverLoad(descriptor, expose)).then(
           () => {

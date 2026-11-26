@@ -433,11 +433,10 @@ describe('a runtime that throws synchronously never rejects the preload', () => 
     const side = isServer ? 'server' : 'browser'
     test(`${side}: with options it settles failed with the error's code or NF-029`, async () => {
       expect(
-        await bindingsFor(isServer, new NFError('NF-028', 'x')).preloadRemoteComponent(
-          d,
-          './Counter',
-          { timeoutMs: 50 }
-        )
+        await bindingsFor(
+          isServer,
+          new NFError('NF-028', 'x')
+        ).preloadRemoteComponent(d, './Counter', { timeoutMs: 50 })
       ).toMatchObject({ state: 'failed', code: 'NF-028' })
       expect(
         await bindingsFor(isServer, new Error('boom')).preloadRemoteComponent(
@@ -460,11 +459,10 @@ describe('a runtime that throws synchronously never rejects the preload', () => 
 
   test('browser: a synchronous NF-036 maps to refused like a rejection', async () => {
     expect(
-      await bindingsFor(false, new NFError('NF-036', 'unmet')).preloadRemoteComponent(
-        d,
-        './Counter',
-        { timeoutMs: 50 }
-      )
+      await bindingsFor(
+        false,
+        new NFError('NF-036', 'unmet')
+      ).preloadRemoteComponent(d, './Counter', { timeoutMs: 50 })
     ).toMatchObject({ state: 'refused', code: 'NF-036' })
   })
 })
