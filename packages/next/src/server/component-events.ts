@@ -9,46 +9,29 @@ import type { RemoteComponentDescriptor } from '@next-federation/protocol'
 
 const keys = new WeakMap<Federation, string>()
 
-/** FNV-1a (32 bit), base 36: a short, stable hash (not a secret). */
-function hash(text: string): string {
-  let h = 0x811c9dc5
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0).toString(36)
-}
-
-/** The federation's config identity: its remote names and component origins. */
-function configHash(federation: Federation): string {
-  const parts = [...federation.remotes].sort().map((name) => {
-    try {
-      return `${name} ${new URL(federation.componentTarget(name).descriptorUrl).origin}`
-    } catch {
-      return name
-    }
-  })
-  return hash(parts.join('\n'))
+function processId(): string {
+  const origin = Math.round(performance.timeOrigin * 1000).toString(36)
+  const pid = typeof process === 'undefined' ? 0 : process.pid
+  return `${origin}-${pid.toString(36)}`
 }
 
 /**
- * `<config hash>.<index>`: the index counts the federations with that config
- * this process created (it only grows, so a key is never reused in a
- * process). Deterministic, so a descriptor cached in a shared cache routes in
- * another process to the federation created with the same config at the same
- * position. Residual: processes that create identical-config federations in
- * a different order could route between them.
+ * `<process id>.<index>`: the process id is made once per process (in the
+ * process-wide registry) from its clock origin (microseconds) and pid, never
+ * from randomness, which a cacheComponents prerender would flag; the index counts the federations this
+ * process created (it only grows, so a key is never reused in a process).
+ * Only keys this process issued are routed: events for descriptors cached by
+ * another process are not routed (they are still logged).
  */
 function eventsKey(federation: Federation): string {
   const registry = componentTrustRegistry()
   const routes = (registry.eventRoutes ??= new Map())
   let key = keys.get(federation)
   if (key === undefined) {
-    const counts = (registry.eventRouteCounts ??= new Map())
-    const config = configHash(federation)
-    const index = counts.get(config) ?? 0
-    counts.set(config, index + 1)
-    key = `${config}.${index}`
+    const id = (registry.eventProcessId ??= processId())
+    const index = registry.eventRouteCount ?? 0
+    registry.eventRouteCount = index + 1
+    key = `${id}.${index}`
     keys.set(federation, key)
   }
   if (routes.get(key)?.deref() !== federation) {

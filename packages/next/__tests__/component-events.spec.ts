@@ -211,7 +211,7 @@ test('a route key is never reused in a process, even after its route is deleted'
   expect(got).toEqual([])
 })
 
-test('a descriptor cached by another process routes to the federation created there with the same config', async () => {
+test('a descriptor cached by another process is not routed there (events are still logged)', async () => {
   const slot = Symbol.for('nf.components.verified')
   const g = globalThis as Record<symbol, unknown>
   const saved = g[slot]
@@ -242,12 +242,14 @@ test('a descriptor cached by another process routes to the federation created th
     const a = await processWith(1_000)
     const cached = JSON.parse(JSON.stringify(a.d)) as RemoteComponentDescriptor
     const b = await processWith(9_999_999)
-    expect(cached.events).toMatch(/^[0-9a-z]+\.\d+$/)
-    expect(b.d.events).toBe(cached.events)
+    expect(cached.events).toMatch(/^[0-9a-z]+-[0-9a-z]+\.\d+$/)
+    // Same config, same position: still another key in another process.
+    expect(b.d.events).not.toBe(cached.events)
     a.got.length = 0
+    b.got.length = 0
     loadEvent(cached)
-    expect(types(b.got)).toEqual(['component:load'])
-    expect(types(a.got)).toEqual([])
+    expect(b.got).toEqual([])
+    expect(a.got).toEqual([])
   } finally {
     Object.defineProperty(performance, 'timeOrigin', {
       value: realOrigin,
